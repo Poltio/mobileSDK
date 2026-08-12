@@ -1,0 +1,75 @@
+# ==============================================================================
+# OS & System Files
+# ==============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ==============================================================================
+# Swift & Xcode Build Artifacts
+# ==============================================================================
+.build/
+**/.build/
+DerivedData/
+**/DerivedData/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
+*.perspectivev3
+*.mode1v3
+*.moved-aside
+xcuserdata/
+.swiftpm/
+Package.resolved
+
+# ==============================================================================
+# CocoaPods & Dependency Caches
+# ==============================================================================
+Pods/
+Podfile.lock
+
+# ==============================================================================
+# Android & Gradle Build Artifacts
+# ==============================================================================
+.gradle/
+build/
+*/build/
+app/build/
+poltio-sdk/build/
+local.properties
+.navigation/
+captures/
+*.apk
+*.aab
+*.aar
+
+# IDEs (Android Studio / IntelliJ / VS Code)
+.idea/
+*.iml
+*.iws
+.vscode/
+
+# ==============================================================================
+# React Native & Node / JavaScript Artifacts
+# ==============================================================================
+node_modules/
+dist/
+lib/
+.npm/
+.metro/
+.expo/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ==============================================================================
+# Miscellaneous & Temporary Files
+# ==============================================================================
+*.log
+*.tmp
+scratch/
