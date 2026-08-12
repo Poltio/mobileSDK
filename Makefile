@@ -1,9 +1,10 @@
 # Poltio Mobile SDK Monorepo Makefile
 
-.PHONY: all help build build-ios build-android build-rn test test-ios test-android test-rn run-example-ios run-example-android run-example-rn version submit-version clean
+.PHONY: all help check build build-ios build-android build-rn test test-ios test-android test-rn run-example-ios run-example-android run-example-rn version submit-version clean
 
 help:
 	@echo "Poltio Mobile SDK - Monorepo Makefile Commands:"
+	@echo "  make check               - Check developer toolchain & platform requirements"
 	@echo "  make build               - Build all SDKs (iOS, Android, React Native)"
 	@echo "  make build-ios           - Build iOS Swift SDK"
 	@echo "  make build-android       - Build Android Kotlin SDK"
@@ -18,6 +19,10 @@ help:
 	@echo "  make version             - Bump version across all SDK manifests"
 	@echo "  make submit-version      - Tag release and trigger publishing"
 	@echo "  make clean               - Clean build artifacts across all platforms"
+
+check:
+	@chmod +x scripts/check-environment.sh
+	@./scripts/check-environment.sh
 
 all: build test
 
@@ -98,12 +103,23 @@ run-example-ios: build-example-ios
 	@echo "==> Launching ExampleApp on iOS Simulator screen..."
 	@DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun simctl launch booted com.poltio.ExampleApp
 
-run-example-android:
-	@echo "==> Running Android Example App..."
-	@if [ -d "example/android" ]; then \
-		cd example/android && ./gradlew :app:installDebug; \
+build-example-android:
+	@echo "==> Building Android Example App (APK)..."
+	@cd example/android && ./gradlew assembleDebug
+
+open-example-android:
+	@echo "==> Opening Android Example App in Android Studio..."
+	@open -a "Android Studio" example/android 2>/dev/null || open example/android
+
+run-example-android: build-example-android
+	@echo "==> Booting Android Emulator / Launching Android Studio..."
+	@open -a "Android Studio" example/android 2>/dev/null || open example/android
+	@echo "==> Installing & Launching Android Example App..."
+	@if command -v adb >/dev/null 2>&1; then \
+		adb install -r example/android/app/build/outputs/apk/debug/app-debug.apk && \
+		adb shell am start -n com.poltio.exampleapp/.MainActivity; \
 	else \
-		echo "Android Example App not created yet."; \
+		echo "Notice: Open project in Android Studio to run on emulator or physical device."; \
 	fi
 
 run-example-rn:
