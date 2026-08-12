@@ -83,18 +83,20 @@ test-rn:
 # Example Apps
 # ------------------------------------------------------------------------------
 build-example-ios:
-	@echo "==> Building iOS Example App..."
-	@DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift build --package-path example/ios --build-path example/ios/.build
+	@echo "==> Building iOS Example App (.app bundle)..."
+	@DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project example/ios/ExampleApp.xcodeproj -scheme ExampleApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath example/ios/.build/DerivedData build
 
 open-example-ios:
 	@echo "==> Opening iOS Example App in Xcode..."
-	@open -a Xcode example/ios/Package.swift
+	@open example/ios/ExampleApp.xcodeproj
 
 run-example-ios: build-example-ios
-	@echo "==> Booting iOS Simulator & Opening Xcode..."
+	@echo "==> Booting iOS Simulator & Installing Example App..."
 	@open -a Simulator
 	@DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun simctl boot "iPhone 17 Pro" 2>/dev/null || true
-	@open -a Xcode example/ios/Package.swift
+	@DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun simctl install booted example/ios/.build/DerivedData/Build/Products/Debug-iphonesimulator/ExampleApp.app
+	@echo "==> Launching ExampleApp on iOS Simulator screen..."
+	@DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun simctl launch booted com.poltio.ExampleApp
 
 run-example-android:
 	@echo "==> Running Android Example App..."
