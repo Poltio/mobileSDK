@@ -1,0 +1,386 @@
+{
+  "builtTestProducts" : [
+
+  ],
+  "copyCommands" : {
+
+  },
+  "explicitTargetDependencyImportCheckingMode" : {
+    "none" : {
+
+    }
+  },
+  "generatedSourceTargetSet" : [
+
+  ],
+  "pluginDescriptions" : [
+
+  ],
+  "swiftCommands" : {
+    "C.ExampleApp-arm64-apple-macosx-debug.module" : {
+      "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "fileList" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/sources",
+      "importPath" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/App/PoltioECommerceApp.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Models/Product.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Services/PoltioSDKPlaceholder.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/Components/CardViews.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/ContentView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/HomeView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/PDPView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/PLPView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/sources"
+        }
+      ],
+      "isLibrary" : false,
+      "moduleName" : "ExampleApp",
+      "moduleOutputPath" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/Modules/ExampleApp.swiftmodule",
+      "objects" : [
+        "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PoltioECommerceApp.swift.o",
+        "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/Product.swift.o",
+        "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PoltioSDKPlaceholder.swift.o",
+        "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/CardViews.swift.o",
+        "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/ContentView.swift.o",
+        "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/HomeView.swift.o",
+        "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PDPView.swift.o",
+        "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PLPView.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx14.0",
+        "-incremental",
+        "-enable-batch-mode",
+        "-serialize-diagnostics",
+        "-index-store-path",
+        "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/index/store",
+        "-Onone",
+        "-enable-testing",
+        "-j10",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-module-cache-path",
+        "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ModuleCache",
+        "-parseable-output",
+        "-Xfrontend",
+        "-entry-point-function-name",
+        "-Xfrontend",
+        "ExampleApp_main",
+        "-color-diagnostics",
+        "-swift-version",
+        "5",
+        "-plugin-path",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+        "-sdk",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-I",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-L",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "ios"
+      ],
+      "outputFileMapPath" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PoltioECommerceApp.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/Product.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PoltioSDKPlaceholder.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/CardViews.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/ContentView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/HomeView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PDPView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PLPView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/Modules/ExampleApp.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/App/PoltioECommerceApp.swift",
+        "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Models/Product.swift",
+        "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Services/PoltioSDKPlaceholder.swift",
+        "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/Components/CardViews.swift",
+        "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/ContentView.swift",
+        "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/HomeView.swift",
+        "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/PDPView.swift",
+        "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/PLPView.swift"
+      ],
+      "tempsPath" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build",
+      "wholeModuleOptimization" : false
+    }
+  },
+  "swiftFrontendCommands" : {
+
+  },
+  "swiftTargetScanArgs" : {
+    "ExampleApp" : [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "-module-name",
+      "ExampleApp",
+      "-package-name",
+      "ios",
+      "-c",
+      "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/App/PoltioECommerceApp.swift",
+      "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Models/Product.swift",
+      "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Services/PoltioSDKPlaceholder.swift",
+      "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/Components/CardViews.swift",
+      "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/ContentView.swift",
+      "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/HomeView.swift",
+      "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/PDPView.swift",
+      "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/PLPView.swift",
+      "-I",
+      "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/Modules",
+      "-target",
+      "arm64-apple-macosx14.0",
+      "-incremental",
+      "-enable-batch-mode",
+      "-serialize-diagnostics",
+      "-index-store-path",
+      "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/index/store",
+      "-Onone",
+      "-enable-testing",
+      "-j10",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-module-cache-path",
+      "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ModuleCache",
+      "-parseable-output",
+      "-Xfrontend",
+      "-entry-point-function-name",
+      "-Xfrontend",
+      "ExampleApp_main",
+      "-color-diagnostics",
+      "-swift-version",
+      "5",
+      "-plugin-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+      "-sdk",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-I",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-L",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "ios",
+      "-driver-use-frontend-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+    ]
+  },
+  "targetDependencyMap" : {
+    "ExampleApp" : [
+
+    ]
+  },
+  "testDiscoveryCommands" : {
+
+  },
+  "testEntryPointCommands" : {
+
+  },
+  "traitConfiguration" : {
+    "default" : {
+
+    }
+  },
+  "writeCommands" : {
+    "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp-entitlement.plist" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<entitlement-plist>"
+        },
+        {
+          "kind" : "virtual",
+          "name" : "<com.apple.security.get-task-allow>"
+        }
+      ],
+      "outputFilePath" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp-entitlement.plist"
+    },
+    "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/App/PoltioECommerceApp.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Models/Product.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Services/PoltioSDKPlaceholder.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/Components/CardViews.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/ContentView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/HomeView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/PDPView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/PLPView.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/sources"
+    },
+    "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.product/Objects.LinkFileList" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<link-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/CardViews.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/ContentView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/HomeView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PDPView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PLPView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PoltioECommerceApp.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PoltioSDKPlaceholder.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/Product.swift.o"
+        }
+      ],
+      "outputFilePath" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.product/Objects.LinkFileList"
+    },
+    "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt" : {
+      "alwaysOutOfDate" : true,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<swift-get-version>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+        }
+      ],
+      "outputFilePath" : "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+    }
+  }
+}

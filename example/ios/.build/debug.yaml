@@ -1,0 +1,81 @@
+client:
+  name: basic
+  file-system: device-agnostic
+tools: {}
+targets:
+  "ExampleApp-arm64-apple-macosx-debug.exe": ["<ExampleApp-arm64-apple-macosx-debug.exe>"]
+  "ExampleApp-arm64-apple-macosx-debug.module": ["<ExampleApp-arm64-apple-macosx-debug.module>"]
+  "PackageStructure": ["<PackageStructure>"]
+  "main": ["<ExampleApp-arm64-apple-macosx-debug.exe>","<ExampleApp-arm64-apple-macosx-debug.module>"]
+  "test": ["<ExampleApp-arm64-apple-macosx-debug.exe>","<ExampleApp-arm64-apple-macosx-debug.module>"]
+default: "main"
+nodes:
+  "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/":
+    is-directory-structure: true
+    content-exclusion-patterns: [".git",".build"]
+  "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp":
+    is-mutated: true
+commands:
+  "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp-entitlement.plist":
+    tool: write-auxiliary-file
+    inputs: ["<entitlement-plist>","<com.apple.security.get-task-allow>"]
+    outputs: ["/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp-entitlement.plist"]
+    description: "Write auxiliary file /Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp-entitlement.plist"
+
+  "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/App/PoltioECommerceApp.swift","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Models/Product.swift","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Services/PoltioSDKPlaceholder.swift","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/Components/CardViews.swift","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/ContentView.swift","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/HomeView.swift","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/PDPView.swift","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/PLPView.swift"]
+    outputs: ["/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/sources"]
+    description: "Write auxiliary file /Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/sources"
+
+  "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.product/Objects.LinkFileList":
+    tool: write-auxiliary-file
+    inputs: ["<link-file-list>","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/CardViews.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/ContentView.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/HomeView.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PDPView.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PLPView.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PoltioECommerceApp.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PoltioSDKPlaceholder.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/Product.swift.o"]
+    outputs: ["/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.product/Objects.LinkFileList"]
+    description: "Write auxiliary file /Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.product/Objects.LinkFileList"
+
+  "/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt":
+    tool: write-auxiliary-file
+    inputs: ["<swift-get-version>","/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"]
+    outputs: ["/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"]
+    always-out-of-date: "true"
+    description: "Write auxiliary file /Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+
+  "<ExampleApp-arm64-apple-macosx-debug.exe>":
+    tool: phony
+    inputs: ["<ExampleApp-arm64-apple-macosx-debug.exe-CodeSigning>"]
+    outputs: ["<ExampleApp-arm64-apple-macosx-debug.exe>"]
+
+  "<ExampleApp-arm64-apple-macosx-debug.module>":
+    tool: phony
+    inputs: ["/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PoltioECommerceApp.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/Product.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PoltioSDKPlaceholder.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/CardViews.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/ContentView.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/HomeView.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PDPView.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PLPView.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/Modules/ExampleApp.swiftmodule"]
+    outputs: ["<ExampleApp-arm64-apple-macosx-debug.module>"]
+
+  "C.ExampleApp-arm64-apple-macosx-debug.exe":
+    tool: shell
+    inputs: ["/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/CardViews.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/ContentView.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/HomeView.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PDPView.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PLPView.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PoltioECommerceApp.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PoltioSDKPlaceholder.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/Product.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.product/Objects.LinkFileList"]
+    outputs: ["/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp"]
+    description: "Linking ./.build/arm64-apple-macosx/debug/ExampleApp"
+    args: ["/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc","-L","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug","-o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp","-module-name","ExampleApp","-Xlinker","-no_warn_duplicate_libraries","-emit-executable","-Xlinker","-alias","-Xlinker","_ExampleApp_main","-Xlinker","_main","-Xlinker","-rpath","-Xlinker","@loader_path","@/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.product/Objects.LinkFileList","-Xlinker","-rpath","-Xlinker","/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-6.2/macosx","-target","arm64-apple-macosx14.0","-Xlinker","-add_ast_path","-Xlinker","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/Modules/ExampleApp.swiftmodule","-plugin-path","/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing","-sdk","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-I","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-L","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-g"]
+
+  "C.ExampleApp-arm64-apple-macosx-debug.exe-entitlements":
+    tool: shell
+    inputs: ["/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp-entitlement.plist"]
+    outputs: ["<ExampleApp-arm64-apple-macosx-debug.exe-CodeSigning>"]
+    description: "Applying debug entitlements to ./.build/arm64-apple-macosx/debug/ExampleApp"
+    args: ["codesign","--force","--sign","-","--entitlements","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp-entitlement.plist","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp"]
+
+  "C.ExampleApp-arm64-apple-macosx-debug.module":
+    tool: shell
+    inputs: ["/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/App/PoltioECommerceApp.swift","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Models/Product.swift","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Services/PoltioSDKPlaceholder.swift","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/Components/CardViews.swift","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/ContentView.swift","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/HomeView.swift","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/PDPView.swift","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/Views/PLPView.swift","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/sources"]
+    outputs: ["/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PoltioECommerceApp.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/Product.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PoltioSDKPlaceholder.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/CardViews.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/ContentView.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/HomeView.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PDPView.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/PLPView.swift.o","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/Modules/ExampleApp.swiftmodule"]
+    description: "Compiling Swift Module 'ExampleApp' (8 sources)"
+    args: ["/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc","-module-name","ExampleApp","-emit-dependencies","-emit-module","-emit-module-path","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/Modules/ExampleApp.swiftmodule","-output-file-map","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/output-file-map.json","-incremental","-c","@/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ExampleApp.build/sources","-I","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/Modules","-target","arm64-apple-macosx14.0","-incremental","-enable-batch-mode","-serialize-diagnostics","-index-store-path","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/index/store","-Onone","-enable-testing","-j10","-DSWIFT_PACKAGE","-DDEBUG","-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE","-module-cache-path","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/.build/arm64-apple-macosx/debug/ModuleCache","-parseable-output","-Xfrontend","-entry-point-function-name","-Xfrontend","ExampleApp_main","-color-diagnostics","-swift-version","5","-plugin-path","/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing","-sdk","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-I","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-L","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-g","-Xcc","-isysroot","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk","-Xcc","-F","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-Xcc","-fPIC","-Xcc","-g","-package-name","ios"]
+
+  "PackageStructure":
+    tool: package-structure-tool
+    inputs: ["/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/ExampleApp/","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/Package.swift","/Users/gcg/Work/src/github.com/Poltio/mobileSDK/example/ios/Package.resolved"]
+    outputs: ["<PackageStructure>"]
+    description: "Planning build"
+    allow-missing-inputs: true
+
