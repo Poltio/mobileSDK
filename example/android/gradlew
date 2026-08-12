@@ -58,7 +58,7 @@ WRAPPER_JAR="$APP_HOME/gradle/wrapper/gradle-wrapper.jar"
 if [ ! -f "$WRAPPER_JAR" ]; then
     mkdir -p "$APP_HOME/gradle/wrapper"
     echo "Downloading gradle-wrapper.jar..."
-    curl -s -L -o "$WRAPPER_JAR" "https://raw.githubusercontent.com/gradle/gradle/v8.5.0/gradle/wrapper/gradle-wrapper.jar" || true
+    curl -s -L -o "$WRAPPER_JAR" "https://github.com/gradle/gradle/raw/v8.5.0/gradle/wrapper/gradle-wrapper.jar" || true
 fi
 
-exec "$JAVACMD" "-Xmx64m" "-Xms64m" -jar "$WRAPPER_JAR" "$@"
+exec "$JAVACMD" "-Xmx64m" "-Xms64m" -cp "$WRAPPER_JAR" org.gradle.wrapper.GradleWrapperMain "$@"

@@ -1,53 +1,67 @@
-# Poltio Mobile SDK
+# Poltio Mobile SDK Monorepo
 
-Bringing the **Poltio TAG** web experience (screen targeting, floating launcher button, interactive popup widget in an in-app WebView) to native mobile applications.
+Welcome to the **Poltio Mobile SDK** monorepo. This repository houses native mobile SDKs and integrated sample applications for bringing the interactive **Poltio TAG** web experience to mobile apps.
 
-## Repository Structure
+---
 
-- [`/ios`](./ios): Swift Package & CocoaPods library for native iOS apps (iOS 14.0+).
-- [`/android`](./android): Gradle library for native Android apps (API 21+).
-- [`/react-native`](./react-native): React Native wrapper library (`@poltio/react-native-sdk`).
-- [`/example`](./example): Sample apps demonstrating integration for iOS, Android, and React Native.
-- [`AGENTS.md`](./AGENTS.md): Guidelines and rules for AI assistants (Claude, Gemini, Antigravity) working on this codebase.
+## 🏗 Repository Structure
 
-## Quick Start Integration
-
-### iOS (Swift Package Manager)
-Add `https://github.com/Poltio/mobileSDK` as a Swift Package dependency, then:
-
-```swift
-import PoltioSDK
-
-// In AppDelegate or App launch:
-Poltio.configure(apiKey: "YOUR_API_KEY")
-
-// On screen navigation:
-Poltio.trackScreen("phone-finder")
+```
+.
+├── Makefile                # Universal entrypoint for builds, tests, & examples
+├── docs/                   # Developer setup & integration guides
+│   ├── ANDROID.md          # Android SDK & AVD setup guide
+│   └── IOS.md              # iOS SDK & Simulator setup guide
+├── ios/                    # Pure Swift SDK (Swift Package Manager & CocoaPods)
+├── android/                # Pure Kotlin SDK (Gradle & Maven Central)
+├── react-native/           # React Native SDK wrapper (npm)
+├── example/                # Integrated sample apps
+│   ├── ios/                # iOS TechStore E-Commerce App (SwiftUI)
+│   ├── android/            # Android TechStore E-Commerce App (Jetpack Compose)
+│   └── rn/                 # React Native Sample App
+└── scripts/                # Utility scripts (environment checker)
 ```
 
-### Android (Gradle)
-Add dependency to `build.gradle.kts`:
+---
 
-```kotlin
-implementation("com.poltio:sdk:1.0.0")
+## ⚡️ Quick Start
 
-// In Application class or Activity:
-Poltio.initialize(context, "YOUR_API_KEY")
-
-// On screen navigation:
-Poltio.trackScreen("phone-finder")
-```
-
-### React Native
-Install via npm/yarn:
-
+### 1. Environment Check
+Validate toolchains and dependencies across all platforms:
 ```bash
-npm install @poltio/react-native-sdk
+make check
 ```
 
-```typescript
-import { Poltio } from '@poltio/react-native-sdk';
+### 2. Run Example Applications
+Launch sample apps directly on simulators/emulators with a single Makefile command:
 
-Poltio.configure('YOUR_API_KEY');
-Poltio.trackScreen('phone-finder');
-```
+- **iOS**: [`make run-example-ios`](docs/IOS.md)
+- **Android**: [`make run-example-android`](docs/ANDROID.md)
+- **React Native**: `make run-example-rn`
+
+---
+
+## 📚 Documentation & Platform Setup Guides
+- 📖 [**Android Setup Guide** (`docs/ANDROID.md`)](docs/ANDROID.md) - JDK 17, Android Studio, and AVD Emulator setup.
+- 📖 [**iOS Setup Guide** (`docs/IOS.md`)](docs/IOS.md) - Xcode, Swift Package Manager, and iOS Simulator setup.
+
+---
+
+## 🛠 Universal Makefile Reference
+
+| Target | Description |
+| :--- | :--- |
+| `make check` | Check developer toolchain & platform requirements |
+| `make build` | Build all SDKs (iOS, Android, React Native) |
+| `make build-ios` | Build iOS Swift SDK |
+| `make build-android` | Build Android Kotlin SDK |
+| `make build-rn` | Build React Native SDK |
+| `make test` | Run test suites across all platforms |
+| `make test-ios` | Run iOS unit tests |
+| `make test-android` | Run Android unit tests |
+| `make test-rn` | Run React Native tests and linter |
+| `make run-example-ios` | Launch iOS Example App in simulator |
+| `make run-example-android` | Launch Android Example App in emulator |
+| `make run-example-rn` | Launch React Native Example App |
+| `make version` | Bump version across all SDK manifests |
+| `make submit-version` | Tag release and trigger publishing |

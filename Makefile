@@ -112,14 +112,27 @@ open-example-android:
 	@open -a "Android Studio" example/android 2>/dev/null || open example/android
 
 run-example-android: build-example-android
-	@echo "==> Booting Android Emulator / Launching Android Studio..."
-	@open -a "Android Studio" example/android 2>/dev/null || open example/android
-	@echo "==> Installing & Launching Android Example App..."
-	@if command -v adb >/dev/null 2>&1; then \
-		adb install -r example/android/app/build/outputs/apk/debug/app-debug.apk && \
-		adb shell am start -n com.poltio.exampleapp/.MainActivity; \
+	@echo "==> Resolving Android ADB path & checking device status..."
+	@ADB_BIN=$$(command -v adb 2>/dev/null || echo "$$HOME/Library/Android/sdk/platform-tools/adb"); \
+	EMU_BIN=$$(command -v emulator 2>/dev/null || echo "$$HOME/Library/Android/sdk/emulator/emulator"); \
+	if $$ADB_BIN devices 2>/dev/null | grep -q "device$$"; then \
+		echo "==> Installing & launching on running Android device/emulator..."; \
+		$$ADB_BIN install -r example/android/app/build/outputs/apk/debug/app-debug.apk && \
+		$$ADB_BIN shell am start -n com.poltio.exampleapp/.MainActivity; \
+	elif [ -f "$$EMU_BIN" ] && [ -n "$$($$EMU_BIN -list-avds 2>/dev/null | head -n 1)" ]; then \
+		AVD_NAME=$$($$EMU_BIN -list-avds 2>/dev/null | head -n 1); \
+		echo "==> Booting Android Emulator ($$AVD_NAME)..."; \
+		$$EMU_BIN -avd "$$AVD_NAME" > /dev/null 2>&1 & \
+		echo "==> Waiting for Android OS to finish booting..."; \
+		$$ADB_BIN wait-for-device; \
+		while [ "$$($$ADB_BIN shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" != "1" ]; do sleep 1; done; \
+		echo "==> Installing & launching example app..."; \
+		$$ADB_BIN install -r example/android/app/build/outputs/apk/debug/app-debug.apk && \
+		$$ADB_BIN shell am start -n com.poltio.exampleapp/.MainActivity; \
 	else \
-		echo "Notice: Open project in Android Studio to run on emulator or physical device."; \
+		echo "==> Launching Android Studio..."; \
+		open -a "Android Studio" example/android 2>/dev/null || open example/android; \
+		echo "Notice: No AVD emulator found. Create one in Android Studio Device Manager (see example/android/README.md)."; \
 	fi
 
 run-example-rn:
