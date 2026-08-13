@@ -3,6 +3,11 @@ import XCTest
 
 final class PoltioSDKTests: XCTestCase {
     
+    override func tearDown() {
+        super.tearDown()
+        PoltioSDK.shared.reset()
+    }
+    
     func testConfigureWithValidKey() {
         let sdk = PoltioSDK.shared
         PoltioSDK.configure(clientKey: "poltio_test_pk_12345")
@@ -24,6 +29,13 @@ final class PoltioSDKTests: XCTestCase {
         
         // Should not throw or crash
         PoltioSDK.track(event: "ViewContent", params: ["url": "app://home"])
+    }
+    
+    func testTrackEmptyEventNameSafelyHandles() {
+        PoltioSDK.configure(clientKey: "poltio_test_pk_12345")
+        
+        // Empty or whitespace event names should be safely ignored
+        PoltioSDK.track(event: "   ", params: ["url": "app://home"])
     }
     
     func testTrackEventWhenNotConfigured() {
