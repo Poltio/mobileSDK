@@ -4,7 +4,7 @@ import Foundation
 public final class PoltioSDK {
     
     /// Shared singleton instance of `PoltioSDK`.
-    public static let shared = PoltioSDK()
+    internal static let shared = PoltioSDK()
     
     private var _clientKey: String?
     private var _isInitialized: Bool = false
@@ -22,6 +22,16 @@ public final class PoltioSDK {
     
     internal init() {}
     
+    #if DEBUG
+    /// Resets the SDK state. Used exclusively for unit testing to prevent state pollution.
+    internal func reset() {
+        queue.sync(flags: .barrier) {
+            self._clientKey = nil
+            self._isInitialized = false
+        }
+    }
+    #endif
+    
     // MARK: - Public Configuration API
     
     /// Configures the Poltio SDK with your publishable client key.
@@ -34,7 +44,7 @@ public final class PoltioSDK {
     
     /// Instance method to configure the SDK.
     @discardableResult
-    public func configure(clientKey: String) -> PoltioSDK {
+    internal func configure(clientKey: String) -> PoltioSDK {
         let trimmedKey = clientKey.trimmingCharacters(in: .whitespacesAndNewlines)
         
         guard !trimmedKey.isEmpty else {
@@ -47,7 +57,7 @@ public final class PoltioSDK {
             self._isInitialized = true
         }
         
-        print("[PoltioSDK] Configured successfully with clientKey: \(trimmedKey)")
+        print("[PoltioSDK] Configured successfully.")
         return self
     }
     
@@ -62,13 +72,19 @@ public final class PoltioSDK {
     }
     
     /// Instance method to track an in-app event.
-    public func track(event: String, params: [String: Any]? = nil) {
+    internal func track(event: String, params: [String: Any]? = nil) {
+        let trimmedEvent = event.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedEvent.isEmpty else {
+            print("[PoltioSDK] Error: Event name cannot be empty.")
+            return
+        }
+        
         guard isInitialized else {
             print("[PoltioSDK] Warning: track called before configuration. Call PoltioSDK.configure(clientKey:) first.")
             return
         }
         
         let safeParams = params ?? [:]
-        print("[PoltioSDK] Event tracked: '\(event)', params: \(safeParams)")
+        print("[PoltioSDK] Event tracked: '\(trimmedEvent)', params: \(safeParams)")
     }
 }
