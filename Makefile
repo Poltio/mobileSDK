@@ -1,9 +1,10 @@
 # Poltio Mobile SDK Monorepo Makefile
 
-.PHONY: all help build build-ios build-android build-rn test test-ios test-android test-rn run-example-ios run-example-android run-example-rn version submit-version clean
+.PHONY: all help check build build-ios build-android build-rn test test-ios test-android test-rn run-example-ios run-example-android run-example-rn version submit-version clean
 
 help:
 	@echo "Poltio Mobile SDK - Monorepo Makefile Commands:"
+	@echo "  make check               - Check developer toolchain & platform requirements"
 	@echo "  make build               - Build all SDKs (iOS, Android, React Native)"
 	@echo "  make build-ios           - Build iOS Swift SDK"
 	@echo "  make build-android       - Build Android Kotlin SDK"
@@ -18,6 +19,10 @@ help:
 	@echo "  make version             - Bump version across all SDK manifests"
 	@echo "  make submit-version      - Tag release and trigger publishing"
 	@echo "  make clean               - Clean build artifacts across all platforms"
+
+check:
+	@chmod +x scripts/check-environment.sh
+	@./scripts/check-environment.sh
 
 all: build test
 
@@ -98,12 +103,36 @@ run-example-ios: build-example-ios
 	@echo "==> Launching ExampleApp on iOS Simulator screen..."
 	@DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun simctl launch booted com.poltio.ExampleApp
 
-run-example-android:
-	@echo "==> Running Android Example App..."
-	@if [ -d "example/android" ]; then \
-		cd example/android && ./gradlew :app:installDebug; \
+build-example-android:
+	@echo "==> Building Android Example App (APK)..."
+	@cd example/android && ./gradlew assembleDebug
+
+open-example-android:
+	@echo "==> Opening Android Example App in Android Studio..."
+	@open -a "Android Studio" example/android 2>/dev/null || open example/android
+
+run-example-android: build-example-android
+	@echo "==> Resolving Android ADB path & checking device status..."
+	@ADB_BIN=$$(command -v adb 2>/dev/null || echo "$$HOME/Library/Android/sdk/platform-tools/adb"); \
+	EMU_BIN=$$(command -v emulator 2>/dev/null || echo "$$HOME/Library/Android/sdk/emulator/emulator"); \
+	if $$ADB_BIN devices 2>/dev/null | grep -q "device$$"; then \
+		echo "==> Installing & launching on running Android device/emulator..."; \
+		$$ADB_BIN install -r example/android/app/build/outputs/apk/debug/app-debug.apk && \
+		$$ADB_BIN shell am start -n com.poltio.exampleapp/.MainActivity; \
+	elif [ -f "$$EMU_BIN" ] && [ -n "$$($$EMU_BIN -list-avds 2>/dev/null | head -n 1)" ]; then \
+		AVD_NAME=$$($$EMU_BIN -list-avds 2>/dev/null | head -n 1); \
+		echo "==> Booting Android Emulator ($$AVD_NAME)..."; \
+		$$EMU_BIN -avd "$$AVD_NAME" > /dev/null 2>&1 & \
+		echo "==> Waiting for Android OS to finish booting..."; \
+		$$ADB_BIN wait-for-device; \
+		while [ "$$($$ADB_BIN shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" != "1" ]; do sleep 1; done; \
+		echo "==> Installing & launching example app..."; \
+		$$ADB_BIN install -r example/android/app/build/outputs/apk/debug/app-debug.apk && \
+		$$ADB_BIN shell am start -n com.poltio.exampleapp/.MainActivity; \
 	else \
-		echo "Android Example App not created yet."; \
+		echo "==> Launching Android Studio..."; \
+		open -a "Android Studio" example/android 2>/dev/null || open example/android; \
+		echo "Notice: No AVD emulator found. Create one in Android Studio Device Manager (see example/android/README.md)."; \
 	fi
 
 run-example-rn:
