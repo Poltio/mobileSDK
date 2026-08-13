@@ -4,7 +4,7 @@ Pod::Spec.new do |s|
   s.summary          = 'Poltio Mobile SDK for iOS'
   s.description      = 'Integrates Poltio TAG web experience and event tracking in iOS applications.'
   s.homepage         = 'https://github.com/Poltio/mobileSDK'
-  s.license          = { :type => 'MIT', :file => '../LICENSE' }
+  s.license          = { :type => 'MIT' }
   s.author           = { 'Poltio' => 'dev@poltio.com' }
   s.source           = { :git => 'https://github.com/Poltio/mobileSDK.git', :tag => "v#{s.version}" }
 
