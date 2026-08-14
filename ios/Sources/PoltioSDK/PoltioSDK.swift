@@ -75,12 +75,15 @@ public final class PoltioSDK {
     /// The API client instance used for backend requests.
     internal var apiClient: PoltioAPIClient {
         get {
-            queue.sync {
-                if let existing = _apiClient {
+            if let existing = queue.sync(execute: { _apiClient }) {
+                return existing
+            }
+            return queue.sync(flags: .barrier) {
+                if let existing = self._apiClient {
                     return existing
                 }
                 let client = PoltioAPIClient()
-                _apiClient = client
+                self._apiClient = client
                 return client
             }
         }
