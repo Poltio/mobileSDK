@@ -10,6 +10,7 @@ public final class PoltioSDK {
     private var _isInitialized: Bool = false
     private var _sdkId: String?
     private var _puid: String?
+    private var _puidLoaded: Bool = false
     
     private let queue = DispatchQueue(label: "com.poltio.sdk", attributes: .concurrent)
     
@@ -29,7 +30,11 @@ public final class PoltioSDK {
     /// SDK-generated unique identifier (source of truth for device tracking).
     /// Generated automatically on first access and persisted in local storage.
     public var sdkId: String {
-        queue.sync(flags: .barrier) {
+        if let existingId = queue.sync(execute: { _sdkId }) {
+            return existingId
+        }
+        
+        return queue.sync(flags: .barrier) {
             if let existingId = self._sdkId {
                 return existingId
             }
@@ -48,11 +53,20 @@ public final class PoltioSDK {
     
     /// Developer-provided optional user identifier (PUID).
     public var puid: String? {
-        queue.sync {
-            if let cached = self._puid {
-                return cached
+        let (loaded, cached) = queue.sync { (self._puidLoaded, self._puid) }
+        if loaded {
+            return cached
+        }
+        
+        return queue.sync(flags: .barrier) {
+            if self._puidLoaded {
+                return self._puid
             }
-            return UserDefaults.standard.string(forKey: PoltioSDK.puidStorageKey)
+            
+            let persisted = UserDefaults.standard.string(forKey: PoltioSDK.puidStorageKey)
+            self._puid = persisted
+            self._puidLoaded = true
+            return persisted
         }
     }
     
@@ -65,6 +79,7 @@ public final class PoltioSDK {
             self._clientKey = nil
             self._isInitialized = false
             self._puid = nil
+            self._puidLoaded = false
             self._sdkId = nil
             UserDefaults.standard.removeObject(forKey: PoltioSDK.sdkIdStorageKey)
             UserDefaults.standard.removeObject(forKey: PoltioSDK.puidStorageKey)
@@ -123,6 +138,7 @@ public final class PoltioSDK {
                 UserDefaults.standard.removeObject(forKey: PoltioSDK.puidStorageKey)
                 print("[PoltioSDK] Cleared PUID.")
             }
+            self._puidLoaded = true
         }
     }
     
@@ -159,4 +175,5 @@ public final class PoltioSDK {
         print("[PoltioSDK] Event tracked: '\(trimmedEvent)', params: \(enrichedParams)")
     }
 }
+
 
