@@ -41,6 +41,25 @@ Launch sample apps directly on simulators/emulators with a single Makefile comma
 
 ---
 
+## 💻 Usage Example
+
+### iOS (Swift)
+
+```swift
+import PoltioSDK
+
+// 1. Configure the SDK at app launch (e.g., inside AppDelegate or App init)
+PoltioSDK.configure(clientKey: "poltio_test_pk_12345")
+
+// 2. Track screen/view events
+PoltioSDK.track(event: "ViewContent", params: ["url": "app://home"])
+
+// 3. Track conversion events
+PoltioSDK.track(event: "TrackConversion", params: ["value": 99.99, "currency": "USD"])
+```
+
+---
+
 ## 📚 Documentation & Platform Setup Guides
 - 📖 [**Android Setup Guide** (`docs/ANDROID.md`)](docs/ANDROID.md) - JDK 17, Android Studio, and AVD Emulator setup.
 - 📖 [**iOS Setup Guide** (`docs/IOS.md`)](docs/IOS.md) - Xcode, Swift Package Manager, and iOS Simulator setup.

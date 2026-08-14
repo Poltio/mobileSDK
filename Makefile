@@ -1,5 +1,8 @@
 # Poltio Mobile SDK Monorepo Makefile
 
+DEVELOPER_DIR ?= /Applications/Xcode.app/Contents/Developer
+export DEVELOPER_DIR
+
 .PHONY: all help check build build-ios build-android build-rn test test-ios test-android test-rn run-example-ios run-example-android run-example-rn version submit-version clean
 
 help:
@@ -34,7 +37,7 @@ build: build-ios build-android build-rn
 build-ios:
 	@echo "==> Building iOS Swift SDK..."
 	@if [ -d "ios" ] && [ -f "ios/Package.swift" ]; then \
-		cd ios && swift build; \
+		cd ios && xcrun swift build; \
 	else \
 		echo "iOS SDK not initialized yet."; \
 	fi
@@ -63,7 +66,7 @@ test: test-ios test-android test-rn
 test-ios:
 	@echo "==> Testing iOS Swift SDK..."
 	@if [ -d "ios" ] && [ -f "ios/Package.swift" ]; then \
-		cd ios && swift test; \
+		cd ios && xcrun swift test; \
 	else \
 		echo "iOS SDK tests not initialized yet."; \
 	fi
