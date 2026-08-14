@@ -55,7 +55,7 @@ PoltioSDK.configure(clientKey: "poltio_test_pk_12345")
 PoltioSDK.identify(puid: "user_12345")
 
 // 3. Track screen/view events (automatically includes internal sdk_id and puid)
-PoltioSDK.track(event: "ViewContent", params: ["url": "app://home"])
+PoltioSDK.track(event: "view", params: ["url": "https://www.poltio.com/pdp"])
 
 // 4. Track conversion events
 PoltioSDK.track(event: "TrackConversion", params: ["value": 99.99, "currency": "USD"])
