@@ -70,6 +70,27 @@ public final class PoltioSDK {
         }
     }
     
+    private var _apiClient: PoltioAPIClient?
+    
+    /// The API client instance used for backend requests.
+    internal var apiClient: PoltioAPIClient {
+        get {
+            queue.sync {
+                if let existing = _apiClient {
+                    return existing
+                }
+                let client = PoltioAPIClient()
+                _apiClient = client
+                return client
+            }
+        }
+        set {
+            queue.sync(flags: .barrier) {
+                _apiClient = newValue
+            }
+        }
+    }
+    
     internal init() {}
     
     #if DEBUG
@@ -81,6 +102,7 @@ public final class PoltioSDK {
             self._puid = nil
             self._puidLoaded = false
             self._sdkId = nil
+            self._apiClient = nil
             UserDefaults.standard.removeObject(forKey: PoltioSDK.sdkIdStorageKey)
             UserDefaults.standard.removeObject(forKey: PoltioSDK.puidStorageKey)
         }
@@ -146,9 +168,10 @@ public final class PoltioSDK {
     
     /// Tracks an in-app event with optional parameters.
     /// Automatically attaches `sdk_id` and `puid` (when available) to the event parameters.
+    /// For `view` events, triggers backend widget resolution via `/sdk/mobile/v1/widget`.
     /// - Parameters:
-    ///   - event: The event name (e.g. "ViewContent", "TrackConversion")
-    ///   - params: Dictionary of event properties (e.g. ["url": "app://home"])
+    ///   - event: The event name (e.g. "view", "TrackConversion")
+    ///   - params: Dictionary of event properties (e.g. ["url": "https://www.poltio.com/pdp"])
     public static func track(event: String, params: [String: Any]? = nil) {
         shared.track(event: event, params: params)
     }
@@ -161,19 +184,55 @@ public final class PoltioSDK {
             return
         }
         
-        guard isInitialized else {
+        guard isInitialized, let key = clientKey else {
             print("[PoltioSDK] Warning: track called before configuration. Call PoltioSDK.configure(clientKey:) first.")
             return
         }
         
         var enrichedParams: [String: Any] = params ?? [:]
-        enrichedParams["sdk_id"] = sdkId
+        let currentSdkId = sdkId
+        enrichedParams["sdk_id"] = currentSdkId
         if let currentPuid = puid {
             enrichedParams["puid"] = currentPuid
         }
         
         print("[PoltioSDK] Event tracked: '\(trimmedEvent)', params: \(enrichedParams)")
+        
+        if isViewEvent(trimmedEvent) {
+            let rawUrl = (params?["url"] as? String) ?? (params?["screen"] as? String) ?? (params?["page"] as? String) ?? ""
+            let targetURL = PoltioSDK.sanitizeOrFormatURL(rawUrl)
+            
+            apiClient.resolveMobileWidget(
+                clientKey: key,
+                deviceId: currentSdkId,
+                targetURL: targetURL
+            )
+        }
+    }
+    
+    // MARK: - Internal Helpers
+    
+    /// Checks whether an event name corresponds to a view event.
+    internal func isViewEvent(_ eventName: String) -> Bool {
+        let lower = eventName.lowercased()
+        return lower == "view" || lower == "viewcontent" || lower == "view_content"
+    }
+    
+    /// Sanitizes or formats a raw URL string to guarantee it contains a scheme and host required by the API.
+    internal static func sanitizeOrFormatURL(_ rawInput: String) -> String {
+        let trimmed = rawInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return "https://app.poltio.com/default"
+        }
+        
+        if let parsed = URL(string: trimmed), parsed.scheme != nil, parsed.host != nil {
+            return trimmed
+        }
+        
+        let cleanPath = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return "https://app.poltio.com/\(cleanPath)"
     }
 }
+
 
 
