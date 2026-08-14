@@ -1,21 +1,21 @@
+import PoltioSDK
 import SwiftUI
 
 struct PLPView: View {
     let category: ProductCategory
-    
+
     var categoryProducts: [Product] {
         Product.sampleProducts.filter { $0.category == category }
     }
-    
+
     let columns = [
         GridItem(.flexible(), spacing: 16),
-        GridItem(.flexible(), spacing: 16)
+        GridItem(.flexible(), spacing: 16),
     ]
-    
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                
                 // Banner for Category
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -33,13 +33,13 @@ struct PLPView: View {
                 }
                 .padding()
                 #if os(iOS)
-                .background(Color(UIColor.secondarySystemGroupedBackground))
+                    .background(Color(UIColor.secondarySystemGroupedBackground))
                 #else
-                .background(Color.gray.opacity(0.1))
+                    .background(Color.gray.opacity(0.1))
                 #endif
-                .cornerRadius(16)
-                .padding(.horizontal)
-                
+                    .cornerRadius(16)
+                    .padding(.horizontal)
+
                 // Product Grid
                 LazyVGrid(columns: columns, spacing: 16) {
                     ForEach(categoryProducts) { product in
@@ -55,14 +55,13 @@ struct PLPView: View {
         }
         .navigationTitle(category.rawValue)
         #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        .background(Color(UIColor.systemGroupedBackground))
+            .navigationBarTitleDisplayMode(.inline)
+            .background(Color(UIColor.systemGroupedBackground))
         #else
-        .background(Color.gray.opacity(0.05))
+            .background(Color.gray.opacity(0.05))
         #endif
-        .onAppear {
-            // Fires Poltio TAG screen view tracking for 'phones', 'tvs', or 'laptops'
-            PoltioSDKPlaceholder.trackScreen(category.routeKey)
-        }
+            .onAppear {
+                PoltioSDK.track(event: "view", params: ["url": "example://plp/\(category.rawValue.lowercased())"])
+            }
     }
 }

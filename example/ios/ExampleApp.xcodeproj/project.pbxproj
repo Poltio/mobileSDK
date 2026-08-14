@@ -3,10 +3,12 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 60;
 	objects = {
 
 /* Begin PBXBuildFile section */
+		5E07C671302F2BAE0055C3AE /* PoltioSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 5E07C670302F2BAE0055C3AE /* PoltioSDK */; };
+		5E5B3052302F2DB000AC6EED /* PoltioSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 5E5B3051302F2DB000AC6EED /* PoltioSDK */; };
 		A10000012C63000000000001 /* PoltioECommerceApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000012C63000000000001 /* PoltioECommerceApp.swift */; };
 		A10000022C63000000000002 /* Product.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000022C63000000000002 /* Product.swift */; };
 		A10000032C63000000000003 /* PoltioSDKPlaceholder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000032C63000000000003 /* PoltioSDKPlaceholder.swift */; };
@@ -34,6 +36,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5E5B3052302F2DB000AC6EED /* PoltioSDK in Frameworks */,
+				5E07C671302F2BAE0055C3AE /* PoltioSDK in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -153,6 +157,9 @@
 				Base,
 			);
 			mainGroup = G10000002C63000000000000;
+			packageReferences = (
+				5E5B3050302F2DB000AC6EED /* XCLocalSwiftPackageReference "../../ios" */,
+			);
 			productRefGroup = P10000002C63000000000000 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -332,6 +339,24 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		5E5B3050302F2DB000AC6EED /* XCLocalSwiftPackageReference "../../ios" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../ios;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		5E07C670302F2BAE0055C3AE /* PoltioSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PoltioSDK;
+		};
+		5E5B3051302F2DB000AC6EED /* PoltioSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PoltioSDK;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = R10000002C63000000000000 /* Project object */;
 }

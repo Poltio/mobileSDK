@@ -2,7 +2,7 @@ import SwiftUI
 
 struct DebugLogsView: View {
     @ObservedObject var sdk = PoltioSDKPlaceholder.shared
-    
+
     var body: some View {
         NavigationStack {
             List {
@@ -15,7 +15,7 @@ struct DebugLogsView: View {
                             .font(.headline)
                     }
                 }
-                
+
                 Section(header: Text("Screen View Log History (\(sdk.trackedScreensHistory.count))")) {
                     if sdk.trackedScreensHistory.isEmpty {
                         Text("No screens tracked yet")
@@ -46,28 +46,28 @@ struct ContentView: View {
                 .tabItem {
                     Label("Shop", systemImage: "storefront.fill")
                 }
-            
+
             NavigationStack {
                 PLPView(category: .phones)
             }
             .tabItem {
                 Label("Phones", systemImage: "iphone")
             }
-            
+
             NavigationStack {
                 PLPView(category: .tvs)
             }
             .tabItem {
                 Label("TVs", systemImage: "tv")
             }
-            
+
             NavigationStack {
                 PLPView(category: .laptops)
             }
             .tabItem {
                 Label("Laptops", systemImage: "laptopcomputer")
             }
-            
+
             DebugLogsView()
                 .tabItem {
                     Label("SDK Logs", systemImage: "tag.fill")

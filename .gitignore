@@ -19,7 +19,12 @@ DerivedData/
 *.xcodeproj/project.xcworkspace/xcuserdata/
 *.xcodeproj/xcuserdata/
 *.xcworkspace/xcuserdata/
-*.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
+*.xcodeproj/xcshareddata/
+*.xcworkspace/xcshareddata/
+*.xcscheme
+Secrets.plist
+*.env
+*.env.local
 *.perspectivev3
 *.mode1v3
 *.moved-aside
