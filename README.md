@@ -51,10 +51,13 @@ import PoltioSDK
 // 1. Configure the SDK at app launch (e.g., inside AppDelegate or App init)
 PoltioSDK.configure(clientKey: "poltio_test_pk_12345")
 
-// 2. Track screen/view events
+// 2. (Optional) Identify logged-in user with developer-provided user ID (puid)
+PoltioSDK.identify(puid: "user_12345")
+
+// 3. Track screen/view events (automatically includes internal sdk_id and puid)
 PoltioSDK.track(event: "ViewContent", params: ["url": "app://home"])
 
-// 3. Track conversion events
+// 4. Track conversion events
 PoltioSDK.track(event: "TrackConversion", params: ["value": 99.99, "currency": "USD"])
 ```
 
