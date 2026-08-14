@@ -188,6 +188,27 @@ final class PoltioSDKTests: XCTestCase {
         
         waitForExpectations(timeout: 2.0)
     }
+    
+    func testConcurrentAPIClientAccess() {
+        let sdk = PoltioSDK.shared
+        PoltioSDK.configure(clientKey: "pk_test_concurrent")
+        
+        let group = DispatchGroup()
+        for i in 0..<50 {
+            group.enter()
+            DispatchQueue.global().async {
+                if i % 2 == 0 {
+                    _ = sdk.apiClient
+                } else {
+                    sdk.apiClient = PoltioAPIClient()
+                }
+                group.leave()
+            }
+        }
+        
+        let result = group.wait(timeout: .now() + 3.0)
+        XCTAssertEqual(result, .success, "Concurrent access to apiClient should finish without deadlocking or racing")
+    }
 }
 
 private extension URLRequest {

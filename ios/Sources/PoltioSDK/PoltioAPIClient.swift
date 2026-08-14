@@ -90,7 +90,7 @@ internal final class PoltioAPIClient {
                 completion?(.success(httpResponse))
             } else {
                 print("[PoltioSDK] resolveMobileWidget server returned status \(httpResponse.statusCode) for URL: '\(targetURL)'")
-                completion?(.success(httpResponse))
+                completion?(.failure(URLError(.badServerResponse)))
             }
         }
         
