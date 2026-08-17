@@ -93,9 +93,7 @@ public final class PoltioFloatingBoxTriggerView: UIView {
         collapsedContainer.translatesAutoresizingMaskIntoConstraints = false
         collapsedContainer.backgroundColor = .white
         collapsedContainer.layer.cornerRadius = 14
-        if #available(iOS 11.0, *) {
-            collapsedContainer.layer.maskedCorners = [.layerMinXMinYCorner, .layerMinXMaxYCorner]
-        }
+        collapsedContainer.layer.maskedCorners = [.layerMinXMinYCorner, .layerMinXMaxYCorner]
         collapsedContainer.layer.shadowColor = UIColor.black.cgColor
         collapsedContainer.layer.shadowOpacity = 0.18
         collapsedContainer.layer.shadowOffset = CGSize(width: -2, height: 3)
@@ -132,9 +130,7 @@ public final class PoltioFloatingBoxTriggerView: UIView {
         expandedContainer.translatesAutoresizingMaskIntoConstraints = false
         expandedContainer.backgroundColor = .white
         expandedContainer.layer.cornerRadius = 18
-        if #available(iOS 11.0, *) {
-            expandedContainer.layer.maskedCorners = [.layerMinXMinYCorner, .layerMinXMaxYCorner]
-        }
+        expandedContainer.layer.maskedCorners = [.layerMinXMinYCorner, .layerMinXMaxYCorner]
         expandedContainer.layer.shadowColor = UIColor.black.cgColor
         expandedContainer.layer.shadowOpacity = 0.20
         expandedContainer.layer.shadowOffset = CGSize(width: -3, height: 4)
@@ -146,9 +142,7 @@ public final class PoltioFloatingBoxTriggerView: UIView {
         innerCard.translatesAutoresizingMaskIntoConstraints = false
         innerCard.backgroundColor = .white
         innerCard.layer.cornerRadius = 18
-        if #available(iOS 11.0, *) {
-            innerCard.layer.maskedCorners = [.layerMinXMinYCorner, .layerMinXMaxYCorner]
-        }
+        innerCard.layer.maskedCorners = [.layerMinXMinYCorner, .layerMinXMaxYCorner]
         innerCard.clipsToBounds = true
         expandedContainer.addSubview(innerCard)
 
@@ -164,14 +158,8 @@ public final class PoltioFloatingBoxTriggerView: UIView {
 
         // 2. Top Right Collapse Chevron Button
         collapseButton.translatesAutoresizingMaskIntoConstraints = false
-        if #available(iOS 13.0, *) {
-            collapseButton.setImage(UIImage(systemName: "chevron.right"), for: .normal)
-            collapseButton.tintColor = .systemGray
-        } else {
-            collapseButton.setTitle("›", for: .normal)
-            collapseButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .bold)
-            collapseButton.setTitleColor(.gray, for: .normal)
-        }
+        collapseButton.setImage(UIImage(systemName: "chevron.right"), for: .normal)
+        collapseButton.tintColor = .systemGray
         collapseButton.addTarget(self, action: #selector(handleSwipeRight), for: .touchUpInside)
         innerCard.addSubview(collapseButton)
 

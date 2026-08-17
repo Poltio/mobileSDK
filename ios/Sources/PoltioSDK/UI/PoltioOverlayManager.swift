@@ -76,6 +76,7 @@ public final class PoltioOverlayManager {
             let window: PoltioPassthroughWindow
             if #available(iOS 13.0, *) {
                 window = PoltioPassthroughWindow(windowScene: windowScene)
+                window.frame = windowScene.coordinateSpace.bounds
             } else {
                 window = PoltioPassthroughWindow(frame: UIScreen.main.bounds)
             }
@@ -99,7 +100,7 @@ public final class PoltioOverlayManager {
             self.overlayWindow = window
 
             NSLayoutConstraint.activate([
-                triggerView.trailingAnchor.constraint(equalTo: rootVC.view.trailingAnchor),
+                triggerView.trailingAnchor.constraint(equalTo: rootVC.view.safeAreaLayoutGuide.trailingAnchor),
                 triggerView.centerYAnchor.constraint(equalTo: rootVC.view.centerYAnchor, constant: -20),
             ])
 
