@@ -1,29 +1,29 @@
+import PoltioSDK
 import SwiftUI
 
 struct PDPView: View {
     let product: Product
     @State private var showAddedToCartToast = false
-    
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                
                 // Product Image Box
                 ZStack {
                     RoundedRectangle(cornerRadius: 20)
-                        #if os(iOS)
+                    #if os(iOS)
                         .fill(Color(UIColor.secondarySystemGroupedBackground))
-                        #else
+                    #else
                         .fill(Color.gray.opacity(0.1))
-                        #endif
+                    #endif
                         .frame(height: 260)
-                    
+
                     Image(systemName: product.imageName)
                         .font(.system(size: 100))
                         .foregroundColor(.blue.opacity(0.8))
                 }
                 .padding(.horizontal)
-                
+
                 // Title & Price Section
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
@@ -31,9 +31,9 @@ struct PDPView: View {
                             .font(.caption)
                             .fontWeight(.bold)
                             .foregroundColor(.blue)
-                        
+
                         Spacer()
-                        
+
                         HStack(spacing: 4) {
                             Image(systemName: "star.fill")
                                 .foregroundColor(.orange)
@@ -42,21 +42,21 @@ struct PDPView: View {
                                 .fontWeight(.medium)
                         }
                     }
-                    
+
                     Text(product.name)
                         .font(.title)
                         .fontWeight(.bold)
-                    
+
                     Text(product.formattedPrice)
                         .font(.title2)
                         .fontWeight(.bold)
                         .foregroundColor(.blue)
                 }
                 .padding(.horizontal)
-                
+
                 Divider()
                     .padding(.horizontal)
-                
+
                 // Interactive Poltio Finder Banner
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
@@ -67,11 +67,11 @@ struct PDPView: View {
                             .font(.headline)
                             .foregroundColor(.primary)
                     }
-                    
+
                     Text("Not sure if this \(product.category.rawValue.dropLast().lowercased()) fits your needs? Use our interactive finder quiz to match your style.")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
-                    
+
                     Button(action: {
                         print("[ExampleApp] Triggering Poltio TAG interactive widget for \(product.id)")
                     }) {
@@ -91,7 +91,7 @@ struct PDPView: View {
                 .background(Color.purple.opacity(0.08))
                 .cornerRadius(16)
                 .padding(.horizontal)
-                
+
                 // Description
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Overview")
@@ -101,12 +101,12 @@ struct PDPView: View {
                         .foregroundColor(.secondary)
                 }
                 .padding(.horizontal)
-                
+
                 // Technical Specs
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Key Specifications")
                         .font(.headline)
-                    
+
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(product.specs, id: \.self) { spec in
                             HStack(spacing: 8) {
@@ -119,7 +119,7 @@ struct PDPView: View {
                     }
                 }
                 .padding(.horizontal)
-                
+
                 Spacer(minLength: 40)
             }
             .padding(.vertical)
@@ -159,13 +159,12 @@ struct PDPView: View {
             .background(.ultraThinMaterial)
         }
         .alert("Added to Cart!", isPresented: $showAddedToCartToast) {
-            Button("OK", role: .cancel) { }
+            Button("OK", role: .cancel) {}
         } message: {
             Text("\(product.name) has been added to your shopping cart.")
         }
         .onAppear {
-            // Track product detail page view
-            PoltioSDKPlaceholder.trackScreen("pdp_\(product.id)")
+            PoltioSDK.track(event: "view", params: ["url": "example://pdp"])
         }
     }
 }
