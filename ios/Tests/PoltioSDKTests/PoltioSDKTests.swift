@@ -141,7 +141,10 @@ final class PoltioSDKTests: XCTestCase {
             }
             expectation.fulfill()
             let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
-            return (response, Data("{}".utf8))
+            let dummyWidgetJSON = """
+            {"public_id":"dummy_1","overlay_options":{"trigger-type":"box"}}
+            """
+            return (response, Data(dummyWidgetJSON.utf8))
         }
 
         guard let urlObj = URL(string: "https://www.poltio.com/checkout") else {
@@ -179,7 +182,19 @@ final class PoltioSDKTests: XCTestCase {
                 httpVersion: nil,
                 headerFields: nil
             )!
-            return (response, Data("{}".utf8))
+            let jsonString = """
+            {
+              "public_id": "6c964c1d-6eb4-4c19-ad16-342bd59bdac3",
+              "overlay_options": {
+                "trigger-type": "box",
+                "floating-box-text-first": "Product Finder",
+                "floating-box-text-second": "Product Finder",
+                "floating-img": "widget/box-default.png",
+                "floating-initial-position": "active"
+              }
+            }
+            """
+            return (response, Data(jsonString.utf8))
         }
 
         client.resolveMobileWidget(
@@ -187,8 +202,14 @@ final class PoltioSDKTests: XCTestCase {
             deviceId: "device_abc_123",
             targetURL: "https://www.poltio.com/pdp"
         ) { result in
-            if case let .success(httpResp) = result {
-                XCTAssertEqual(httpResp.statusCode, 200)
+            if case let .success(widget) = result {
+                XCTAssertEqual(widget.publicId, "6c964c1d-6eb4-4c19-ad16-342bd59bdac3")
+                XCTAssertEqual(widget.overlayOptions.triggerType, "box")
+                XCTAssertEqual(widget.overlayOptions.floatingBoxTextFirst, "Product Finder")
+                XCTAssertEqual(widget.overlayOptions.floatingBoxTextSecond, "Product Finder")
+                XCTAssertEqual(widget.overlayOptions.floatingImg, "widget/box-default.png")
+                XCTAssertTrue(widget.overlayOptions.isBoxTrigger)
+                XCTAssertTrue(widget.overlayOptions.isInitialActive)
             } else {
                 XCTFail("Expected success but got failure")
             }
@@ -196,6 +217,61 @@ final class PoltioSDKTests: XCTestCase {
         }
 
         waitForExpectations(timeout: 2.0)
+    }
+
+    func testPoltioWidgetResponseModelDecoding() throws {
+        let json = """
+        {
+          "public_id": "test-uuid-12345",
+          "overlay_options": {
+            "trigger-type": "box",
+            "floating-box-text-first": "Quiz Time",
+            "floating-box-text-second": "Start Quiz",
+            "floating-img": "https://cdn.poltio.com/banner.png",
+            "floating-initial-position": "active",
+            "mobile": {
+              "floating-box-text-first": "Mobile Quiz"
+            }
+          }
+        }
+        """
+        let data = Data(json.utf8)
+        let decoded = try JSONDecoder().decode(PoltioWidgetResponse.self, from: data)
+
+        XCTAssertEqual(decoded.publicId, "test-uuid-12345")
+        XCTAssertEqual(decoded.overlayOptions.triggerType, "box")
+        XCTAssertTrue(decoded.overlayOptions.isBoxTrigger)
+        XCTAssertEqual(decoded.overlayOptions.floatingBoxTextFirst, "Mobile Quiz", "Mobile override should take precedence")
+        XCTAssertEqual(decoded.overlayOptions.floatingBoxTextSecond, "Start Quiz")
+        XCTAssertEqual(decoded.overlayOptions.floatingImg, "https://cdn.poltio.com/banner.png")
+        XCTAssertTrue(decoded.overlayOptions.isInitialActive)
+        XCTAssertEqual(decoded.overlayOptions.resolvedImageUrl()?.absoluteString, "https://cdn.poltio.com/banner.png")
+    }
+
+    func testResolvedImageUrlForRelativeAndAbsolutePaths() {
+        let relativeOptions = PoltioOverlayOptions(floatingImg: "widget/box-default.png")
+        XCTAssertEqual(
+            relativeOptions.resolvedImageUrl()?.absoluteString,
+            "https://cdn.poltio.com/240x120/widget/box-default.png"
+        )
+
+        let leadingSlashOptions = PoltioOverlayOptions(floatingImg: "/custom/img.png")
+        XCTAssertEqual(
+            leadingSlashOptions.resolvedImageUrl()?.absoluteString,
+            "https://cdn.poltio.com/240x120/custom/img.png"
+        )
+
+        let absoluteOptions = PoltioOverlayOptions(floatingImg: "https://example.com/image.jpg")
+        XCTAssertEqual(
+            absoluteOptions.resolvedImageUrl()?.absoluteString,
+            "https://example.com/image.jpg"
+        )
+
+        let emptyOptions = PoltioOverlayOptions(floatingImg: "")
+        XCTAssertNil(emptyOptions.resolvedImageUrl())
+
+        let nilOptions = PoltioOverlayOptions(floatingImg: nil)
+        XCTAssertNil(nilOptions.resolvedImageUrl())
     }
 
     func testTrackViewEventTriggersAPIWithoutCrashingOnServerError() {
@@ -245,6 +321,19 @@ final class PoltioSDKTests: XCTestCase {
         let result = group.wait(timeout: .now() + 3.0)
         XCTAssertEqual(result, .success, "Concurrent access to apiClient should finish without deadlocking or racing")
     }
+
+    #if canImport(UIKit)
+        func testBuildWidgetURLWithAndWithoutPUID() {
+            let urlWithoutPuid = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", puid: nil)
+            XCTAssertEqual(urlWithoutPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off")
+
+            let urlWithEmptyPuid = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", puid: "   ")
+            XCTAssertEqual(urlWithEmptyPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off")
+
+            let urlWithPuid = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", puid: "usr_123")
+            XCTAssertEqual(urlWithPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?puid=usr_123&disclaimer=off")
+        }
+    #endif
 }
 
 private extension URLRequest {
