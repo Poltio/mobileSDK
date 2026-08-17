@@ -244,12 +244,29 @@ public struct AnyCodable: Codable, Equatable {
             try container.encode(doubleVal)
         } else if let boolVal = value as? Bool {
             try container.encode(boolVal)
+        } else if let dict = value as? [String: AnyCodable] {
+            try container.encode(dict)
+        } else if let array = value as? [AnyCodable] {
+            try container.encode(array)
         } else {
             try container.encode("\(value)")
         }
     }
 
     public static func == (lhs: AnyCodable, rhs: AnyCodable) -> Bool {
-        String(describing: lhs.value) == String(describing: rhs.value)
+        if let lhsStr = lhs.value as? String, let rhsStr = rhs.value as? String {
+            return lhsStr == rhsStr
+        } else if let lhsInt = lhs.value as? Int, let rhsInt = rhs.value as? Int {
+            return lhsInt == rhsInt
+        } else if let lhsDouble = lhs.value as? Double, let rhsDouble = rhs.value as? Double {
+            return lhsDouble == rhsDouble
+        } else if let lhsBool = lhs.value as? Bool, let rhsBool = rhs.value as? Bool {
+            return lhsBool == rhsBool
+        } else if let lhsDict = lhs.value as? [String: AnyCodable], let rhsDict = rhs.value as? [String: AnyCodable] {
+            return lhsDict == rhsDict
+        } else if let lhsArray = lhs.value as? [AnyCodable], let rhsArray = rhs.value as? [AnyCodable] {
+            return lhsArray == rhsArray
+        }
+        return false
     }
 }

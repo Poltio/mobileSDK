@@ -91,9 +91,11 @@ final class PoltioAPIClient {
                     return
                 }
 
+                #if DEBUG
                 if let bodyString = String(data: responseData, encoding: .utf8) {
                     print("[PoltioSDK] resolveMobileWidget response body (Status \(httpResponse.statusCode)):\n\(bodyString)")
                 }
+                #endif
 
                 do {
                     let widgetResponse = try JSONDecoder().decode(PoltioWidgetResponse.self, from: responseData)
