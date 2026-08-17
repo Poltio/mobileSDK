@@ -11,7 +11,6 @@
 		5E5B3052302F2DB000AC6EED /* PoltioSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 5E5B3051302F2DB000AC6EED /* PoltioSDK */; };
 		A10000012C63000000000001 /* PoltioECommerceApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000012C63000000000001 /* PoltioECommerceApp.swift */; };
 		A10000022C63000000000002 /* Product.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000022C63000000000002 /* Product.swift */; };
-		A10000032C63000000000003 /* PoltioSDKPlaceholder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000032C63000000000003 /* PoltioSDKPlaceholder.swift */; };
 		A10000042C63000000000004 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000042C63000000000004 /* ContentView.swift */; };
 		A10000052C63000000000005 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000052C63000000000005 /* HomeView.swift */; };
 		A10000062C63000000000006 /* PLPView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000062C63000000000006 /* PLPView.swift */; };
@@ -23,7 +22,6 @@
 		E10000002C63000000000000 /* ExampleApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ExampleApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F10000012C63000000000001 /* PoltioECommerceApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PoltioECommerceApp.swift; sourceTree = "<group>"; };
 		F10000022C63000000000002 /* Product.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Product.swift; sourceTree = "<group>"; };
-		F10000032C63000000000003 /* PoltioSDKPlaceholder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PoltioSDKPlaceholder.swift; sourceTree = "<group>"; };
 		F10000042C63000000000004 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		F10000052C63000000000005 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		F10000062C63000000000006 /* PLPView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PLPView.swift; sourceTree = "<group>"; };
@@ -57,7 +55,6 @@
 			children = (
 				G10000022C63000000000002 /* App */,
 				G10000032C63000000000003 /* Models */,
-				G10000042C63000000000004 /* Services */,
 				G10000052C63000000000005 /* Views */,
 			);
 			path = ExampleApp;
@@ -77,14 +74,6 @@
 				F10000022C63000000000002 /* Product.swift */,
 			);
 			path = Models;
-			sourceTree = "<group>";
-		};
-		G10000042C63000000000004 /* Services */ = {
-			isa = PBXGroup;
-			children = (
-				F10000032C63000000000003 /* PoltioSDKPlaceholder.swift */,
-			);
-			path = Services;
 			sourceTree = "<group>";
 		};
 		G10000052C63000000000005 /* Views */ = {
@@ -176,7 +165,6 @@
 			files = (
 				A10000012C63000000000001 /* PoltioECommerceApp.swift in Sources */,
 				A10000022C63000000000002 /* Product.swift in Sources */,
-				A10000032C63000000000003 /* PoltioSDKPlaceholder.swift in Sources */,
 				A10000042C63000000000004 /* ContentView.swift in Sources */,
 				A10000052C63000000000005 /* HomeView.swift in Sources */,
 				A10000062C63000000000006 /* PLPView.swift in Sources */,

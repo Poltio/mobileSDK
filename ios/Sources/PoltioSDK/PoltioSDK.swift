@@ -3,7 +3,7 @@ import Foundation
 /// Main entry point for the Poltio iOS SDK.
 public final class PoltioSDK {
     /// Shared singleton instance of `PoltioSDK`.
-    static let shared = PoltioSDK()
+    public static let shared = PoltioSDK()
 
     private var _clientKey: String?
     private var _isInitialized: Bool = false
