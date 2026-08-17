@@ -10,6 +10,7 @@ public final class PoltioSDK {
     private var _sdkId: String?
     private var _puid: String?
     private var _puidLoaded: Bool = false
+    private var _currentViewRequestId: UInt64 = 0
 
     private let queue = DispatchQueue(label: "com.poltio.sdk", attributes: .concurrent)
 
@@ -208,12 +209,41 @@ public final class PoltioSDK {
                 rawUrl = ""
             }
             let targetURL = PoltioSDK.sanitizeOrFormatURL(rawUrl)
+            let activePuid = puid
+
+            let thisRequestId: UInt64 = queue.sync(flags: .barrier) {
+                self._currentViewRequestId &+= 1
+                return self._currentViewRequestId
+            }
 
             apiClient.resolveMobileWidget(
                 clientKey: key,
                 deviceId: currentSdkId,
                 targetURL: targetURL
-            )
+            ) { [weak self] result in
+                guard let self = self else { return }
+
+                let isLatest: Bool = self.queue.sync {
+                    thisRequestId == self._currentViewRequestId
+                }
+
+                guard isLatest else {
+                    print("[PoltioSDK] Ignoring outdated widget resolution result for '\(targetURL)' (newer screen was already requested).")
+                    return
+                }
+
+                switch result {
+                case let .success(widgetResponse):
+                    #if canImport(UIKit)
+                        PoltioOverlayManager.shared.showTrigger(widget: widgetResponse, puid: activePuid)
+                    #endif
+                case let .failure(error):
+                    #if canImport(UIKit)
+                        PoltioOverlayManager.shared.hideTrigger()
+                    #endif
+                    print("[PoltioSDK] Widget resolution skipped/failed for '\(targetURL)': \(error.localizedDescription)")
+                }
+            }
         }
     }
 
