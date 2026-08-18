@@ -92,13 +92,28 @@ struct SDKStatusView: View {
     }
 }
 
+enum AppTab: Int, CaseIterable, Identifiable {
+    case shop = 0
+    case phones = 1
+    case tvs = 2
+    case laptops = 3
+    case sdkInfo = 4
+
+    var id: Int {
+        rawValue
+    }
+}
+
 struct ContentView: View {
+    @State private var selectedTab: AppTab = .shop
+
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             HomeView()
                 .tabItem {
                     Label("Shop", systemImage: "storefront.fill")
                 }
+                .tag(AppTab.shop)
 
             NavigationStack {
                 PLPView(category: .phones)
@@ -106,6 +121,7 @@ struct ContentView: View {
             .tabItem {
                 Label("Phones", systemImage: "iphone")
             }
+            .tag(AppTab.phones)
 
             NavigationStack {
                 PLPView(category: .tvs)
@@ -113,6 +129,7 @@ struct ContentView: View {
             .tabItem {
                 Label("TVs", systemImage: "tv")
             }
+            .tag(AppTab.tvs)
 
             NavigationStack {
                 PLPView(category: .laptops)
@@ -120,12 +137,27 @@ struct ContentView: View {
             .tabItem {
                 Label("Laptops", systemImage: "laptopcomputer")
             }
+            .tag(AppTab.laptops)
 
             SDKStatusView()
                 .tabItem {
                     Label("SDK Info", systemImage: "tag.fill")
                 }
+                .tag(AppTab.sdkInfo)
+        }
+        .onChange(of: selectedTab) { newTab in
+            switch newTab {
+            case .shop:
+                PoltioSDK.track(event: "view", params: ["url": "example://home"])
+            case .phones:
+                PoltioSDK.track(event: "view", params: ["url": "example://plp/phones"])
+            case .tvs:
+                PoltioSDK.track(event: "view", params: ["url": "example://plp/tvs"])
+            case .laptops:
+                PoltioSDK.track(event: "view", params: ["url": "example://plp/laptops"])
+            case .sdkInfo:
+                PoltioSDK.track(event: "view", params: ["url": "example://sdk-info"])
+            }
         }
     }
 }
-
