@@ -3,7 +3,7 @@
 DEVELOPER_DIR ?= /Applications/Xcode.app/Contents/Developer
 export DEVELOPER_DIR
 
-.PHONY: all help check build build-ios build-android build-rn test test-ios test-android test-rn run-example-ios run-example-android run-example-rn version submit-version clean
+.PHONY: all help check build build-ios build-android build-rn test test-ios test-android test-rn format format-ios lint-ios run-example-ios run-example-android run-example-rn version submit-version clean
 
 help:
 	@echo "Poltio Mobile SDK - Monorepo Makefile Commands:"
@@ -16,6 +16,9 @@ help:
 	@echo "  make test-ios            - Run iOS unit tests"
 	@echo "  make test-android        - Run Android unit tests"
 	@echo "  make test-rn             - Run React Native tests & linter"
+	@echo "  make format              - Format code across all platforms"
+	@echo "  make format-ios          - Format Swift source files with swiftformat"
+	@echo "  make lint-ios            - Lint Swift source files with swiftformat --lint"
 	@echo "  make run-example-ios     - Launch iOS Example App in simulator"
 	@echo "  make run-example-android - Launch Android Example App in emulator"
 	@echo "  make run-example-rn      - Launch React Native Example App"
@@ -26,6 +29,31 @@ help:
 check:
 	@chmod +x scripts/check-environment.sh
 	@./scripts/check-environment.sh
+
+# ------------------------------------------------------------------------------
+# Formatting & Linting Targets
+# ------------------------------------------------------------------------------
+format: format-ios
+
+format-ios:
+	@echo "==> Formatting Swift files with swiftformat..."
+	@if command -v swiftformat >/dev/null 2>&1; then \
+		swiftformat ios example/ios --swiftversion 5.9; \
+	elif [ -f "/opt/homebrew/bin/swiftformat" ]; then \
+		/opt/homebrew/bin/swiftformat ios example/ios --swiftversion 5.9; \
+	else \
+		echo "swiftformat is not installed. Install via: brew install swiftformat"; \
+	fi
+
+lint-ios:
+	@echo "==> Linting Swift files with swiftformat..."
+	@if command -v swiftformat >/dev/null 2>&1; then \
+		swiftformat ios example/ios --lint --swiftversion 5.9; \
+	elif [ -f "/opt/homebrew/bin/swiftformat" ]; then \
+		/opt/homebrew/bin/swiftformat ios example/ios --lint --swiftversion 5.9; \
+	else \
+		echo "swiftformat is not installed. Install via: brew install swiftformat"; \
+	fi
 
 all: build test
 
