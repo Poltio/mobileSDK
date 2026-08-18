@@ -123,8 +123,10 @@ public struct PoltioOverlayOptions: Codable, Equatable {
     /// - For pill triggers / `floatingSvg`: `https://cdn.poltio.com/40x40/`
     /// - For box triggers: `https://cdn.poltio.com/240x120/`
     public func resolvedImageUrl(cdnPrefix: String? = nil) -> URL? {
-        let rawImgPath = (floatingSvg ?? floatingImg)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let path = rawImgPath, !path.isEmpty else {
+        let rawImgPath = [floatingSvg, floatingImg]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+        guard let path = rawImgPath else {
             return nil
         }
 
@@ -133,7 +135,8 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         }
 
         let cleanPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let defaultPrefix = if isPillTrigger || floatingSvg != nil || cleanPath.hasSuffix(".svg") {
+        let hasValidSvg = !(floatingSvg?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        let defaultPrefix = if isPillTrigger || hasValidSvg || cleanPath.hasSuffix(".svg") {
             "https://cdn.poltio.com/40x40"
         } else {
             "https://cdn.poltio.com/240x120"
