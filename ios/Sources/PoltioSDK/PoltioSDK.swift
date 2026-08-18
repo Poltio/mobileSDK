@@ -216,6 +216,10 @@ public final class PoltioSDK {
                 return self._currentViewRequestId
             }
 
+            #if canImport(UIKit)
+                PoltioOverlayManager.shared.hideTrigger()
+            #endif
+
             apiClient.resolveMobileWidget(
                 clientKey: key,
                 deviceId: currentSdkId,

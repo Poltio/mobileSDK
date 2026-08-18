@@ -85,9 +85,9 @@ struct HomeView: View {
             #else
                 .background(Color.gray.opacity(0.05))
             #endif
-                .onAppear {
-                    PoltioSDK.track(event: "view", params: ["url": "example://home"])
-                }
+            .onAppear {
+                PoltioSDK.track(event: "view", params: ["url": "example://home"])
+            }
         }
     }
 }

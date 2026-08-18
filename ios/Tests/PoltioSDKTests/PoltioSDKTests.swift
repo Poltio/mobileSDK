@@ -322,6 +322,83 @@ final class PoltioSDKTests: XCTestCase {
         XCTAssertEqual(result, .success, "Concurrent access to apiClient should finish without deadlocking or racing")
     }
 
+    func testPoltioWidgetResponsePillTriggerWithSvgDecoding() throws {
+        let json = """
+        {
+          "public_id": "6c964c1d-6eb4-4c19-ad16-342bd59bdac3",
+          "overlay_options": {
+            "trigger-type": "pill",
+            "floating-initial-position": "active",
+            "floating-svg": "widget/PoltioSpark.svg"
+          }
+        }
+        """
+        let data = Data(json.utf8)
+        let decoded = try JSONDecoder().decode(PoltioWidgetResponse.self, from: data)
+
+        XCTAssertEqual(decoded.publicId, "6c964c1d-6eb4-4c19-ad16-342bd59bdac3")
+        XCTAssertEqual(decoded.overlayOptions.triggerType, "pill")
+        XCTAssertTrue(decoded.overlayOptions.isPillTrigger)
+        XCTAssertFalse(decoded.overlayOptions.isBoxTrigger)
+        XCTAssertEqual(decoded.overlayOptions.floatingSvg, "widget/PoltioSpark.svg")
+        XCTAssertTrue(decoded.overlayOptions.isInitialActive)
+        XCTAssertEqual(
+            decoded.overlayOptions.resolvedImageUrl()?.absoluteString,
+            "https://cdn.poltio.com/40x40/widget/PoltioSpark.svg"
+        )
+    }
+
+    func testDemoModeDynamicResolution() {
+        let client = PoltioAPIClient()
+        let homeExpectation = expectation(description: "Demo mode resolves Box for home")
+        let phonesExpectation = expectation(description: "Demo mode resolves Pill for phones")
+        let tvsExpectation = expectation(description: "Demo mode returns 404 for TVs")
+
+        client.resolveMobileWidget(
+            clientKey: "POLTIO_DEMO_KEY",
+            deviceId: "demo_device",
+            targetURL: "example://home"
+        ) { result in
+            if case let .success(widget) = result {
+                XCTAssertTrue(widget.overlayOptions.isBoxTrigger)
+                XCTAssertEqual(widget.overlayOptions.floatingBoxTextFirst, "Product Finder")
+            } else {
+                XCTFail("Expected box widget for example://home")
+            }
+            homeExpectation.fulfill()
+        }
+
+        client.resolveMobileWidget(
+            clientKey: "POLTIO_DEMO_KEY",
+            deviceId: "demo_device",
+            targetURL: "example://plp/phones"
+        ) { result in
+            if case let .success(widget) = result {
+                XCTAssertTrue(widget.overlayOptions.isPillTrigger)
+                XCTAssertEqual(widget.overlayOptions.floatingSvg, "widget/1787042301.079.svg")
+                XCTAssertTrue(widget.overlayOptions.isInitialActive)
+            } else {
+                XCTFail("Expected pill widget for example://plp/phones")
+            }
+            phonesExpectation.fulfill()
+        }
+
+        client.resolveMobileWidget(
+            clientKey: "POLTIO_DEMO_KEY",
+            deviceId: "demo_device",
+            targetURL: "example://plp/tvs"
+        ) { result in
+            if case .failure = result {
+                // Expected 404
+            } else {
+                XCTFail("Expected failure/404 for unconfigured URL example://plp/tvs")
+            }
+            tvsExpectation.fulfill()
+        }
+
+        waitForExpectations(timeout: 2.0)
+    }
+
     #if canImport(UIKit)
         func testBuildWidgetURLWithAndWithoutPUID() {
             let urlWithoutPuid = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", puid: nil)
@@ -332,6 +409,57 @@ final class PoltioSDKTests: XCTestCase {
 
             let urlWithPuid = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", puid: "usr_123")
             XCTAssertEqual(urlWithPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?puid=usr_123&disclaimer=off")
+        }
+
+        func testFloatingPillTriggerViewLifecycleAndStateTransitions() {
+            let widget = PoltioWidgetResponse(
+                publicId: "test-pill-widget",
+                overlayOptions: PoltioOverlayOptions(
+                    triggerType: "pill",
+                    floatingBoxTextFirst: "Try our",
+                    floatingBoxTextSecond: "PRODUCT FINDER",
+                    floatingInitialPosition: "collapsed"
+                )
+            )
+
+            var didOpenWidget = false
+            let pillView = PoltioFloatingPillTriggerView(widget: widget) {
+                didOpenWidget = true
+            }
+
+            XCTAssertEqual(pillView.currentState, .collapsed)
+
+            // Test transition to expanded
+            pillView.setState(.expanded, animated: false)
+            XCTAssertEqual(pillView.currentState, .expanded)
+
+            // Test resetToCollapsed
+            pillView.resetToCollapsed(animated: false)
+            XCTAssertEqual(pillView.currentState, .collapsed)
+            XCTAssertFalse(didOpenWidget)
+        }
+
+        func testFloatingPillTriggerInitialActiveState() {
+            let widget = PoltioWidgetResponse(
+                publicId: "test-pill-active-widget",
+                overlayOptions: PoltioOverlayOptions(
+                    triggerType: "pill",
+                    floatingBoxTextFirst: "Try our",
+                    floatingBoxTextSecond: "PRODUCT FINDER",
+                    floatingInitialPosition: "active"
+                )
+            )
+
+            let pillView = PoltioFloatingPillTriggerView(widget: widget) {}
+            XCTAssertEqual(pillView.currentState, .expanded)
+        }
+
+        func testSparklePathGeneration() {
+            let rect = CGRect(x: 0, y: 0, width: 20, height: 20)
+            let path = PoltioSparkleIconView.createSparklePath(in: rect)
+            XCTAssertFalse(path.isEmpty)
+            XCTAssertTrue(path.bounds.width > 0)
+            XCTAssertTrue(path.bounds.height > 0)
         }
     #endif
 }
