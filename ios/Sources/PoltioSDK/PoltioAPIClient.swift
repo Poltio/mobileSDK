@@ -106,7 +106,7 @@ final class PoltioAPIClient {
         }
 
         let task = session.dataTask(with: request) { data, response, error in
-            if let error = error {
+            if let error {
                 print("[PoltioSDK] Network request failed for '\(targetURL)': \(error.localizedDescription)")
                 completion?(.failure(error))
                 return

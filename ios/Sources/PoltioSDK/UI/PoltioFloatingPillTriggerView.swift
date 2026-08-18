@@ -399,7 +399,7 @@
             autoCollapseTimer?.invalidate()
             autoCollapseTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self] _ in
                 DispatchQueue.main.async {
-                    guard let self = self, self.currentState == .expanded else { return }
+                    guard let self, self.currentState == .expanded else { return }
                     self.setState(.collapsed, animated: true)
                 }
             }
@@ -414,8 +414,8 @@
                 object: nil,
                 queue: .main
             ) { [weak self] _ in
-                guard let self = self, self.currentState == .expanded else { return }
-                self.setState(.collapsed, animated: true)
+                guard let self, currentState == .expanded else { return }
+                setState(.collapsed, animated: true)
             }
         }
 
@@ -428,7 +428,7 @@
 
             imageDownloadTask?.cancel()
             imageDownloadTask = URLSession.shared.dataTask(with: imageURL) { [weak self] data, response, error in
-                guard let self = self, let data = data, error == nil else {
+                guard let self, let data, error == nil else {
                     return
                 }
 

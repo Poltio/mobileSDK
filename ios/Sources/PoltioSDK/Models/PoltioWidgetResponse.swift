@@ -104,17 +104,17 @@ public struct PoltioOverlayOptions: Codable, Equatable {
 
     /// Convenience check for box trigger type.
     public var isBoxTrigger: Bool {
-        return triggerType?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "box"
+        triggerType?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "box"
     }
 
     /// Convenience check for pill trigger type.
     public var isPillTrigger: Bool {
-        return triggerType?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "pill"
+        triggerType?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "pill"
     }
 
     /// Convenience check whether initial state should be active / expanded.
     public var isInitialActive: Bool {
-        return floatingInitialPosition?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "active"
+        floatingInitialPosition?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "active"
     }
 
     /// Resolves the full URL for `floatingImg` or `floatingSvg`.
@@ -133,11 +133,10 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         }
 
         let cleanPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let defaultPrefix: String
-        if isPillTrigger || floatingSvg != nil || cleanPath.hasSuffix(".svg") {
-            defaultPrefix = "https://cdn.poltio.com/40x40"
+        let defaultPrefix = if isPillTrigger || floatingSvg != nil || cleanPath.hasSuffix(".svg") {
+            "https://cdn.poltio.com/40x40"
         } else {
-            defaultPrefix = "https://cdn.poltio.com/240x120"
+            "https://cdn.poltio.com/240x120"
         }
 
         let effectivePrefix = cdnPrefix ?? defaultPrefix

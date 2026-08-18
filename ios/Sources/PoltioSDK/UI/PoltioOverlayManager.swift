@@ -27,7 +27,7 @@
         }
 
         override var shouldAutorotate: Bool {
-            return true
+            true
         }
     }
 
@@ -52,15 +52,15 @@
             puid: String? = nil
         ) {
             DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
+                guard let self else { return }
 
                 guard widget.overlayOptions.isBoxTrigger || widget.overlayOptions.isPillTrigger else {
                     print("[PoltioSDK] Trigger type '\(widget.overlayOptions.triggerType ?? "none")' is not currently handled (supported: 'box', 'pill').")
-                    self.hideTrigger()
+                    hideTrigger()
                     return
                 }
 
-                guard let hostWindow = self.findHostKeyWindow() else {
+                guard let hostWindow = findHostKeyWindow() else {
                     print("[PoltioSDK] Host window not ready yet, retrying showTrigger after 0.2s...")
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
                         self?.showTrigger(widget: widget, puid: puid)
@@ -71,19 +71,19 @@
                 let container: UIView = hostWindow
                 let targetTriggerType = widget.overlayOptions.triggerType ?? ""
 
-                if self.currentPublicId == widget.publicId,
-                   self.currentTriggerType == targetTriggerType,
-                   self.activeTriggerView != nil,
-                   self.activeTriggerView?.superview != nil
+                if currentPublicId == widget.publicId,
+                   currentTriggerType == targetTriggerType,
+                   activeTriggerView != nil,
+                   activeTriggerView?.superview != nil
                 {
                     // Already active and visible for this exact widget and trigger type
                     return
                 }
 
                 // Clean up previous overlay
-                self.teardownOverlaySynchronously()
-                self.currentPublicId = widget.publicId
-                self.currentTriggerType = targetTriggerType
+                teardownOverlaySynchronously()
+                currentPublicId = widget.publicId
+                currentTriggerType = targetTriggerType
 
                 let onOpenWidget: () -> Void = { [weak self] in
                     self?.presentWidgetWebView(publicId: widget.publicId, puid: puid)
@@ -123,7 +123,7 @@
                     triggerView = boxView
                 }
 
-                self.activeTriggerView = triggerView
+                activeTriggerView = triggerView
 
                 print("[PoltioSDK] Attached floating trigger overlay for widget '\(widget.publicId)' (type: \(widget.overlayOptions.triggerType ?? "unknown")) in host container.")
 
@@ -148,11 +148,11 @@
         /// Hides and removes any currently displayed floating trigger view with animation.
         public func hideTrigger() {
             DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
-                self.currentPublicId = nil
-                self.currentTriggerType = nil
-                let viewToClose = self.activeTriggerView
-                self.activeTriggerView = nil
+                guard let self else { return }
+                currentPublicId = nil
+                currentTriggerType = nil
+                let viewToClose = activeTriggerView
+                activeTriggerView = nil
 
                 guard let view = viewToClose else { return }
 
@@ -176,18 +176,18 @@
         /// Presents the interactive widget modal WebView on top of the active view controller.
         public func presentWidgetWebView(publicId: String, puid: String?) {
             DispatchQueue.main.async { [weak self] in
-                guard let self = self, let topVC = self.findTopmostHostViewController() else {
+                guard let self, let topVC = findTopmostHostViewController() else {
                     print("[PoltioSDK] Error: Unable to find topmost view controller to present widget.")
                     return
                 }
 
                 // Hide the floating trigger while the webview is presented
-                self.activeTriggerView?.isHidden = true
+                activeTriggerView?.isHidden = true
 
                 let webVC = PoltioWebViewController(publicId: publicId, puid: puid)
                 webVC.onDismiss = { [weak self] in
                     DispatchQueue.main.async {
-                        guard let self = self, let trigger = self.activeTriggerView else {
+                        guard let self, let trigger = self.activeTriggerView else {
                             return
                         }
 

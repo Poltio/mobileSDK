@@ -11,17 +11,17 @@ enum ProductCategory: String, CaseIterable, Identifiable, Codable {
 
     var iconName: String {
         switch self {
-        case .phones: return "iphone"
-        case .tvs: return "tv"
-        case .laptops: return "laptopcomputer"
+        case .phones: "iphone"
+        case .tvs: "tv"
+        case .laptops: "laptopcomputer"
         }
     }
 
     var routeKey: String {
         switch self {
-        case .phones: return "phones"
-        case .tvs: return "tvs"
-        case .laptops: return "laptops"
+        case .phones: "phones"
+        case .tvs: "tvs"
+        case .laptops: "laptops"
         }
     }
 }

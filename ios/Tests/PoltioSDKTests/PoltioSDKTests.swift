@@ -6,11 +6,11 @@ final class MockURLProtocol: URLProtocol {
     static var requestHandler: ((URLRequest) throws -> (HTTPURLResponse, Data?))?
 
     override class func canInit(with _: URLRequest) -> Bool {
-        return true
+        true
     }
 
     override class func canonicalRequest(for request: URLRequest) -> URLRequest {
-        return request
+        request
     }
 
     override func startLoading() {
@@ -22,7 +22,7 @@ final class MockURLProtocol: URLProtocol {
         do {
             let (response, data) = try handler(request)
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            if let data = data {
+            if let data {
                 client?.urlProtocol(self, didLoad: data)
             }
             client?.urlProtocolDidFinishLoading(self)

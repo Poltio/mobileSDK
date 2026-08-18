@@ -257,7 +257,7 @@
 
             imageDownloadTask?.cancel()
             imageDownloadTask = URLSession.shared.dataTask(with: imageURL) { [weak self] data, _, error in
-                guard let self = self, let data = data, error == nil, let image = UIImage(data: data) else {
+                guard let self, let data, error == nil, let image = UIImage(data: data) else {
                     return
                 }
                 DispatchQueue.main.async {

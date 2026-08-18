@@ -6,7 +6,7 @@ struct HomeView: View {
     @State private var selectedCategory: ProductCategory?
 
     var featuredProducts: [Product] {
-        products.filter { $0.isFeatured }
+        products.filter(\.isFeatured)
     }
 
     var body: some View {
