@@ -7,6 +7,7 @@ Welcome to the **Poltio Mobile SDK** repository. This file provides guidelines, 
 > 1. **Root Makefile Commands**: EVERY build, test, lint, example-app, versioning, and publishing action MUST be executable via the root `Makefile` (`make build`, `make build-ios`, `make test-ios`, `make run-example-ios`, `make version`, `make submit-version`, etc.). Agents must maintain and update the Makefile as targets or sub-projects evolve.
 > 2. **Monorepo Architecture**: This repository is a monorepo for all Poltio mobile SDKs. Code for iOS, Android, and React Native MUST be isolated in their respective `/ios`, `/android`, and `/react-native` directories.
 > 3. **Example Apps**: Sample apps MUST reside in `/example` (`/example/ios`, `/example/android`, `/example/rn`). Every sample app MUST be runnable directly via root `Makefile` targets.
+> 4. **Target Current Active Branch/PR**: When asked to check PR review comments, always make sure you check the PR corresponding to the current active git branch. Use `gh pr view --comments` (without providing a specific PR ID) so GitHub CLI automatically resolves the active pull request for the current branch.
 
 ---
 
