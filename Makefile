@@ -52,7 +52,8 @@ lint-ios:
 	elif [ -f "/opt/homebrew/bin/swiftformat" ]; then \
 		/opt/homebrew/bin/swiftformat ios example/ios --lint --swiftversion 5.9; \
 	else \
-		echo "swiftformat is not installed. Install via: brew install swiftformat"; \
+		echo "Error: swiftformat is not installed. Install via: brew install swiftformat"; \
+		exit 1; \
 	fi
 
 all: build test
