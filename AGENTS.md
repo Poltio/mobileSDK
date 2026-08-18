@@ -69,13 +69,16 @@ Poltio Mobile SDKs bring the **Poltio TAG** web experience (screen targeting, fl
 
 ## 4. Universal Makefile Workflows
 
-AI agents MUST use and maintain the root `Makefile` targets for executing builds, tests, and examples:
+AI agents MUST use and maintain the root `Makefile` targets for executing builds, tests, formatting, and examples:
 
 | Target | Description |
 | :--- | :--- |
 | `make build` | Builds all SDKs (iOS, Android, React Native). |
 | `make build-ios` | Builds the Swift iOS SDK package. |
 | `make test-ios` | Runs iOS unit tests (`swift test`). |
+| `make format` | Formats code across all platforms. |
+| `make format-ios` | Formats all Swift files using `swiftformat`. |
+| `make lint-ios` | Lints Swift files using `swiftformat --lint`. |
 | `make build-android` | Builds Android AAR library via Gradle. |
 | `make test-android` | Runs Android unit tests via Gradle. |
 | `make build-rn` | Builds React Native TypeScript package. |
@@ -91,6 +94,8 @@ AI agents MUST use and maintain the root `Makefile` targets for executing builds
 
 ## 5. Coding Style & Conventions
 
-- **Swift**: Follow API Design Guidelines, standard Swift naming (`camelCase` for properties, `PascalCase` for types).
+- **Swift**:
+  - **Formatting**: ALL Swift source and test files (`/ios` and `/example/ios`) **MUST** be formatted using `swiftformat` (run `make format-ios`) after every modification.
+  - Follow Apple API Design Guidelines, standard Swift naming (`camelCase` for properties, `PascalCase` for types).
 - **Kotlin**: Follow official Kotlin style guides, explicit visibility modifiers, immutability (`val` over `var` where possible).
 - **TypeScript**: Strict mode enabled, explicit return types on exported functions/classes, detailed JSDoc comments for public SDK APIs.
