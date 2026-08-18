@@ -535,24 +535,29 @@ final class PoltioSDKTests: XCTestCase {
             let triggerButton = UIButton(frame: CGRect(x: 200, y: 500, width: 100, height: 50))
             rootVC.view.addSubview(triggerButton)
 
-            var notificationReceived = false
+            var notificationCount = 0
             let observer = NotificationCenter.default.addObserver(
                 forName: PoltioFloatingPillTriggerView.didScrollNotification,
                 object: nil,
                 queue: .main
             ) { _ in
-                notificationReceived = true
+                notificationCount += 1
             }
 
             // Hit test directly on the trigger button
             let hitTrigger = window.hitTest(CGPoint(x: 250, y: 525), with: nil)
             XCTAssertEqual(hitTrigger, triggerButton)
-            XCTAssertFalse(notificationReceived)
+            XCTAssertEqual(notificationCount, 0)
 
-            // Hit test outside on empty window background
+            // Hit test outside on empty window background (first time)
             let hitOutside = window.hitTest(CGPoint(x: 50, y: 50), with: nil)
             XCTAssertNil(hitOutside)
-            XCTAssertTrue(notificationReceived)
+            XCTAssertEqual(notificationCount, 1)
+
+            // Immediate second hit test outside should be throttled (within 0.1s)
+            let hitOutsideRapid = window.hitTest(CGPoint(x: 50, y: 50), with: nil)
+            XCTAssertNil(hitOutsideRapid)
+            XCTAssertEqual(notificationCount, 1)
 
             NotificationCenter.default.removeObserver(observer)
         }

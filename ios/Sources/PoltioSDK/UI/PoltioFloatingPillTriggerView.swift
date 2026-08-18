@@ -113,6 +113,8 @@
         private let cardContainer = UIView()
         private let iconView = PoltioSparkleIconView()
         private let remoteImageView = UIImageView()
+        /// Lightweight WKWebView used to render remote vector SVGs without introducing external third-party dependencies.
+        /// Hardened with JavaScript disabled and scroll disabled for minimal overhead and security.
         private lazy var svgWebView: WKWebView = {
             let config = WKWebViewConfiguration()
             config.defaultWebpagePreferences.allowsContentJavaScript = false
@@ -169,7 +171,10 @@
         }
 
         deinit {
-            autoCollapseTimer?.invalidate()
+            let timer = autoCollapseTimer
+            DispatchQueue.main.async {
+                timer?.invalidate()
+            }
             if let observer = scrollObserver {
                 NotificationCenter.default.removeObserver(observer)
             }
@@ -421,7 +426,8 @@
         private func loadImageIfNeeded() {
             guard let imageURL = widget.overlayOptions.resolvedImageUrl() else { return }
 
-            let isSvgFile = imageURL.pathExtension.lowercased() == "svg" || (widget.overlayOptions.floatingSvg != nil)
+            let hasSvg = widget.overlayOptions.floatingSvg?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            let isSvgFile = imageURL.pathExtension.lowercased() == "svg" || hasSvg
 
             imageDownloadTask?.cancel()
             imageDownloadTask = URLSession.shared.dataTask(with: imageURL) { [weak self] data, response, error in

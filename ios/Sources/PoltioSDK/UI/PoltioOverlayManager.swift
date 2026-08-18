@@ -4,13 +4,19 @@
     /// Transparent overlay window that passes through touches except when interacting with the floating trigger.
     @available(iOSApplicationExtension, unavailable)
     public final class PoltioPassthroughWindow: UIWindow {
+        private var lastNotificationTime: TimeInterval = 0
+
         override public func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
             guard let hitView = super.hitTest(point, with: event) else {
                 return nil
             }
             // Pass touches through if the user tapped on the empty window or root controller container view
             if hitView === self || hitView === rootViewController?.view {
-                NotificationCenter.default.post(name: PoltioFloatingPillTriggerView.didScrollNotification, object: nil)
+                let now = CACurrentMediaTime()
+                if now - lastNotificationTime > 0.1 {
+                    lastNotificationTime = now
+                    NotificationCenter.default.post(name: PoltioFloatingPillTriggerView.didScrollNotification, object: nil)
+                }
                 return nil
             }
             return hitView
@@ -40,6 +46,7 @@
         private var activeTriggerView: (UIView & PoltioTriggerPresentable)?
         private var currentPublicId: String?
         private var currentTriggerType: String?
+        private var pendingShowWorkItem: DispatchWorkItem?
 
         private init() {}
 
@@ -53,6 +60,9 @@
         ) {
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
+
+                pendingShowWorkItem?.cancel()
+                pendingShowWorkItem = nil
 
                 guard widget.overlayOptions.isBoxTrigger || widget.overlayOptions.isPillTrigger else {
                     print("[PoltioSDK] Trigger type '\(widget.overlayOptions.triggerType ?? "none")' is not currently handled (supported: 'box', 'pill').")
@@ -78,10 +88,12 @@
 
                 guard let windowScene = findActiveWindowScene() else {
                     print("[PoltioSDK] UIWindowScene not ready yet, retrying showTrigger after 0.2s...")
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                    let workItem = DispatchWorkItem { [weak self] in
                         guard let self, currentPublicId == widget.publicId else { return }
                         showTrigger(widget: widget, puid: puid)
                     }
+                    pendingShowWorkItem = workItem
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: workItem)
                     return
                 }
 
@@ -162,6 +174,8 @@
         public func hideTrigger() {
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
+                pendingShowWorkItem?.cancel()
+                pendingShowWorkItem = nil
                 currentPublicId = nil
                 currentTriggerType = nil
                 let windowToClose = overlayWindow
@@ -184,6 +198,8 @@
 
         /// Synchronously tears down any existing overlay window/view.
         private func teardownOverlaySynchronously() {
+            pendingShowWorkItem?.cancel()
+            pendingShowWorkItem = nil
             currentPublicId = nil
             currentTriggerType = nil
             activeTriggerView?.removeFromSuperview()
