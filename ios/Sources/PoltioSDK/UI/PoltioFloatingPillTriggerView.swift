@@ -282,10 +282,14 @@
             let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap))
             cardContainer.addGestureRecognizer(tapGesture)
 
-            // Swipe Gesture to Collapse
-            let swipeGesture = UISwipeGestureRecognizer(target: self, action: #selector(handleSwipe))
-            swipeGesture.direction = [.right, .left]
-            cardContainer.addGestureRecognizer(swipeGesture)
+            // Swipe Gestures to Collapse
+            let swipeRight = UISwipeGestureRecognizer(target: self, action: #selector(handleSwipe))
+            swipeRight.direction = .right
+            cardContainer.addGestureRecognizer(swipeRight)
+
+            let swipeLeft = UISwipeGestureRecognizer(target: self, action: #selector(handleSwipe))
+            swipeLeft.direction = .left
+            cardContainer.addGestureRecognizer(swipeLeft)
         }
 
         // MARK: - State Management

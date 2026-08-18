@@ -524,6 +524,54 @@ final class PoltioSDKTests: XCTestCase {
             XCTAssertTrue(path.bounds.width > 0)
             XCTAssertTrue(path.bounds.height > 0)
         }
+
+        func testPassthroughWindowHitTestingAndNotification() {
+            let window = PoltioPassthroughWindow(frame: CGRect(x: 0, y: 0, width: 375, height: 812))
+            let rootVC = PoltioOverlayRootViewController()
+            window.rootViewController = rootVC
+            rootVC.view.frame = window.bounds
+            window.isHidden = false
+
+            let triggerButton = UIButton(frame: CGRect(x: 200, y: 500, width: 100, height: 50))
+            rootVC.view.addSubview(triggerButton)
+
+            var notificationReceived = false
+            let observer = NotificationCenter.default.addObserver(
+                forName: PoltioFloatingPillTriggerView.didScrollNotification,
+                object: nil,
+                queue: .main
+            ) { _ in
+                notificationReceived = true
+            }
+
+            // Hit test directly on the trigger button
+            let hitTrigger = window.hitTest(CGPoint(x: 250, y: 525), with: nil)
+            XCTAssertEqual(hitTrigger, triggerButton)
+            XCTAssertFalse(notificationReceived)
+
+            // Hit test outside on empty window background
+            let hitOutside = window.hitTest(CGPoint(x: 50, y: 50), with: nil)
+            XCTAssertNil(hitOutside)
+            XCTAssertTrue(notificationReceived)
+
+            NotificationCenter.default.removeObserver(observer)
+        }
+
+        func testPillTriggerSwipeGesturesConfiguration() {
+            let widget = PoltioWidgetResponse(
+                publicId: "test-pill-swipes",
+                overlayOptions: PoltioOverlayOptions(triggerType: "pill")
+            )
+            let pillView = PoltioFloatingPillTriggerView(widget: widget) {}
+
+            let swipeRecognizers = pillView.subviews
+                .flatMap { $0.gestureRecognizers ?? [] }
+                .compactMap { $0 as? UISwipeGestureRecognizer }
+
+            XCTAssertEqual(swipeRecognizers.count, 2)
+            XCTAssertTrue(swipeRecognizers.contains(where: { $0.direction == .right }))
+            XCTAssertTrue(swipeRecognizers.contains(where: { $0.direction == .left }))
+        }
     #endif
 }
 
