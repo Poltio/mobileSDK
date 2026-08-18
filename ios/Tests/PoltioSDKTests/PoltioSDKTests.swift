@@ -267,6 +267,24 @@ final class PoltioSDKTests: XCTestCase {
             "https://example.com/image.jpg"
         )
 
+        let emptySvgFallbackOptions = PoltioOverlayOptions(
+            floatingImg: "widget/box-default.png",
+            floatingSvg: ""
+        )
+        XCTAssertEqual(
+            emptySvgFallbackOptions.resolvedImageUrl()?.absoluteString,
+            "https://cdn.poltio.com/240x120/widget/box-default.png"
+        )
+
+        let whitespaceSvgFallbackOptions = PoltioOverlayOptions(
+            floatingImg: "widget/box-default.png",
+            floatingSvg: "   "
+        )
+        XCTAssertEqual(
+            whitespaceSvgFallbackOptions.resolvedImageUrl()?.absoluteString,
+            "https://cdn.poltio.com/240x120/widget/box-default.png"
+        )
+
         let emptyOptions = PoltioOverlayOptions(floatingImg: "")
         XCTAssertNil(emptyOptions.resolvedImageUrl())
 
@@ -348,14 +366,59 @@ final class PoltioSDKTests: XCTestCase {
         )
     }
 
-    func testDemoModeDynamicResolution() {
-        let client = PoltioAPIClient()
-        let homeExpectation = expectation(description: "Demo mode resolves Box for home")
-        let phonesExpectation = expectation(description: "Demo mode resolves Pill for phones")
-        let tvsExpectation = expectation(description: "Demo mode returns 404 for TVs")
+    func testDynamicWidgetResolutionWithMockSession() {
+        let mockSession = createMockSession()
+        let client = PoltioAPIClient(session: mockSession)
+
+        let homeExpectation = expectation(description: "Mock resolves Box for home")
+        let phonesExpectation = expectation(description: "Mock resolves Pill for phones")
+        let tvsExpectation = expectation(description: "Mock returns 404 for TVs")
+
+        MockURLProtocol.requestHandler = { request in
+            guard let bodyData = request.httpBody ?? request.httpBodyStreamData(),
+                  let json = try? JSONSerialization.jsonObject(with: bodyData) as? [String: String],
+                  let targetURL = json["url"]
+            else {
+                let response = HTTPURLResponse(url: request.url!, statusCode: 400, httpVersion: nil, headerFields: nil)!
+                return (response, Data())
+            }
+
+            if targetURL == "example://home" {
+                let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                let body = """
+                {
+                  "public_id": "6c964c1d-6eb4-4c19-ad16-342bd59bdac3",
+                  "overlay_options": {
+                    "trigger-type": "box",
+                    "floating-box-text-first": "Product Finder",
+                    "floating-box-text-second": "Product Finder",
+                    "floating-img": "widget/box-default.png",
+                    "floating-initial-position": "active"
+                  }
+                }
+                """
+                return (response, Data(body.utf8))
+            } else if targetURL == "example://plp/phones" {
+                let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                let body = """
+                {
+                  "public_id": "6c964c1d-6eb4-4c19-ad16-342bd59bdac3",
+                  "overlay_options": {
+                    "trigger-type": "pill",
+                    "floating-svg": "widget/1787042301.079.svg",
+                    "floating-initial-position": "active"
+                  }
+                }
+                """
+                return (response, Data(body.utf8))
+            } else {
+                let response = HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!
+                return (response, Data("Not Found".utf8))
+            }
+        }
 
         client.resolveMobileWidget(
-            clientKey: "POLTIO_DEMO_KEY",
+            clientKey: "pk_live_test_123",
             deviceId: "demo_device",
             targetURL: "example://home"
         ) { result in
@@ -369,7 +432,7 @@ final class PoltioSDKTests: XCTestCase {
         }
 
         client.resolveMobileWidget(
-            clientKey: "POLTIO_DEMO_KEY",
+            clientKey: "pk_live_test_123",
             deviceId: "demo_device",
             targetURL: "example://plp/phones"
         ) { result in
@@ -384,7 +447,7 @@ final class PoltioSDKTests: XCTestCase {
         }
 
         client.resolveMobileWidget(
-            clientKey: "POLTIO_DEMO_KEY",
+            clientKey: "pk_live_test_123",
             deviceId: "demo_device",
             targetURL: "example://plp/tvs"
         ) { result in

@@ -45,41 +45,6 @@ final class PoltioAPIClient {
         targetURL: String,
         completion: ((Result<PoltioWidgetResponse, Error>) -> Void)? = nil
     ) {
-        if clientKey == "POLTIO_DEMO_KEY" {
-            let normalizedURL = targetURL.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-            if normalizedURL == "example://home" {
-                let response = PoltioWidgetResponse(
-                    publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3",
-                    overlayOptions: PoltioOverlayOptions(
-                        triggerType: "box",
-                        floatingBoxTextFirst: "Product Finder",
-                        floatingBoxTextSecond: "Product Finder",
-                        floatingImg: "widget/box-default.png",
-                        floatingInitialPosition: "active"
-                    )
-                )
-                print("[PoltioSDK] [Demo] Resolved Box widget for '\(targetURL)'.")
-                completion?(.success(response))
-                return
-            } else if normalizedURL == "example://plp/phones" {
-                let response = PoltioWidgetResponse(
-                    publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3",
-                    overlayOptions: PoltioOverlayOptions(
-                        triggerType: "pill",
-                        floatingSvg: "widget/1787042301.079.svg",
-                        floatingInitialPosition: "active"
-                    )
-                )
-                print("[PoltioSDK] [Demo] Resolved Pill widget for '\(targetURL)'.")
-                completion?(.success(response))
-                return
-            } else {
-                print("[PoltioSDK] [Demo] No widget configured for URL: '\(targetURL)' (404).")
-                completion?(.failure(URLError(.resourceUnavailable)))
-                return
-            }
-        }
-
         let endpointString = "\(baseURL)\(PoltioAPIClient.widgetEndpointPath)"
         guard let requestURL = URL(string: endpointString) else {
             print("[PoltioSDK] Error: Invalid API endpoint URL '\(endpointString)'.")

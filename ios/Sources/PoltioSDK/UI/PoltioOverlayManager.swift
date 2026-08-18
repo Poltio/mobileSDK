@@ -60,15 +60,6 @@
                     return
                 }
 
-                guard let hostWindow = findHostKeyWindow() else {
-                    print("[PoltioSDK] Host window not ready yet, retrying showTrigger after 0.2s...")
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-                        self?.showTrigger(widget: widget, puid: puid)
-                    }
-                    return
-                }
-
-                let container: UIView = hostWindow
                 let targetTriggerType = widget.overlayOptions.triggerType ?? ""
 
                 if currentPublicId == widget.publicId,
@@ -80,10 +71,21 @@
                     return
                 }
 
-                // Clean up previous overlay
+                // Clean up previous overlay and update state immediately
                 teardownOverlaySynchronously()
                 currentPublicId = widget.publicId
                 currentTriggerType = targetTriggerType
+
+                guard let hostWindow = findHostKeyWindow() else {
+                    print("[PoltioSDK] Host window not ready yet, retrying showTrigger after 0.2s...")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                        guard let self, currentPublicId == widget.publicId else { return }
+                        showTrigger(widget: widget, puid: puid)
+                    }
+                    return
+                }
+
+                let container: UIView = hostWindow
 
                 let onOpenWidget: () -> Void = { [weak self] in
                     self?.presentWidgetWebView(publicId: widget.publicId, puid: puid)

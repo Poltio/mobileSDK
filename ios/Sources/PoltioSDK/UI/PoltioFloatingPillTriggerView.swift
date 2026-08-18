@@ -115,6 +115,7 @@
         private let remoteImageView = UIImageView()
         private lazy var svgWebView: WKWebView = {
             let config = WKWebViewConfiguration()
+            config.defaultWebpagePreferences.allowsContentJavaScript = false
             let webView = WKWebView(frame: .zero, configuration: config)
             webView.translatesAutoresizingMaskIntoConstraints = false
             webView.isOpaque = false
@@ -345,16 +346,8 @@
         }
 
         private func calculateExpandedWidth() -> CGFloat {
-            let dummySubtitle = UILabel()
-            dummySubtitle.font = subtitleLabel.font
-            dummySubtitle.text = subtitleLabel.text
-
-            let dummyTitle = UILabel()
-            dummyTitle.font = titleLabel.font
-            dummyTitle.attributedText = titleLabel.attributedText
-
-            let subtitleWidth = dummySubtitle.intrinsicContentSize.width
-            let titleWidth = dummyTitle.intrinsicContentSize.width
+            let subtitleWidth = subtitleLabel.intrinsicContentSize.width
+            let titleWidth = titleLabel.intrinsicContentSize.width
             let textWidth = max(subtitleWidth, titleWidth)
 
             // 14 (icon leading) + 40 (icon width) + 8 (spacing) + textWidth + 20 (trailing)
