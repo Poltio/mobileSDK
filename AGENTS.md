@@ -7,6 +7,7 @@ Welcome to the **Poltio Mobile SDK** repository. This file provides guidelines, 
 > 1. **Root Makefile Commands**: EVERY build, test, lint, example-app, versioning, and publishing action MUST be executable via the root `Makefile` (`make build`, `make build-ios`, `make test-ios`, `make run-example-ios`, `make version`, `make submit-version`, etc.). Agents must maintain and update the Makefile as targets or sub-projects evolve.
 > 2. **Monorepo Architecture**: This repository is a monorepo for all Poltio mobile SDKs. Code for iOS, Android, and React Native MUST be isolated in their respective `/ios`, `/android`, and `/react-native` directories.
 > 3. **Example Apps**: Sample apps MUST reside in `/example` (`/example/ios`, `/example/android`, `/example/rn`). Every sample app MUST be runnable directly via root `Makefile` targets.
+> 4. **Target Current Active Branch/PR**: When asked to check PR review comments, always make sure you check the PR corresponding to the current active git branch. Use `gh pr view --comments` (without providing a specific PR ID) so GitHub CLI automatically resolves the active pull request for the current branch.
 
 ---
 
@@ -69,13 +70,16 @@ Poltio Mobile SDKs bring the **Poltio TAG** web experience (screen targeting, fl
 
 ## 4. Universal Makefile Workflows
 
-AI agents MUST use and maintain the root `Makefile` targets for executing builds, tests, and examples:
+AI agents MUST use and maintain the root `Makefile` targets for executing builds, tests, formatting, and examples:
 
 | Target | Description |
 | :--- | :--- |
 | `make build` | Builds all SDKs (iOS, Android, React Native). |
 | `make build-ios` | Builds the Swift iOS SDK package. |
 | `make test-ios` | Runs iOS unit tests (`swift test`). |
+| `make format` | Formats code across all platforms. |
+| `make format-ios` | Formats all Swift files using `swiftformat`. |
+| `make lint-ios` | Lints Swift files using `swiftformat --lint`. |
 | `make build-android` | Builds Android AAR library via Gradle. |
 | `make test-android` | Runs Android unit tests via Gradle. |
 | `make build-rn` | Builds React Native TypeScript package. |
@@ -91,6 +95,8 @@ AI agents MUST use and maintain the root `Makefile` targets for executing builds
 
 ## 5. Coding Style & Conventions
 
-- **Swift**: Follow API Design Guidelines, standard Swift naming (`camelCase` for properties, `PascalCase` for types).
+- **Swift**:
+  - **Formatting**: ALL Swift source and test files (`/ios` and `/example/ios`) **MUST** be formatted using `swiftformat` (run `make format-ios`) after every modification.
+  - Follow Apple API Design Guidelines, standard Swift naming (`camelCase` for properties, `PascalCase` for types).
 - **Kotlin**: Follow official Kotlin style guides, explicit visibility modifiers, immutability (`val` over `var` where possible).
 - **TypeScript**: Strict mode enabled, explicit return types on exported functions/classes, detailed JSDoc comments for public SDK APIs.

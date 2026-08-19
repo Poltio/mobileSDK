@@ -71,7 +71,7 @@ final class PoltioAPIClient {
         }
 
         let task = session.dataTask(with: request) { data, response, error in
-            if let error = error {
+            if let error {
                 print("[PoltioSDK] Network request failed for '\(targetURL)': \(error.localizedDescription)")
                 completion?(.failure(error))
                 return
@@ -92,9 +92,9 @@ final class PoltioAPIClient {
                 }
 
                 #if DEBUG
-                if let bodyString = String(data: responseData, encoding: .utf8) {
-                    print("[PoltioSDK] resolveMobileWidget response body (Status \(httpResponse.statusCode)):\n\(bodyString)")
-                }
+                    if let bodyString = String(data: responseData, encoding: .utf8) {
+                        print("[PoltioSDK] resolveMobileWidget response body (Status \(httpResponse.statusCode)):\n\(bodyString)")
+                    }
                 #endif
 
                 do {

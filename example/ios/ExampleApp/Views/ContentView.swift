@@ -67,6 +67,62 @@ struct SDKStatusView: View {
                     }
                 }
 
+                Section(header: Text("Test Dynamic Screen Views")) {
+                    Button(action: {
+                        PoltioSDK.track(event: "view", params: ["url": "example://home"])
+                        eventStatusMessage = "Tracked 'view' for 'example://home'"
+                    }) {
+                        HStack {
+                            Image(systemName: "storefront")
+                                .foregroundColor(.blue)
+                            Text("Track View Home (example://home)")
+                        }
+                    }
+
+                    Button(action: {
+                        PoltioSDK.track(event: "view", params: ["url": "example://plp/phones"])
+                        eventStatusMessage = "Tracked 'view' for 'example://plp/phones'"
+                    }) {
+                        HStack {
+                            Image(systemName: "iphone")
+                                .foregroundColor(.teal)
+                            Text("Track View Phones (example://plp/phones)")
+                        }
+                    }
+
+                    Button(action: {
+                        PoltioSDK.track(event: "view", params: ["url": "example://plp/tvs"])
+                        eventStatusMessage = "Tracked 'view' for 'example://plp/tvs'"
+                    }) {
+                        HStack {
+                            Image(systemName: "tv")
+                                .foregroundColor(.indigo)
+                            Text("Track View TVs (example://plp/tvs)")
+                        }
+                    }
+
+                    Button(action: {
+                        PoltioSDK.track(event: "view", params: ["url": "example://plp/laptops"])
+                        eventStatusMessage = "Tracked 'view' for 'example://plp/laptops'"
+                    }) {
+                        HStack {
+                            Image(systemName: "laptopcomputer")
+                                .foregroundColor(.purple)
+                            Text("Track View Laptops (example://plp/laptops)")
+                        }
+                    }
+
+                    Button(role: .destructive, action: {
+                        PoltioOverlayManager.shared.hideTrigger()
+                        eventStatusMessage = "Hidden Active Trigger Overlay"
+                    }) {
+                        HStack {
+                            Image(systemName: "xmark.circle")
+                            Text("Hide Active Trigger")
+                        }
+                    }
+                }
+
                 Section(header: Text("Manual Event Tracking")) {
                     Button("Track Custom View Event") {
                         PoltioSDK.track(event: "view", params: ["url": "example://manual_track"])
@@ -145,6 +201,9 @@ struct ContentView: View {
                 }
                 .tag(AppTab.sdkInfo)
         }
+        .onAppear {
+            PoltioSDK.track(event: "view", params: ["url": "example://home"])
+        }
         .onChange(of: selectedTab) { newTab in
             switch newTab {
             case .shop:
@@ -156,7 +215,7 @@ struct ContentView: View {
             case .laptops:
                 PoltioSDK.track(event: "view", params: ["url": "example://plp/laptops"])
             case .sdkInfo:
-                PoltioSDK.track(event: "view", params: ["url": "example://sdk-info"])
+                PoltioSDK.track(event: "view", params: ["url": "example://sdk_info"])
             }
         }
     }

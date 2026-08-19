@@ -1,251 +1,315 @@
 #if canImport(UIKit)
-import UIKit
+    import UIKit
 
-/// Transparent overlay window that passes through touches except when interacting with the floating trigger.
-@available(iOSApplicationExtension, unavailable)
-public final class PoltioPassthroughWindow: UIWindow {
-    override public func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        guard let hitView = super.hitTest(point, with: event) else {
-            return nil
+    /// Transparent overlay window that passes through touches except when interacting with the floating trigger.
+    @available(iOSApplicationExtension, unavailable)
+    public final class PoltioPassthroughWindow: UIWindow {
+        private var lastNotificationTime: TimeInterval = 0
+
+        override public func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+            guard let hitView = super.hitTest(point, with: event) else {
+                return nil
+            }
+            // Pass touches through if the user tapped on the empty window or root controller container view
+            if hitView === self || hitView === rootViewController?.view {
+                let now = CACurrentMediaTime()
+                if now - lastNotificationTime > 0.1 {
+                    lastNotificationTime = now
+                    NotificationCenter.default.post(name: PoltioFloatingPillTriggerView.didScrollNotification, object: nil)
+                }
+                return nil
+            }
+            return hitView
         }
-        // Pass touches through if the user tapped on the empty window or root controller container view
-        if hitView === self || hitView === rootViewController?.view {
-            return nil
+    }
+
+    /// Dedicated root view controller for the overlay window.
+    @available(iOSApplicationExtension, unavailable)
+    final class PoltioOverlayRootViewController: UIViewController {
+        override func viewDidLoad() {
+            super.viewDidLoad()
+            view.backgroundColor = .clear
+            view.isOpaque = false
         }
-        return hitView
-    }
-}
 
-/// Dedicated root view controller for the overlay window.
-@available(iOSApplicationExtension, unavailable)
-final class PoltioOverlayRootViewController: UIViewController {
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        view.backgroundColor = .clear
-        view.isOpaque = false
+        override var shouldAutorotate: Bool {
+            true
+        }
     }
 
-    override var shouldAutorotate: Bool {
-        return true
-    }
-}
+    /// Manages attaching, presenting, and dismissing native Poltio floating triggers and interactive webviews.
+    @available(iOSApplicationExtension, unavailable)
+    public final class PoltioOverlayManager {
+        public static let shared = PoltioOverlayManager()
 
-/// Manages attaching, presenting, and dismissing native Poltio floating triggers and interactive webviews.
-@available(iOSApplicationExtension, unavailable)
-public final class PoltioOverlayManager {
-    public static let shared = PoltioOverlayManager()
+        private var overlayWindow: PoltioPassthroughWindow?
+        private var activeTriggerView: (UIView & PoltioTriggerPresentable)?
+        private var currentPublicId: String?
+        private var currentTriggerType: String?
+        private var pendingShowWorkItem: DispatchWorkItem?
 
-    private var overlayWindow: PoltioPassthroughWindow?
-    private var activeTriggerView: PoltioFloatingBoxTriggerView?
-    private var currentPublicId: String?
+        private init() {}
 
-    private init() {}
+        /// Displays the floating trigger for the resolved widget on a dedicated passthrough overlay window.
+        /// - Parameters:
+        ///   - widget: The resolved Poltio widget configuration.
+        ///   - puid: Optional developer-provided user identifier.
+        public func showTrigger(
+            widget: PoltioWidgetResponse,
+            puid: String? = nil
+        ) {
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
 
-    /// Displays the floating trigger for the resolved widget on a dedicated passthrough overlay window.
-    /// - Parameters:
-    ///   - widget: The resolved Poltio widget configuration.
-    ///   - puid: Optional developer-provided user identifier.
-    public func showTrigger(
-        widget: PoltioWidgetResponse,
-        puid: String? = nil
-    ) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
+                pendingShowWorkItem?.cancel()
+                pendingShowWorkItem = nil
 
-            guard widget.overlayOptions.isBoxTrigger else {
-                print("[PoltioSDK] Trigger type '\(widget.overlayOptions.triggerType ?? "none")' is not currently handled (supported: 'box').")
-                self.hideTrigger()
-                return
-            }
+                guard widget.overlayOptions.isBoxTrigger || widget.overlayOptions.isPillTrigger else {
+                    print("[PoltioSDK] Trigger type '\(widget.overlayOptions.triggerType ?? "none")' is not currently handled (supported: 'box', 'pill').")
+                    hideTrigger()
+                    return
+                }
 
-            guard let windowScene = self.findActiveWindowScene() else {
-                print("[PoltioSDK] Error: Unable to find active UIWindowScene to attach floating trigger.")
-                return
-            }
+                let targetTriggerType = widget.overlayOptions.triggerType ?? ""
 
-            if self.currentPublicId == widget.publicId, self.activeTriggerView != nil, self.overlayWindow?.isHidden == false {
-                // Already active and visible for this widget
-                return
-            }
+                if currentPublicId == widget.publicId,
+                   currentTriggerType == targetTriggerType,
+                   activeTriggerView != nil,
+                   activeTriggerView?.superview != nil
+                {
+                    // Already active and visible for this exact widget and trigger type
+                    return
+                }
 
-            // Synchronously clean up previous overlay without scheduling conflicting async blocks
-            self.teardownOverlaySynchronously()
+                // Clean up previous overlay and update state immediately
+                teardownOverlaySynchronously()
+                currentPublicId = widget.publicId
+                currentTriggerType = targetTriggerType
 
-            self.currentPublicId = widget.publicId
+                guard let windowScene = findActiveWindowScene() else {
+                    print("[PoltioSDK] UIWindowScene not ready yet, retrying showTrigger after 0.2s...")
+                    let workItem = DispatchWorkItem { [weak self] in
+                        guard let self, currentPublicId == widget.publicId else { return }
+                        showTrigger(widget: widget, puid: puid)
+                    }
+                    pendingShowWorkItem = workItem
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: workItem)
+                    return
+                }
 
-            let window: PoltioPassthroughWindow
-            if #available(iOS 13.0, *) {
-                window = PoltioPassthroughWindow(windowScene: windowScene)
-                window.frame = windowScene.coordinateSpace.bounds
-            } else {
-                window = PoltioPassthroughWindow(frame: UIScreen.main.bounds)
-            }
+                let window: PoltioPassthroughWindow
+                if #available(iOS 13.0, *) {
+                    window = PoltioPassthroughWindow(windowScene: windowScene)
+                    window.frame = windowScene.coordinateSpace.bounds
+                } else {
+                    window = PoltioPassthroughWindow(frame: UIScreen.main.bounds)
+                }
 
-            window.windowLevel = UIWindow.Level.alert - 1
-            window.backgroundColor = .clear
-            window.isOpaque = false
+                window.windowLevel = UIWindow.Level.alert - 1
+                window.backgroundColor = .clear
+                window.isOpaque = false
 
-            let rootVC = PoltioOverlayRootViewController()
-            window.rootViewController = rootVC
+                let rootVC = PoltioOverlayRootViewController()
+                window.rootViewController = rootVC
 
-            let triggerView = PoltioFloatingBoxTriggerView(
-                widget: widget,
-                onOpenWidget: { [weak self] in
+                let onOpenWidget: () -> Void = { [weak self] in
                     self?.presentWidgetWebView(publicId: widget.publicId, puid: puid)
                 }
-            )
 
-            rootVC.view.addSubview(triggerView)
-            self.activeTriggerView = triggerView
-            self.overlayWindow = window
+                let triggerView: UIView & PoltioTriggerPresentable
 
-            NSLayoutConstraint.activate([
-                triggerView.trailingAnchor.constraint(equalTo: rootVC.view.safeAreaLayoutGuide.trailingAnchor),
-                triggerView.centerYAnchor.constraint(equalTo: rootVC.view.centerYAnchor, constant: -20),
-            ])
-
-            window.isHidden = false
-
-            print("[PoltioSDK] Attached floating trigger overlay for widget '\(widget.publicId)' in dedicated overlay window.")
-
-            triggerView.alpha = 0
-            triggerView.transform = CGAffineTransform(translationX: 80, y: 0)
-
-            UIView.animate(
-                withDuration: 0.4,
-                delay: 0.05,
-                usingSpringWithDamping: 0.8,
-                initialSpringVelocity: 0.5,
-                options: [.curveEaseOut, .allowUserInteraction],
-                animations: {
-                    triggerView.alpha = 1
-                    triggerView.transform = .identity
-                },
-                completion: nil
-            )
-        }
-    }
-
-    /// Hides and removes any currently displayed floating trigger view and its overlay window with animation.
-    public func hideTrigger() {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            self.currentPublicId = nil
-            let windowToClose = self.overlayWindow
-            let viewToClose = self.activeTriggerView
-
-            self.overlayWindow = nil
-            self.activeTriggerView = nil
-
-            guard let view = viewToClose, let window = windowToClose else { return }
-
-            UIView.animate(withDuration: 0.25, animations: {
-                view.alpha = 0
-                view.transform = CGAffineTransform(translationX: 80, y: 0)
-            }, completion: { _ in
-                view.removeFromSuperview()
-                window.isHidden = true
-            })
-        }
-    }
-
-    /// Synchronously tears down any existing overlay window/view.
-    private func teardownOverlaySynchronously() {
-        currentPublicId = nil
-        activeTriggerView?.removeFromSuperview()
-        activeTriggerView = nil
-        overlayWindow?.isHidden = true
-        overlayWindow = nil
-    }
-
-    /// Presents the interactive widget modal WebView on top of the active view controller.
-    public func presentWidgetWebView(publicId: String, puid: String?) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self, let topVC = self.findTopmostHostViewController() else {
-                print("[PoltioSDK] Error: Unable to find topmost view controller to present widget.")
-                return
-            }
-
-            // Hide the floating trigger while the webview is presented
-            self.overlayWindow?.isHidden = true
-
-            let webVC = PoltioWebViewController(publicId: publicId, puid: puid)
-            webVC.onDismiss = { [weak self] in
-                DispatchQueue.main.async {
-                    guard let self = self, let window = self.overlayWindow, let trigger = self.activeTriggerView else {
-                        return
-                    }
-
-                    // Reset to collapsed tab after user interacted with webview
-                    trigger.setState(.collapsed, animated: false)
-
-                    window.isHidden = false
-                    trigger.alpha = 0
-                    trigger.transform = CGAffineTransform(translationX: 80, y: 0)
-
-                    UIView.animate(
-                        withDuration: 0.35,
-                        delay: 0.05,
-                        usingSpringWithDamping: 0.8,
-                        initialSpringVelocity: 0.5,
-                        options: [.curveEaseOut, .allowUserInteraction],
-                        animations: {
-                            trigger.alpha = 1
-                            trigger.transform = .identity
-                        },
-                        completion: nil
+                if widget.overlayOptions.isPillTrigger {
+                    let pillView = PoltioFloatingPillTriggerView(
+                        widget: widget,
+                        onOpenWidget: onOpenWidget
                     )
+                    pillView.translatesAutoresizingMaskIntoConstraints = false
+                    rootVC.view.addSubview(pillView)
+
+                    NSLayoutConstraint.activate([
+                        pillView.trailingAnchor.constraint(equalTo: rootVC.view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+                        pillView.bottomAnchor.constraint(equalTo: rootVC.view.safeAreaLayoutGuide.bottomAnchor, constant: -70),
+                    ])
+                    triggerView = pillView
+                } else {
+                    let boxView = PoltioFloatingBoxTriggerView(
+                        widget: widget,
+                        onOpenWidget: onOpenWidget
+                    )
+                    boxView.translatesAutoresizingMaskIntoConstraints = false
+                    rootVC.view.addSubview(boxView)
+
+                    NSLayoutConstraint.activate([
+                        boxView.trailingAnchor.constraint(equalTo: rootVC.view.trailingAnchor),
+                        boxView.centerYAnchor.constraint(equalTo: rootVC.view.centerYAnchor, constant: -20),
+                    ])
+                    triggerView = boxView
+                }
+
+                activeTriggerView = triggerView
+                overlayWindow = window
+                window.isHidden = false
+
+                print("[PoltioSDK] Attached floating trigger overlay for widget '\(widget.publicId)' (type: \(widget.overlayOptions.triggerType ?? "unknown")) in dedicated passthrough window.")
+
+                triggerView.alpha = 0
+                triggerView.transform = CGAffineTransform(translationX: 80, y: 0)
+
+                UIView.animate(
+                    withDuration: 0.4,
+                    delay: 0.05,
+                    usingSpringWithDamping: 0.8,
+                    initialSpringVelocity: 0.5,
+                    options: [.curveEaseOut, .allowUserInteraction],
+                    animations: {
+                        triggerView.alpha = 1
+                        triggerView.transform = .identity
+                    },
+                    completion: nil
+                )
+            }
+        }
+
+        /// Hides and removes any currently displayed floating trigger view and its overlay window with animation.
+        public func hideTrigger() {
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                pendingShowWorkItem?.cancel()
+                pendingShowWorkItem = nil
+                currentPublicId = nil
+                currentTriggerType = nil
+                let windowToClose = overlayWindow
+                let viewToClose = activeTriggerView
+
+                overlayWindow = nil
+                activeTriggerView = nil
+
+                guard let view = viewToClose, let window = windowToClose else { return }
+
+                UIView.animate(withDuration: 0.25, animations: {
+                    view.alpha = 0
+                    view.transform = CGAffineTransform(translationX: 80, y: 0)
+                }, completion: { _ in
+                    view.removeFromSuperview()
+                    window.isHidden = true
+                })
+            }
+        }
+
+        /// Synchronously tears down any existing overlay window/view.
+        private func teardownOverlaySynchronously() {
+            pendingShowWorkItem?.cancel()
+            pendingShowWorkItem = nil
+            currentPublicId = nil
+            currentTriggerType = nil
+            activeTriggerView?.removeFromSuperview()
+            activeTriggerView = nil
+            overlayWindow?.isHidden = true
+            overlayWindow = nil
+        }
+
+        /// Presents the interactive widget modal WebView on top of the active view controller.
+        public func presentWidgetWebView(publicId: String, puid: String?) {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let topVC = findTopmostHostViewController() else {
+                    print("[PoltioSDK] Error: Unable to find topmost view controller to present widget.")
+                    return
+                }
+
+                // Hide the floating trigger window while the webview is presented
+                overlayWindow?.isHidden = true
+
+                let webVC = PoltioWebViewController(publicId: publicId, puid: puid)
+                webVC.onDismiss = { [weak self] in
+                    DispatchQueue.main.async {
+                        guard let self, let window = self.overlayWindow, let trigger = self.activeTriggerView else {
+                            return
+                        }
+
+                        // Reset to collapsed tab after user interacted with webview
+                        trigger.resetToCollapsed(animated: false)
+
+                        window.isHidden = false
+                        trigger.alpha = 0
+                        trigger.transform = CGAffineTransform(translationX: 80, y: 0)
+
+                        UIView.animate(
+                            withDuration: 0.35,
+                            delay: 0.05,
+                            usingSpringWithDamping: 0.8,
+                            initialSpringVelocity: 0.5,
+                            options: [.curveEaseOut, .allowUserInteraction],
+                            animations: {
+                                trigger.alpha = 1
+                                trigger.transform = .identity
+                            },
+                            completion: nil
+                        )
+                    }
+                }
+
+                topVC.present(webVC, animated: true, completion: nil)
+            }
+        }
+
+        // MARK: - Scene & View Controller Traversal
+
+        private func findActiveWindowScene() -> UIWindowScene? {
+            if #available(iOS 13.0, *) {
+                let scenes = UIApplication.shared.connectedScenes
+                    .compactMap { $0 as? UIWindowScene }
+
+                if let active = scenes.first(where: { $0.activationState == .foregroundActive }) {
+                    return active
+                }
+                if let first = scenes.first {
+                    return first
+                }
+                if let scene = UIApplication.shared.windows.first?.windowScene {
+                    return scene
+                }
+            }
+            return nil
+        }
+
+        private func findHostKeyWindow() -> UIWindow? {
+            if #available(iOS 13.0, *) {
+                let scenes = UIApplication.shared.connectedScenes
+                    .compactMap { $0 as? UIWindowScene }
+
+                for scene in scenes {
+                    if let window = scene.windows.first(where: { $0 !== self.overlayWindow && $0.isKeyWindow && $0.rootViewController != nil }) {
+                        return window
+                    }
+                    if let window = scene.windows.first(where: { $0 !== self.overlayWindow && $0.rootViewController != nil }) {
+                        return window
+                    }
+                    if let window = scene.windows.first(where: { $0 !== self.overlayWindow }) {
+                        return window
+                    }
                 }
             }
 
-            topVC.present(webVC, animated: true, completion: nil)
+            return UIApplication.shared.windows.first(where: { $0 !== self.overlayWindow && $0.isKeyWindow && $0.rootViewController != nil })
+                ?? UIApplication.shared.windows.first(where: { $0 !== self.overlayWindow && $0.rootViewController != nil })
+                ?? UIApplication.shared.windows.first(where: { $0 !== self.overlayWindow })
+                ?? UIApplication.shared.keyWindow
         }
-    }
 
-    // MARK: - Scene & View Controller Traversal
+        private func findTopmostHostViewController(from root: UIViewController? = nil) -> UIViewController? {
+            let base = root ?? findHostKeyWindow()?.rootViewController
 
-    private func findActiveWindowScene() -> UIWindowScene? {
-        if #available(iOS 13.0, *) {
-            let scenes = UIApplication.shared.connectedScenes
-                .compactMap { $0 as? UIWindowScene }
-
-            return scenes.first(where: { $0.activationState == .foregroundActive })
-                ?? scenes.first
-        }
-        return nil
-    }
-
-    private func findHostKeyWindow() -> UIWindow? {
-        if #available(iOS 13.0, *) {
-            if let scene = findActiveWindowScene() {
-                if let window = scene.windows.first(where: { $0 !== self.overlayWindow && $0.isKeyWindow }) {
-                    return window
-                }
-                if let window = scene.windows.first(where: { $0 !== self.overlayWindow }) {
-                    return window
-                }
+            if let nav = base as? UINavigationController {
+                return findTopmostHostViewController(from: nav.visibleViewController)
             }
-        }
+            if let tab = base as? UITabBarController {
+                return findTopmostHostViewController(from: tab.selectedViewController)
+            }
+            if let presented = base?.presentedViewController {
+                return findTopmostHostViewController(from: presented)
+            }
 
-        return UIApplication.shared.windows.first(where: { $0 !== self.overlayWindow && $0.isKeyWindow })
-            ?? UIApplication.shared.windows.first(where: { $0 !== self.overlayWindow })
-            ?? UIApplication.shared.keyWindow
+            return base
+        }
     }
-
-    private func findTopmostHostViewController(from root: UIViewController? = nil) -> UIViewController? {
-        let base = root ?? findHostKeyWindow()?.rootViewController
-
-        if let nav = base as? UINavigationController {
-            return findTopmostHostViewController(from: nav.visibleViewController)
-        }
-        if let tab = base as? UITabBarController {
-            return findTopmostHostViewController(from: tab.selectedViewController)
-        }
-        if let presented = base?.presentedViewController {
-            return findTopmostHostViewController(from: presented)
-        }
-
-        return base
-    }
-}
 #endif

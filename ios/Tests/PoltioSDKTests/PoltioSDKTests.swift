@@ -6,11 +6,11 @@ final class MockURLProtocol: URLProtocol {
     static var requestHandler: ((URLRequest) throws -> (HTTPURLResponse, Data?))?
 
     override class func canInit(with _: URLRequest) -> Bool {
-        return true
+        true
     }
 
     override class func canonicalRequest(for request: URLRequest) -> URLRequest {
-        return request
+        request
     }
 
     override func startLoading() {
@@ -22,7 +22,7 @@ final class MockURLProtocol: URLProtocol {
         do {
             let (response, data) = try handler(request)
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            if let data = data {
+            if let data {
                 client?.urlProtocol(self, didLoad: data)
             }
             client?.urlProtocolDidFinishLoading(self)
@@ -267,6 +267,24 @@ final class PoltioSDKTests: XCTestCase {
             "https://example.com/image.jpg"
         )
 
+        let emptySvgFallbackOptions = PoltioOverlayOptions(
+            floatingImg: "widget/box-default.png",
+            floatingSvg: ""
+        )
+        XCTAssertEqual(
+            emptySvgFallbackOptions.resolvedImageUrl()?.absoluteString,
+            "https://cdn.poltio.com/240x120/widget/box-default.png"
+        )
+
+        let whitespaceSvgFallbackOptions = PoltioOverlayOptions(
+            floatingImg: "widget/box-default.png",
+            floatingSvg: "   "
+        )
+        XCTAssertEqual(
+            whitespaceSvgFallbackOptions.resolvedImageUrl()?.absoluteString,
+            "https://cdn.poltio.com/240x120/widget/box-default.png"
+        )
+
         let emptyOptions = PoltioOverlayOptions(floatingImg: "")
         XCTAssertNil(emptyOptions.resolvedImageUrl())
 
@@ -322,6 +340,128 @@ final class PoltioSDKTests: XCTestCase {
         XCTAssertEqual(result, .success, "Concurrent access to apiClient should finish without deadlocking or racing")
     }
 
+    func testPoltioWidgetResponsePillTriggerWithSvgDecoding() throws {
+        let json = """
+        {
+          "public_id": "6c964c1d-6eb4-4c19-ad16-342bd59bdac3",
+          "overlay_options": {
+            "trigger-type": "pill",
+            "floating-initial-position": "active",
+            "floating-svg": "widget/PoltioSpark.svg"
+          }
+        }
+        """
+        let data = Data(json.utf8)
+        let decoded = try JSONDecoder().decode(PoltioWidgetResponse.self, from: data)
+
+        XCTAssertEqual(decoded.publicId, "6c964c1d-6eb4-4c19-ad16-342bd59bdac3")
+        XCTAssertEqual(decoded.overlayOptions.triggerType, "pill")
+        XCTAssertTrue(decoded.overlayOptions.isPillTrigger)
+        XCTAssertFalse(decoded.overlayOptions.isBoxTrigger)
+        XCTAssertEqual(decoded.overlayOptions.floatingSvg, "widget/PoltioSpark.svg")
+        XCTAssertTrue(decoded.overlayOptions.isInitialActive)
+        XCTAssertEqual(
+            decoded.overlayOptions.resolvedImageUrl()?.absoluteString,
+            "https://cdn.poltio.com/40x40/widget/PoltioSpark.svg"
+        )
+    }
+
+    func testDynamicWidgetResolutionWithMockSession() {
+        let mockSession = createMockSession()
+        let client = PoltioAPIClient(session: mockSession)
+
+        let homeExpectation = expectation(description: "Mock resolves Box for home")
+        let phonesExpectation = expectation(description: "Mock resolves Pill for phones")
+        let tvsExpectation = expectation(description: "Mock returns 404 for TVs")
+
+        MockURLProtocol.requestHandler = { request in
+            guard let bodyData = request.httpBody ?? request.httpBodyStreamData(),
+                  let json = try? JSONSerialization.jsonObject(with: bodyData) as? [String: String],
+                  let targetURL = json["url"]
+            else {
+                let response = HTTPURLResponse(url: request.url!, statusCode: 400, httpVersion: nil, headerFields: nil)!
+                return (response, Data())
+            }
+
+            if targetURL == "example://home" {
+                let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                let body = """
+                {
+                  "public_id": "6c964c1d-6eb4-4c19-ad16-342bd59bdac3",
+                  "overlay_options": {
+                    "trigger-type": "box",
+                    "floating-box-text-first": "Product Finder",
+                    "floating-box-text-second": "Product Finder",
+                    "floating-img": "widget/box-default.png",
+                    "floating-initial-position": "active"
+                  }
+                }
+                """
+                return (response, Data(body.utf8))
+            } else if targetURL == "example://plp/phones" {
+                let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                let body = """
+                {
+                  "public_id": "6c964c1d-6eb4-4c19-ad16-342bd59bdac3",
+                  "overlay_options": {
+                    "trigger-type": "pill",
+                    "floating-svg": "widget/1787042301.079.svg",
+                    "floating-initial-position": "active"
+                  }
+                }
+                """
+                return (response, Data(body.utf8))
+            } else {
+                let response = HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!
+                return (response, Data("Not Found".utf8))
+            }
+        }
+
+        client.resolveMobileWidget(
+            clientKey: "pk_live_test_123",
+            deviceId: "demo_device",
+            targetURL: "example://home"
+        ) { result in
+            if case let .success(widget) = result {
+                XCTAssertTrue(widget.overlayOptions.isBoxTrigger)
+                XCTAssertEqual(widget.overlayOptions.floatingBoxTextFirst, "Product Finder")
+            } else {
+                XCTFail("Expected box widget for example://home")
+            }
+            homeExpectation.fulfill()
+        }
+
+        client.resolveMobileWidget(
+            clientKey: "pk_live_test_123",
+            deviceId: "demo_device",
+            targetURL: "example://plp/phones"
+        ) { result in
+            if case let .success(widget) = result {
+                XCTAssertTrue(widget.overlayOptions.isPillTrigger)
+                XCTAssertEqual(widget.overlayOptions.floatingSvg, "widget/1787042301.079.svg")
+                XCTAssertTrue(widget.overlayOptions.isInitialActive)
+            } else {
+                XCTFail("Expected pill widget for example://plp/phones")
+            }
+            phonesExpectation.fulfill()
+        }
+
+        client.resolveMobileWidget(
+            clientKey: "pk_live_test_123",
+            deviceId: "demo_device",
+            targetURL: "example://plp/tvs"
+        ) { result in
+            if case .failure = result {
+                // Expected 404
+            } else {
+                XCTFail("Expected failure/404 for unconfigured URL example://plp/tvs")
+            }
+            tvsExpectation.fulfill()
+        }
+
+        waitForExpectations(timeout: 2.0)
+    }
+
     #if canImport(UIKit)
         func testBuildWidgetURLWithAndWithoutPUID() {
             let urlWithoutPuid = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", puid: nil)
@@ -332,6 +472,110 @@ final class PoltioSDKTests: XCTestCase {
 
             let urlWithPuid = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", puid: "usr_123")
             XCTAssertEqual(urlWithPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?puid=usr_123&disclaimer=off")
+        }
+
+        func testFloatingPillTriggerViewLifecycleAndStateTransitions() {
+            let widget = PoltioWidgetResponse(
+                publicId: "test-pill-widget",
+                overlayOptions: PoltioOverlayOptions(
+                    triggerType: "pill",
+                    floatingBoxTextFirst: "Try our",
+                    floatingBoxTextSecond: "PRODUCT FINDER",
+                    floatingInitialPosition: "collapsed"
+                )
+            )
+
+            var didOpenWidget = false
+            let pillView = PoltioFloatingPillTriggerView(widget: widget) {
+                didOpenWidget = true
+            }
+
+            XCTAssertEqual(pillView.currentState, .collapsed)
+
+            // Test transition to expanded
+            pillView.setState(.expanded, animated: false)
+            XCTAssertEqual(pillView.currentState, .expanded)
+
+            // Test resetToCollapsed
+            pillView.resetToCollapsed(animated: false)
+            XCTAssertEqual(pillView.currentState, .collapsed)
+            XCTAssertFalse(didOpenWidget)
+        }
+
+        func testFloatingPillTriggerInitialActiveState() {
+            let widget = PoltioWidgetResponse(
+                publicId: "test-pill-active-widget",
+                overlayOptions: PoltioOverlayOptions(
+                    triggerType: "pill",
+                    floatingBoxTextFirst: "Try our",
+                    floatingBoxTextSecond: "PRODUCT FINDER",
+                    floatingInitialPosition: "active"
+                )
+            )
+
+            let pillView = PoltioFloatingPillTriggerView(widget: widget) {}
+            XCTAssertEqual(pillView.currentState, .expanded)
+        }
+
+        func testSparklePathGeneration() {
+            let rect = CGRect(x: 0, y: 0, width: 20, height: 20)
+            let path = PoltioSparkleIconView.createSparklePath(in: rect)
+            XCTAssertFalse(path.isEmpty)
+            XCTAssertTrue(path.bounds.width > 0)
+            XCTAssertTrue(path.bounds.height > 0)
+        }
+
+        func testPassthroughWindowHitTestingAndNotification() {
+            let window = PoltioPassthroughWindow(frame: CGRect(x: 0, y: 0, width: 375, height: 812))
+            let rootVC = PoltioOverlayRootViewController()
+            window.rootViewController = rootVC
+            rootVC.view.frame = window.bounds
+            window.isHidden = false
+
+            let triggerButton = UIButton(frame: CGRect(x: 200, y: 500, width: 100, height: 50))
+            rootVC.view.addSubview(triggerButton)
+
+            var notificationCount = 0
+            let observer = NotificationCenter.default.addObserver(
+                forName: PoltioFloatingPillTriggerView.didScrollNotification,
+                object: nil,
+                queue: .main
+            ) { _ in
+                notificationCount += 1
+            }
+
+            // Hit test directly on the trigger button
+            let hitTrigger = window.hitTest(CGPoint(x: 250, y: 525), with: nil)
+            XCTAssertEqual(hitTrigger, triggerButton)
+            XCTAssertEqual(notificationCount, 0)
+
+            // Hit test outside on empty window background (first time)
+            let hitOutside = window.hitTest(CGPoint(x: 50, y: 50), with: nil)
+            XCTAssertNil(hitOutside)
+            XCTAssertEqual(notificationCount, 1)
+
+            // Immediate second hit test outside should be throttled (within 0.1s)
+            let hitOutsideRapid = window.hitTest(CGPoint(x: 50, y: 50), with: nil)
+            XCTAssertNil(hitOutsideRapid)
+            XCTAssertEqual(notificationCount, 1)
+
+            NotificationCenter.default.removeObserver(observer)
+        }
+
+        func testPillTriggerSwipeGesturesConfiguration() {
+            let widget = PoltioWidgetResponse(
+                publicId: "test-pill-swipes",
+                overlayOptions: PoltioOverlayOptions(triggerType: "pill")
+            )
+            let pillView = PoltioFloatingPillTriggerView(widget: widget) {}
+
+            let swipeRecognizers = pillView.subviews
+                .flatMap { $0.gestureRecognizers ?? [] }
+                .compactMap { $0 as? UISwipeGestureRecognizer }
+
+            XCTAssertEqual(swipeRecognizers.count, 2)
+            XCTAssertTrue(swipeRecognizers.contains(where: { $0.direction == .right }))
+            XCTAssertTrue(swipeRecognizers.contains(where: { $0.direction == .left }))
         }
     #endif
 }

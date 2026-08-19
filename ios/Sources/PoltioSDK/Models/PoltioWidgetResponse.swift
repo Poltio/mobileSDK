@@ -40,6 +40,7 @@ public struct PoltioOverlayOptions: Codable, Equatable {
     private let _floatingBoxTextFirst: String?
     private let _floatingBoxTextSecond: String?
     private let _floatingImg: String?
+    private let _floatingSvg: String?
     private let _floatingInitialPosition: String?
     private let _mobile: [String: AnyCodable]?
 
@@ -81,6 +82,16 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         return _floatingImg
     }
 
+    /// SVG asset path or URL for floating trigger, respecting mobile overrides if present.
+    public var floatingSvg: String? {
+        if let mobile = _mobile,
+           let val = mobile["floating-svg"]?.stringValue ?? mobile["floating_svg"]?.stringValue
+        {
+            return val
+        }
+        return _floatingSvg
+    }
+
     /// Initial trigger position / state (e.g. "active", "collapsed"), respecting mobile overrides if present.
     public var floatingInitialPosition: String? {
         if let mobile = _mobile,
@@ -93,30 +104,46 @@ public struct PoltioOverlayOptions: Codable, Equatable {
 
     /// Convenience check for box trigger type.
     public var isBoxTrigger: Bool {
-        return triggerType?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "box"
+        triggerType?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "box"
+    }
+
+    /// Convenience check for pill trigger type.
+    public var isPillTrigger: Bool {
+        triggerType?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "pill"
     }
 
     /// Convenience check whether initial state should be active / expanded.
     public var isInitialActive: Bool {
-        return floatingInitialPosition?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "active"
+        floatingInitialPosition?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "active"
     }
 
-    /// Resolves the full URL for `floatingImg`.
-    /// If `floatingImg` is an absolute URL (`http://` or `https://`), it is returned directly.
-    /// If it is a relative path (e.g. `widget/box-default.png`), it is resolved using the CDN prefix (default: `https://cdn.poltio.com/240x120/`).
-    public func resolvedImageUrl(cdnPrefix: String = "https://cdn.poltio.com/240x120") -> URL? {
-        guard let rawImgPath = floatingImg?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !rawImgPath.isEmpty
-        else {
+    /// Resolves the full URL for `floatingImg` or `floatingSvg`.
+    /// If `floatingImg` or `floatingSvg` is an absolute URL (`http://` or `https://`), it is returned directly.
+    /// If it is a relative path (e.g. `widget/1787042301.079.svg`), it is resolved using the CDN prefix:
+    /// - For pill triggers / `floatingSvg`: `https://cdn.poltio.com/40x40/`
+    /// - For box triggers: `https://cdn.poltio.com/240x120/`
+    public func resolvedImageUrl(cdnPrefix: String? = nil) -> URL? {
+        let rawImgPath = [floatingSvg, floatingImg]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+        guard let path = rawImgPath else {
             return nil
         }
 
-        if rawImgPath.hasPrefix("http://") || rawImgPath.hasPrefix("https://") {
-            return URL(string: rawImgPath)
+        if path.hasPrefix("http://") || path.hasPrefix("https://") {
+            return URL(string: path)
         }
 
-        let cleanPath = rawImgPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let cleanPrefix = cdnPrefix.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let cleanPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let hasValidSvg = !(floatingSvg?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        let defaultPrefix = if isPillTrigger || hasValidSvg || cleanPath.hasSuffix(".svg") {
+            "https://cdn.poltio.com/40x40"
+        } else {
+            "https://cdn.poltio.com/240x120"
+        }
+
+        let effectivePrefix = cdnPrefix ?? defaultPrefix
+        let cleanPrefix = effectivePrefix.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         return URL(string: "\(cleanPrefix)/\(cleanPath)")
     }
 
@@ -125,6 +152,7 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         floatingBoxTextFirst: String? = nil,
         floatingBoxTextSecond: String? = nil,
         floatingImg: String? = nil,
+        floatingSvg: String? = nil,
         floatingInitialPosition: String? = nil,
         mobile: [String: AnyCodable]? = nil
     ) {
@@ -132,6 +160,7 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         _floatingBoxTextFirst = floatingBoxTextFirst
         _floatingBoxTextSecond = floatingBoxTextSecond
         _floatingImg = floatingImg
+        _floatingSvg = floatingSvg
         _floatingInitialPosition = floatingInitialPosition
         _mobile = mobile
     }
@@ -154,6 +183,7 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         _floatingBoxTextFirst = decodeString(forKeys: ["floating-box-text-first", "floating_box_text_first", "floatingBoxTextFirst"])
         _floatingBoxTextSecond = decodeString(forKeys: ["floating-box-text-second", "floating_box_text_second", "floatingBoxTextSecond"])
         _floatingImg = decodeString(forKeys: ["floating-img", "floating_img", "floatingImg"])
+        _floatingSvg = decodeString(forKeys: ["floating-svg", "floating_svg", "floatingSvg"])
         _floatingInitialPosition = decodeString(forKeys: ["floating-initial-position", "floating_initial_position", "floatingInitialPosition"])
 
         if let mobileKey = DynamicCodingKeys(stringValue: "mobile"),
@@ -178,6 +208,9 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         }
         if let img = _floatingImg, let key = DynamicCodingKeys(stringValue: "floating-img") {
             try container.encode(img, forKey: key)
+        }
+        if let svg = _floatingSvg, let key = DynamicCodingKeys(stringValue: "floating-svg") {
+            try container.encode(svg, forKey: key)
         }
         if let pos = _floatingInitialPosition, let key = DynamicCodingKeys(stringValue: "floating-initial-position") {
             try container.encode(pos, forKey: key)

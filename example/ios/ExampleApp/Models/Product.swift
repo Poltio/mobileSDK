@@ -4,22 +4,24 @@ enum ProductCategory: String, CaseIterable, Identifiable, Codable {
     case phones = "Phones"
     case tvs = "TVs"
     case laptops = "Laptops"
-    
-    var id: String { rawValue }
-    
+
+    var id: String {
+        rawValue
+    }
+
     var iconName: String {
         switch self {
-        case .phones: return "iphone"
-        case .tvs: return "tv"
-        case .laptops: return "laptopcomputer"
+        case .phones: "iphone"
+        case .tvs: "tv"
+        case .laptops: "laptopcomputer"
         }
     }
-    
+
     var routeKey: String {
         switch self {
-        case .phones: return "phones"
-        case .tvs: return "tvs"
-        case .laptops: return "laptops"
+        case .phones: "phones"
+        case .tvs: "tvs"
+        case .laptops: "laptops"
         }
     }
 }
@@ -34,7 +36,7 @@ struct Product: Identifiable, Codable {
     let specs: [String]
     let imageName: String
     let isFeatured: Bool
-    
+
     var formattedPrice: String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
@@ -79,7 +81,7 @@ extension Product {
             imageName: "iphone.gen2",
             isFeatured: false
         ),
-        
+
         // TVs
         Product(
             id: "lg-oled-65",
@@ -114,7 +116,7 @@ extension Product {
             imageName: "tv.circle",
             isFeatured: false
         ),
-        
+
         // Laptops
         Product(
             id: "macbook-pro-16",
@@ -148,6 +150,6 @@ extension Product {
             specs: ["Intel Core i7 Evo", "14\" 2.8K OLED Display", "16GB RAM / 512GB SSD", "1.12 kg Ultra Light"],
             imageName: "macbook",
             isFeatured: false
-        )
+        ),
     ]
 }

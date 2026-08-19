@@ -119,7 +119,7 @@ public final class PoltioSDK {
     /// - Returns: The configured shared instance.
     @discardableResult
     public static func configure(clientKey: String) -> PoltioSDK {
-        return shared.configure(clientKey: clientKey)
+        shared.configure(clientKey: clientKey)
     }
 
     /// Instance method to configure the SDK.
@@ -202,11 +202,10 @@ public final class PoltioSDK {
         print("[PoltioSDK] Event tracked: '\(trimmedEvent)', params: \(enrichedParams)")
 
         if isViewEvent(trimmedEvent) {
-            let rawUrl: String
-            if let value = params?["url"] ?? params?["screen"] ?? params?["page"] {
-                rawUrl = (value as? String) ?? (value as? URL)?.absoluteString ?? ""
+            let rawUrl: String = if let value = params?["url"] ?? params?["screen"] ?? params?["page"] {
+                (value as? String) ?? (value as? URL)?.absoluteString ?? ""
             } else {
-                rawUrl = ""
+                ""
             }
             let targetURL = PoltioSDK.sanitizeOrFormatURL(rawUrl)
             let activePuid = puid
@@ -221,9 +220,9 @@ public final class PoltioSDK {
                 deviceId: currentSdkId,
                 targetURL: targetURL
             ) { [weak self] result in
-                guard let self = self else { return }
+                guard let self else { return }
 
-                let isLatest: Bool = self.queue.sync {
+                let isLatest: Bool = queue.sync {
                     thisRequestId == self._currentViewRequestId
                 }
 
