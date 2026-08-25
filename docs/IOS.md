@@ -31,16 +31,19 @@ All builds, tests, and example apps are run via the universal root `Makefile`:
 | **Check Env** | `make check` | Validates Xcode, Swift compiler, and iOS Simulator. |
 | **Build SDK** | `make build-ios` | Compiles the Swift package SDK (`swift build`). |
 | **Test SDK** | `make test-ios` | Runs Swift PM unit test suite (`swift test`). |
+| **Lint Podspec** | `make lint-pod` | Validates CocoaPods podspec (`pod lib lint`). |
+| **Publish Pod** | `make publish-cocoapods` | Pushes podspec to CocoaPods Trunk (`pod trunk push`). |
 | **Build Example** | `make build-example-ios` | Compiles `ExampleApp.app` bundle via `xcodebuild`. |
 | **Open Xcode** | `make open-example-ios` | Opens `example/ios/ExampleApp.xcodeproj` in Xcode. |
 | **Run Example** | `make run-example-ios` | Boots iOS Simulator (`iPhone 17 Pro`), installs `.app`, and launches app. |
 
 ---
 
-## 📁 3. Project Structure & SPM Distribution
+## 📁 3. Project Structure & Distribution
 
 ```
 poltio-mobile-sdk/
+├── LICENSE             # MIT License
 ├── Package.swift       # Swift Package Manager Manifest (root entrypoint)
 ├── ios/                # Poltio Core iOS Library (Swift)
 │   ├── PoltioSDK.podspec
@@ -53,9 +56,11 @@ poltio-mobile-sdk/
 
 ---
 
-## 📦 4. Integrating Poltio iOS SDK via Swift Package Manager
+## 📦 4. Integrating Poltio iOS SDK
 
-### In an Xcode Application Project:
+### Option A: Swift Package Manager (Recommended)
+
+#### In an Xcode Application Project:
 1. Open your project in Xcode.
 2. Select **File** > **Add Package Dependencies...** (or select your target project in the navigator > **Package Dependencies** tab > **+**).
 3. Paste the repository URL:
@@ -63,14 +68,14 @@ poltio-mobile-sdk/
    https://github.com/Poltio/mobileSDK.git
    ```
 4. Set the **Dependency Rule**:
-   - For release versions: Select **Up to Next Major Version** with `0.1.0`.
+   - For release versions: Select **Up to Next Major Version** with `1.0.0`.
    - For testing/pre-release: Select **Branch** and specify `main`.
 5. Click **Add Package** and select **PoltioSDK** as a linked framework for your target.
 
-### In a `Package.swift` Manifest:
+#### In a `Package.swift` Manifest:
 ```swift
 dependencies: [
-    .package(url: "https://github.com/Poltio/mobileSDK.git", from: "0.1.0")
+    .package(url: "https://github.com/Poltio/mobileSDK.git", from: "1.0.0")
 ],
 targets: [
     .target(
@@ -82,7 +87,51 @@ targets: [
 ]
 ```
 
-### Basic SDK Usage
+### Option B: CocoaPods
+
+Add `PoltioSDK` to your `Podfile`:
+
+```ruby
+target 'YourAppTarget' do
+  use_frameworks!
+  pod 'PoltioSDK', '~> 1.0.0'
+end
+```
+
+Then install the dependencies:
+```bash
+pod install
+```
+
+---
+
+## 🚀 5. Publishing to CocoaPods Trunk
+
+### One-Time Setup:
+```bash
+# Register account with CocoaPods Trunk
+pod trunk register dev@poltio.com "Poltio" --description="Release Machine"
+# Check email to verify account, then confirm session
+pod trunk me
+```
+
+### Validation & Release:
+```bash
+# 1. Validate the podspec locally
+make lint-pod
+
+# 2. Tag release in git and push
+git tag -a v1.0.0 -m "Release v1.0.0"
+git push origin v1.0.0
+
+# 3. Publish to CocoaPods Trunk (or triggered automatically via GitHub Actions)
+make publish-cocoapods
+```
+
+---
+
+## 💡 6. Basic SDK Usage
+
 ```swift
 import PoltioSDK
 
