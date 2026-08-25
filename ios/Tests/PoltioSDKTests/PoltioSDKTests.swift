@@ -15,7 +15,14 @@ final class MockURLProtocol: URLProtocol {
 
     override func startLoading() {
         guard let handler = MockURLProtocol.requestHandler else {
-            XCTFail("Handler is not set.")
+            client?.urlProtocol(
+                self,
+                didFailWithError: NSError(
+                    domain: NSURLErrorDomain,
+                    code: NSURLErrorCancelled,
+                    userInfo: [NSLocalizedDescriptionKey: "Handler is not set."]
+                )
+            )
             return
         }
 
@@ -600,6 +607,17 @@ final class PoltioSDKTests: XCTestCase {
         let client = PoltioAPIClient(session: mockSession)
 
         let cancelExpectation = expectation(description: "First request cancelled")
+
+        MockURLProtocol.requestHandler = { _ in
+            Thread.sleep(forTimeInterval: 0.1)
+            let response = HTTPURLResponse(
+                url: URL(string: "https://app.poltio.com/first")!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, Data())
+        }
 
         let task = client.resolveMobileWidget(
             clientKey: "pk_test_cancel",
