@@ -213,7 +213,7 @@ VERSION ?= 1.0.0
 
 version:
 	@chmod +x scripts/bump-version.sh
-	@./scripts/bump-version.sh $(VERSION)
+	@./scripts/bump-version.sh "$(VERSION)"
 
 submit-version:
 	@echo "==> Submitting version $(VERSION)..."
