@@ -113,11 +113,11 @@
 
         private func loadWidgetURL() {
             guard let url = PoltioWebViewController.buildWidgetURL(publicId: publicId, puid: puid) else {
-                print("[PoltioSDK] Error: Invalid widget URL string for publicId '\(publicId)'")
+                PoltioLogger.error("Invalid widget URL string for publicId '\(publicId)'")
                 return
             }
 
-            print("[PoltioSDK] Loading widget WebView: \(url.absoluteString)")
+            PoltioLogger.debug("Loading widget WebView: \(url.absoluteString)")
             activityIndicator.startAnimating()
             let request = URLRequest(url: url)
             webView.load(request)
@@ -154,12 +154,12 @@
 
         public func webView(_: WKWebView, didFail _: WKNavigation!, withError error: Error) {
             activityIndicator.stopAnimating()
-            print("[PoltioSDK] Webview navigation failed: \(error.localizedDescription)")
+            PoltioLogger.error("Webview navigation failed: \(error.localizedDescription)")
         }
 
         public func webView(_: WKWebView, didFailProvisionalNavigation _: WKNavigation!, withError error: Error) {
             activityIndicator.stopAnimating()
-            print("[PoltioSDK] Webview provisional navigation failed: \(error.localizedDescription)")
+            PoltioLogger.error("Webview provisional navigation failed: \(error.localizedDescription)")
         }
     }
 #endif

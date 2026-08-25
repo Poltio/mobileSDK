@@ -12,10 +12,18 @@ public final class PoltioSDK {
     private var _puidLoaded: Bool = false
     private var _currentViewRequestId: UInt64 = 0
 
+    private var _activeWidgetTask: URLSessionDataTask?
+
     private let queue = DispatchQueue(label: "com.poltio.sdk", attributes: .concurrent)
 
     private static let sdkIdStorageKey = "com.poltio.sdk.sdk_id"
     private static let puidStorageKey = "com.poltio.sdk.puid"
+
+    /// The active log level for the SDK.
+    public static var logLevel: PoltioLogLevel {
+        get { PoltioLogger.logLevel }
+        set { PoltioLogger.logLevel = newValue }
+    }
 
     /// The client key configured for this SDK session.
     public var clientKey: String? {
@@ -106,29 +114,42 @@ public final class PoltioSDK {
                 self._puidLoaded = false
                 self._sdkId = nil
                 self._apiClient = nil
+                self._activeWidgetTask?.cancel()
+                self._activeWidgetTask = nil
+                self._currentViewRequestId = 0
                 UserDefaults.standard.removeObject(forKey: PoltioSDK.sdkIdStorageKey)
                 UserDefaults.standard.removeObject(forKey: PoltioSDK.puidStorageKey)
             }
+            PoltioLogger.logLevel = .info
         }
     #endif
 
     // MARK: - Public Configuration API
 
-    /// Configures the Poltio SDK with your publishable client key.
-    /// - Parameter clientKey: Poltio client key (e.g. "poltio_test_pk...")
+    /// Configures the Poltio SDK with your publishable client key and optional log level.
+    /// - Parameters:
+    ///   - clientKey: Poltio client key (e.g. "poltio_test_pk...")
+    ///   - logLevel: Verbosity level of console logging (defaults to `.info`).
     /// - Returns: The configured shared instance.
     @discardableResult
-    public static func configure(clientKey: String) -> PoltioSDK {
-        shared.configure(clientKey: clientKey)
+    public static func configure(
+        clientKey: String,
+        logLevel: PoltioLogLevel = .info
+    ) -> PoltioSDK {
+        shared.configure(clientKey: clientKey, logLevel: logLevel)
     }
 
     /// Instance method to configure the SDK.
     @discardableResult
-    func configure(clientKey: String) -> PoltioSDK {
+    func configure(
+        clientKey: String,
+        logLevel: PoltioLogLevel = .info
+    ) -> PoltioSDK {
         let trimmedKey = clientKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        PoltioLogger.logLevel = logLevel
 
         guard !trimmedKey.isEmpty else {
-            print("[PoltioSDK] Error: Client key cannot be empty.")
+            PoltioLogger.error("Client key cannot be empty.")
             return self
         }
 
@@ -137,7 +158,7 @@ public final class PoltioSDK {
             self._isInitialized = true
         }
 
-        print("[PoltioSDK] Configured successfully (SDK ID: \(sdkId)).")
+        PoltioLogger.info("Configured successfully (SDK ID: \(sdkId)).")
         return self
     }
 
@@ -157,11 +178,11 @@ public final class PoltioSDK {
             if let validPuid = trimmedPuid, !validPuid.isEmpty {
                 self._puid = validPuid
                 UserDefaults.standard.set(validPuid, forKey: PoltioSDK.puidStorageKey)
-                print("[PoltioSDK] Identified user with PUID: '\(validPuid)'.")
+                PoltioLogger.info("Identified user with PUID: '\(validPuid)'.")
             } else {
                 self._puid = nil
                 UserDefaults.standard.removeObject(forKey: PoltioSDK.puidStorageKey)
-                print("[PoltioSDK] Cleared PUID.")
+                PoltioLogger.info("Cleared PUID.")
             }
             self._puidLoaded = true
         }
@@ -183,12 +204,12 @@ public final class PoltioSDK {
     func track(event: String, params: [String: Any]? = nil) {
         let trimmedEvent = event.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedEvent.isEmpty else {
-            print("[PoltioSDK] Error: Event name cannot be empty.")
+            PoltioLogger.error("Event name cannot be empty.")
             return
         }
 
         guard isInitialized, let key = clientKey else {
-            print("[PoltioSDK] Warning: track called before configuration. Call PoltioSDK.configure(clientKey:) first.")
+            PoltioLogger.warning("track called before configuration. Call PoltioSDK.configure(clientKey:) first.")
             return
         }
 
@@ -199,7 +220,7 @@ public final class PoltioSDK {
             enrichedParams["puid"] = currentPuid
         }
 
-        print("[PoltioSDK] Event tracked: '\(trimmedEvent)', params: \(enrichedParams)")
+        PoltioLogger.info("Event tracked: '\(trimmedEvent)', params: \(enrichedParams)")
 
         if isViewEvent(trimmedEvent) {
             let rawUrl: String = if let value = params?["url"] ?? params?["screen"] ?? params?["page"] {
@@ -210,12 +231,16 @@ public final class PoltioSDK {
             let targetURL = PoltioSDK.sanitizeOrFormatURL(rawUrl)
             let activePuid = puid
 
-            let thisRequestId: UInt64 = queue.sync(flags: .barrier) {
+            // Cancel any in-flight widget resolution task for previous screen
+            queue.sync(flags: .barrier) {
+                self._activeWidgetTask?.cancel()
+                self._activeWidgetTask = nil
                 self._currentViewRequestId &+= 1
-                return self._currentViewRequestId
             }
 
-            apiClient.resolveMobileWidget(
+            let thisRequestId: UInt64 = queue.sync { self._currentViewRequestId }
+
+            let task = apiClient.resolveMobileWidget(
                 clientKey: key,
                 deviceId: currentSdkId,
                 targetURL: targetURL
@@ -227,7 +252,7 @@ public final class PoltioSDK {
                 }
 
                 guard isLatest else {
-                    print("[PoltioSDK] Ignoring outdated widget resolution result for '\(targetURL)' (newer screen was already requested).")
+                    PoltioLogger.debug("Ignoring outdated widget resolution result for '\(targetURL)' (newer screen was already requested).")
                     return
                 }
 
@@ -240,7 +265,15 @@ public final class PoltioSDK {
                     #if canImport(UIKit)
                         PoltioOverlayManager.shared.hideTrigger()
                     #endif
-                    print("[PoltioSDK] Widget resolution skipped/failed for '\(targetURL)': \(error.localizedDescription)")
+                    if (error as? URLError)?.code != .cancelled, (error as NSError).code != NSURLErrorCancelled {
+                        PoltioLogger.warning("Widget resolution skipped/failed for '\(targetURL)': \(error.localizedDescription)")
+                    }
+                }
+            }
+
+            queue.sync(flags: .barrier) {
+                if thisRequestId == self._currentViewRequestId {
+                    self._activeWidgetTask = task
                 }
             }
         }

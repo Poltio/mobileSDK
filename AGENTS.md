@@ -100,3 +100,37 @@ AI agents MUST use and maintain the root `Makefile` targets for executing builds
   - Follow Apple API Design Guidelines, standard Swift naming (`camelCase` for properties, `PascalCase` for types).
 - **Kotlin**: Follow official Kotlin style guides, explicit visibility modifiers, immutability (`val` over `var` where possible).
 - **TypeScript**: Strict mode enabled, explicit return types on exported functions/classes, detailed JSDoc comments for public SDK APIs.
+
+---
+
+## 6. SDK Quality, Performance & Fault Tolerance Standards ("Do No Harm")
+
+Because this SDK is embedded in third-party client applications, agents MUST adhere to strict reliability and performance standards:
+
+### 1. Crash Isolation & Zero Panic Points
+- **Zero Fatal Errors**: NEVER use force unwraps (`!`), force try (`try!`), or `fatalError()` in production paths.
+- **Graceful Degradation**: If backend responses fail (404, 500, empty body), JSON decoding fails, or the UI hierarchy is in an unexpected state, fail silently and hide any active overlay without affecting the host app.
+- **Defensive API Boundaries**: Guard all public entry points against invalid/null parameters without raising fatal exceptions.
+
+### 2. Main-Thread Hygiene & Cold Start Performance
+- **Zero Main-Thread Blocking**: `PoltioSDK.configure(clientKey:)` must complete in <2ms. Never perform synchronous disk I/O, heavy parsing, or blocking operations on the main thread during app startup.
+- **Background Execution**: Keep network requests, payload encoding, and URL sanitization on background queues. Dispatch to the main thread ONLY for attaching and animating UI components.
+- **Lazy Initialization**: Defer creation of views and WebViews until a widget trigger is actually resolved and presented.
+
+### 3. In-Flight Request Cancellation & Network Efficiency
+- **Cancel Stale In-Flight Requests**: When a new screen is tracked (e.g. rapid navigation between screens), cancel any pending `URLSessionDataTask` from previous screens immediately.
+- **Avoid Redundant Downloads**: Prefer caching vector assets and images in-memory to prevent unnecessary bandwidth consumption and battery drain.
+
+### 4. Logging Standards (`PoltioLogger`)
+- **No Raw `print()` Statements**: NEVER use raw `print()` / `println()` / `console.log()` in SDK source files.
+- **Use `PoltioLogger`**: All SDK logging MUST use `PoltioLogger` with appropriate levels (`.debug`, `.info`, `.warning`, `.error`).
+- **Configurable `logLevel`**: Support `PoltioLogLevel` so host applications can completely mute SDK logs (`logLevel: .none`) or inspect issues (`logLevel: .debug`) during development.
+
+### 5. UI & Touch Event Isolation
+- **Transparent Hit-Testing**: Floating overlay windows (`PoltioPassthroughWindow`) must strictly pass touches through to the host view controller when tapped outside trigger bounds.
+- **Non-Interfering Lifecycle**: Modal WebViews and triggers must never corrupt the host app's navigation stack, gesture recognizers, or view controllers.
+
+### 6. Memory & Retain Cycle Prevention
+- **Weak Self in Closures**: Always use `[weak self]` in asynchronous handlers, network callbacks, timers, and WebKit delegates.
+- **Resource Cleanup**: Explicitly clean up `WKWebView` (stop loading, remove script message handlers), timers, and `NotificationCenter` observers upon view dismissal or SDK reset.
+
