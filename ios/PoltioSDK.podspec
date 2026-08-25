@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'PoltioSDK'
-  s.version          = '1.0.0'
+  s.version          = '0.0.3'
   s.summary          = 'Poltio Mobile SDK for iOS'
   s.description      = 'Integrates Poltio TAG web experience and event tracking in iOS applications.'
   s.homepage         = 'https://github.com/Poltio/mobileSDK'
