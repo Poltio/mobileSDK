@@ -212,8 +212,8 @@ run-example-rn:
 VERSION ?= 1.0.0
 
 version:
-	@echo "==> Bumping version to $(VERSION)..."
-	@echo "Updating iOS, Android, and React Native package versions..."
+	@chmod +x scripts/bump-version.sh
+	@./scripts/bump-version.sh $(VERSION)
 
 submit-version:
 	@echo "==> Submitting version $(VERSION)..."

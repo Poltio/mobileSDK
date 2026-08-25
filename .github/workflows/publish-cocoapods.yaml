@@ -25,6 +25,19 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Sync Podspec Version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          if [ -n "$VERSION" ] && [ "$VERSION" != "main" ] && [ "$VERSION" != "master" ]; then
+            echo "Syncing PoltioSDK.podspec version to '${VERSION}' from tag '${RELEASE_TAG}'..."
+            chmod +x scripts/bump-version.sh
+            ./scripts/bump-version.sh "$VERSION"
+          else
+            echo "No release tag detected. Using existing manifest version."
+          fi
+
       - name: Deploy to CocoaPods Trunk
         env:
           COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
