@@ -29,7 +29,7 @@ fi
 
 # 3. React Native package.json (if present)
 if [ -f "react-native/package.json" ]; then
-    sed -i.bak -E "s/\"version\":[[:space:]]*\"[^\"]+\"/\"version\": \"${NEW_VERSION}\"/" react-native/package.json
+    sed -i.bak -E "s/^([[:space:]]*)\"version\":[[:space:]]*\"[^"]+\"/\\1\"version\": \"${NEW_VERSION}\"/" react-native/package.json
     rm -f react-native/package.json.bak
     echo "  ✅ Updated react-native/package.json -> ${NEW_VERSION}"
 fi
