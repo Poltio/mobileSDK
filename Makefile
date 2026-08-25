@@ -83,10 +83,10 @@ build: build-ios build-android build-rn
 
 build-ios:
 	@echo "==> Building iOS Swift SDK..."
-	@if [ -d "ios" ] && [ -f "ios/Package.swift" ]; then \
-		cd ios && xcrun swift build; \
+	@if [ -f "Package.swift" ]; then \
+		xcrun swift build; \
 	else \
-		echo "iOS SDK not initialized yet."; \
+		echo "iOS SDK Package.swift manifest not found."; \
 	fi
 
 build-android:
@@ -112,10 +112,10 @@ test: test-ios test-android test-rn
 
 test-ios:
 	@echo "==> Testing iOS Swift SDK..."
-	@if [ -d "ios" ] && [ -f "ios/Package.swift" ]; then \
-		cd ios && xcrun swift test; \
+	@if [ -f "Package.swift" ]; then \
+		xcrun swift test; \
 	else \
-		echo "iOS SDK tests not initialized yet."; \
+		echo "iOS SDK Package.swift manifest not found."; \
 	fi
 
 test-android:

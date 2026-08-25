@@ -147,7 +147,7 @@
 			);
 			mainGroup = G10000002C63000000000000;
 			packageReferences = (
-				5E5B3050302F2DB000AC6EED /* XCLocalSwiftPackageReference "../../ios" */,
+				5E5B3050302F2DB000AC6EED /* XCLocalSwiftPackageReference "../.." */,
 			);
 			productRefGroup = P10000002C63000000000000 /* Products */;
 			projectDirPath = "";
@@ -371,9 +371,9 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		5E5B3050302F2DB000AC6EED /* XCLocalSwiftPackageReference "../../ios" */ = {
+		5E5B3050302F2DB000AC6EED /* XCLocalSwiftPackageReference "../.." */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = ../../ios;
+			relativePath = ../..;
 		};
 /* End XCLocalSwiftPackageReference section */
 

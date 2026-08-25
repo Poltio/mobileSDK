@@ -41,9 +41,8 @@ All builds, tests, and example apps are run via the universal root `Makefile`:
 
 ```
 poltio-mobile-sdk/
-├── Package.swift       # Root Swift Package Manager Manifest (for remote SPM resolution)
+├── Package.swift       # Swift Package Manager Manifest (root entrypoint)
 ├── ios/                # Poltio Core iOS Library (Swift)
-│   ├── Package.swift   # iOS Subdirectory Package Manifest
 │   ├── PoltioSDK.podspec
 │   └── Sources/PoltioSDK/
 │       ├── Resources/PrivacyInfo.xcprivacy
