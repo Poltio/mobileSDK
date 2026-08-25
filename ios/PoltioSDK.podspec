@@ -11,9 +11,9 @@ Pod::Spec.new do |s|
   s.ios.deployment_target = '14.0'
   s.swift_version    = '5.9'
 
-  s.source_files     = 'Sources/PoltioSDK/**/*'
+  s.source_files     = 'ios/Sources/PoltioSDK/**/*'
   s.resource_bundles = {
-    'PoltioSDK_Privacy' => ['Sources/PoltioSDK/Resources/PrivacyInfo.xcprivacy']
+    'PoltioSDK_Privacy' => ['ios/Sources/PoltioSDK/Resources/PrivacyInfo.xcprivacy']
   }
   s.frameworks       = 'Foundation', 'WebKit', 'UIKit'
 end
