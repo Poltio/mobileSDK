@@ -37,14 +37,61 @@ All builds, tests, and example apps are run via the universal root `Makefile`:
 
 ---
 
-## 📁 3. Project Structure (`/ios` & `/example/ios`)
+## 📁 3. Project Structure & SPM Distribution
 
 ```
 poltio-mobile-sdk/
+├── Package.swift       # Swift Package Manager Manifest (root entrypoint)
 ├── ios/                # Poltio Core iOS Library (Swift)
-│   ├── Package.swift   # Swift Package Manager Manifest
 │   ├── PoltioSDK.podspec
 │   └── Sources/PoltioSDK/
+│       ├── Resources/PrivacyInfo.xcprivacy
+│       └── ...
 └── example/ios/        # Sample E-Commerce App (TechStore - SwiftUI)
     └── ExampleApp.xcodeproj/
+```
+
+---
+
+## 📦 4. Integrating Poltio iOS SDK via Swift Package Manager
+
+### In an Xcode Application Project:
+1. Open your project in Xcode.
+2. Select **File** > **Add Package Dependencies...** (or select your target project in the navigator > **Package Dependencies** tab > **+**).
+3. Paste the repository URL:
+   ```text
+   https://github.com/Poltio/mobileSDK.git
+   ```
+4. Set the **Dependency Rule**:
+   - For release versions: Select **Up to Next Major Version** with `0.1.0`.
+   - For testing/pre-release: Select **Branch** and specify `main`.
+5. Click **Add Package** and select **PoltioSDK** as a linked framework for your target.
+
+### In a `Package.swift` Manifest:
+```swift
+dependencies: [
+    .package(url: "https://github.com/Poltio/mobileSDK.git", from: "0.1.0")
+],
+targets: [
+    .target(
+        name: "YourAppTarget",
+        dependencies: [
+            .product(name: "PoltioSDK", package: "mobileSDK")
+        ]
+    )
+]
+```
+
+### Basic SDK Usage
+```swift
+import PoltioSDK
+
+// 1. Configure in AppDelegate / App initialization
+PoltioSDK.configure(clientKey: "YOUR_CLIENT_KEY", logLevel: .info)
+
+// 2. Identify user (optional)
+PoltioSDK.identify(puid: "user_12345")
+
+// 3. Track screen / view events
+PoltioSDK.track(event: "view", params: ["url": "https://app.poltio.com/home"])
 ```

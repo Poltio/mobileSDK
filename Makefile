@@ -41,9 +41,9 @@ format: format-ios
 format-ios:
 	@echo "==> Formatting Swift files with swiftformat..."
 	@if command -v swiftformat >/dev/null 2>&1; then \
-		swiftformat ios example/ios --swiftversion 5.9; \
+		swiftformat Package.swift ios example/ios --swiftversion 5.9; \
 	elif [ -f "/opt/homebrew/bin/swiftformat" ]; then \
-		/opt/homebrew/bin/swiftformat ios example/ios --swiftversion 5.9; \
+		/opt/homebrew/bin/swiftformat Package.swift ios example/ios --swiftversion 5.9; \
 	else \
 		echo "swiftformat is not installed. Install via: brew install swiftformat"; \
 	fi
@@ -53,9 +53,9 @@ lint: lint-ios lint-actions
 lint-ios:
 	@echo "==> Linting Swift files with swiftformat..."
 	@if command -v swiftformat >/dev/null 2>&1; then \
-		swiftformat ios example/ios --lint --swiftversion 5.9; \
+		swiftformat Package.swift ios example/ios --lint --swiftversion 5.9; \
 	elif [ -f "/opt/homebrew/bin/swiftformat" ]; then \
-		/opt/homebrew/bin/swiftformat ios example/ios --lint --swiftversion 5.9; \
+		/opt/homebrew/bin/swiftformat Package.swift ios example/ios --lint --swiftversion 5.9; \
 	else \
 		echo "Error: swiftformat is not installed. Install via: brew install swiftformat"; \
 		exit 1; \
@@ -83,10 +83,10 @@ build: build-ios build-android build-rn
 
 build-ios:
 	@echo "==> Building iOS Swift SDK..."
-	@if [ -d "ios" ] && [ -f "ios/Package.swift" ]; then \
-		cd ios && xcrun swift build; \
+	@if [ -f "Package.swift" ]; then \
+		xcrun swift build; \
 	else \
-		echo "iOS SDK not initialized yet."; \
+		echo "iOS SDK Package.swift manifest not found."; \
 	fi
 
 build-android:
@@ -112,10 +112,10 @@ test: test-ios test-android test-rn
 
 test-ios:
 	@echo "==> Testing iOS Swift SDK..."
-	@if [ -d "ios" ] && [ -f "ios/Package.swift" ]; then \
-		cd ios && xcrun swift test; \
+	@if [ -f "Package.swift" ]; then \
+		xcrun swift test; \
 	else \
-		echo "iOS SDK tests not initialized yet."; \
+		echo "iOS SDK Package.swift manifest not found."; \
 	fi
 
 test-android:
@@ -208,6 +208,6 @@ submit-version:
 
 clean:
 	@echo "==> Cleaning build artifacts..."
-	@rm -rf ios/.build
+	@rm -rf .build ios/.build example/ios/.build
 	@if [ -d "android" ] && [ -f "android/gradlew" ]; then cd android && ./gradlew clean; fi
 	@rm -rf react-native/dist react-native/node_modules

@@ -3,7 +3,23 @@ import XCTest
 
 /// Helper mock URLProtocol for testing network requests without hitting live servers.
 final class MockURLProtocol: URLProtocol {
-    static var requestHandler: ((URLRequest) throws -> (HTTPURLResponse, Data?))?
+    private static let lock = NSLock()
+    private static var _requestHandler: ((URLRequest) throws -> (HTTPURLResponse, Data?))?
+
+    static var requestHandler: ((URLRequest) throws -> (HTTPURLResponse, Data?))? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return _requestHandler
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            _requestHandler = newValue
+        }
+    }
+
+    private var isStopped = false
 
     override class func canInit(with _: URLRequest) -> Bool {
         true
@@ -14,6 +30,8 @@ final class MockURLProtocol: URLProtocol {
     }
 
     override func startLoading() {
+        guard !isStopped else { return }
+
         guard let handler = MockURLProtocol.requestHandler else {
             client?.urlProtocol(
                 self,
@@ -28,30 +46,42 @@ final class MockURLProtocol: URLProtocol {
 
         do {
             let (response, data) = try handler(request)
+            guard !isStopped else { return }
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             if let data {
                 client?.urlProtocol(self, didLoad: data)
             }
             client?.urlProtocolDidFinishLoading(self)
         } catch {
+            guard !isStopped else { return }
             client?.urlProtocol(self, didFailWithError: error)
         }
     }
 
-    override func stopLoading() {}
+    override func stopLoading() {
+        isStopped = true
+    }
 }
 
 final class PoltioSDKTests: XCTestCase {
+    private var activeSessions: [URLSession] = []
+
     override func tearDown() {
         super.tearDown()
         PoltioSDK.shared.reset()
         MockURLProtocol.requestHandler = nil
+        for session in activeSessions {
+            session.invalidateAndCancel()
+        }
+        activeSessions.removeAll()
     }
 
     private func createMockSession() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [MockURLProtocol.self]
-        return URLSession(configuration: configuration)
+        let session = URLSession(configuration: configuration)
+        activeSessions.append(session)
+        return session
     }
 
     func testConfigureWithValidKey() {
@@ -607,9 +637,12 @@ final class PoltioSDKTests: XCTestCase {
         let client = PoltioAPIClient(session: mockSession)
 
         let cancelExpectation = expectation(description: "First request cancelled")
+        let requestStartedExpectation = expectation(description: "Request started loading in mock protocol")
+        let cancelSemaphore = DispatchSemaphore(value: 0)
 
         MockURLProtocol.requestHandler = { _ in
-            Thread.sleep(forTimeInterval: 0.1)
+            requestStartedExpectation.fulfill()
+            _ = cancelSemaphore.wait(timeout: .now() + 1.0)
             let response = HTTPURLResponse(
                 url: URL(string: "https://app.poltio.com/first")!,
                 statusCode: 200,
@@ -635,9 +668,11 @@ final class PoltioSDKTests: XCTestCase {
         }
 
         XCTAssertNotNil(task)
+        wait(for: [requestStartedExpectation], timeout: 2.0)
         task?.cancel()
+        cancelSemaphore.signal()
 
-        waitForExpectations(timeout: 2.0)
+        wait(for: [cancelExpectation], timeout: 2.0)
     }
 }
 

@@ -15,7 +15,7 @@ let package = Package(
     targets: [
         .target(
             name: "PoltioSDK",
-            path: "Sources/PoltioSDK",
+            path: "ios/Sources/PoltioSDK",
             resources: [
                 .process("Resources"),
             ]
@@ -23,7 +23,7 @@ let package = Package(
         .testTarget(
             name: "PoltioSDKTests",
             dependencies: ["PoltioSDK"],
-            path: "Tests/PoltioSDKTests"
+            path: "ios/Tests/PoltioSDKTests"
         ),
     ]
 )
