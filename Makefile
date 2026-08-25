@@ -3,7 +3,7 @@
 DEVELOPER_DIR ?= /Applications/Xcode.app/Contents/Developer
 export DEVELOPER_DIR
 
-.PHONY: all help check build build-ios build-android build-rn test test-ios test-android test-rn format format-ios lint lint-ios lint-actions zizmor run-example-ios run-example-android run-example-rn version submit-version clean
+.PHONY: all help check build build-ios build-android build-rn test test-ios test-android test-rn format format-ios lint lint-ios lint-pod lint-actions zizmor run-example-ios run-example-android run-example-rn version submit-version publish-cocoapods clean
 
 help:
 	@echo "Poltio Mobile SDK - Monorepo Makefile Commands:"
@@ -20,6 +20,7 @@ help:
 	@echo "  make format-ios          - Format Swift source files with swiftformat"
 	@echo "  make lint                - Run all linters (Swift, GitHub Actions)"
 	@echo "  make lint-ios            - Lint Swift source files with swiftformat --lint"
+	@echo "  make lint-pod            - Lint CocoaPods podspec with pod lib lint"
 	@echo "  make lint-actions        - Lint GitHub Actions workflows with zizmor"
 	@echo "  make zizmor              - Alias for lint-actions"
 	@echo "  make run-example-ios     - Launch iOS Example App in simulator"
@@ -27,6 +28,7 @@ help:
 	@echo "  make run-example-rn      - Launch React Native Example App"
 	@echo "  make version             - Bump version across all SDK manifests"
 	@echo "  make submit-version      - Tag release and trigger publishing"
+	@echo "  make publish-cocoapods   - Publish iOS SDK to CocoaPods Trunk"
 	@echo "  make clean               - Clean build artifacts across all platforms"
 
 check:
@@ -58,6 +60,17 @@ lint-ios:
 		/opt/homebrew/bin/swiftformat Package.swift ios example/ios --lint --swiftversion 5.9; \
 	else \
 		echo "Error: swiftformat is not installed. Install via: brew install swiftformat"; \
+		exit 1; \
+	fi
+
+lint-pod:
+	@echo "==> Linting CocoaPods podspec..."
+	@if command -v pod >/dev/null 2>&1; then \
+		pod lib lint ios/PoltioSDK.podspec --allow-warnings; \
+	elif [ -f "/opt/homebrew/bin/pod" ]; then \
+		/opt/homebrew/bin/pod lib lint ios/PoltioSDK.podspec --allow-warnings; \
+	else \
+		echo "Error: CocoaPods is not installed. Install via: brew install cocoapods or sudo gem install cocoapods"; \
 		exit 1; \
 	fi
 
@@ -199,12 +212,23 @@ run-example-rn:
 VERSION ?= 1.0.0
 
 version:
-	@echo "==> Bumping version to $(VERSION)..."
-	@echo "Updating iOS, Android, and React Native package versions..."
+	@chmod +x scripts/bump-version.sh
+	@./scripts/bump-version.sh "$(VERSION)"
 
 submit-version:
 	@echo "==> Submitting version $(VERSION)..."
 	@git tag -a "v$(VERSION)" -m "Release v$(VERSION)"
+
+publish-cocoapods:
+	@echo "==> Pushing PoltioSDK to CocoaPods Trunk..."
+	@if command -v pod >/dev/null 2>&1; then \
+		pod trunk push ios/PoltioSDK.podspec --allow-warnings; \
+	elif [ -f "/opt/homebrew/bin/pod" ]; then \
+		/opt/homebrew/bin/pod trunk push ios/PoltioSDK.podspec --allow-warnings; \
+	else \
+		echo "Error: CocoaPods is not installed. Install via: brew install cocoapods or sudo gem install cocoapods"; \
+		exit 1; \
+	fi
 
 clean:
 	@echo "==> Cleaning build artifacts..."

@@ -79,8 +79,9 @@ AI agents MUST use and maintain the root `Makefile` targets for executing builds
 | `make test-ios` | Runs iOS unit tests (`swift test`). |
 | `make format` | Formats code across all platforms. |
 | `make format-ios` | Formats all Swift files using `swiftformat`. |
-| `make lint` | Runs all linters across the codebase (Swift, GitHub Actions). |
+| `make lint` | Runs all linters across the codebase (Swift, CocoaPods, GitHub Actions). |
 | `make lint-ios` | Lints Swift files using `swiftformat --lint`. |
+| `make lint-pod` | Lints CocoaPods podspec using `pod lib lint`. |
 | `make lint-actions` | Lints GitHub Actions workflows using `zizmor`. |
 | `make build-android` | Builds Android AAR library via Gradle. |
 | `make test-android` | Runs Android unit tests via Gradle. |
@@ -92,6 +93,7 @@ AI agents MUST use and maintain the root `Makefile` targets for executing builds
 | `make run-example-rn` | Builds & starts the React Native example app. |
 | `make version` | Bumps version across all platform manifest files. |
 | `make submit-version` | Tags and triggers release/publishing workflows. |
+| `make publish-cocoapods`| Pushes iOS SDK podspec to CocoaPods Trunk. |
 
 ---
 
