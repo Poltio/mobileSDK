@@ -79,6 +79,7 @@ AI agents MUST use and maintain the root `Makefile` targets for executing builds
 | `make test-ios` | Runs iOS unit tests (`swift test`). |
 | `make format` | Formats code across all platforms. |
 | `make format-ios` | Formats all Swift files using `swiftformat`. |
+| `make lint` | Runs all linters across the codebase (Swift, GitHub Actions). |
 | `make lint-ios` | Lints Swift files using `swiftformat --lint`. |
 | `make lint-actions` | Lints GitHub Actions workflows using `zizmor`. |
 | `make build-android` | Builds Android AAR library via Gradle. |

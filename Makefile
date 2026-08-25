@@ -3,7 +3,7 @@
 DEVELOPER_DIR ?= /Applications/Xcode.app/Contents/Developer
 export DEVELOPER_DIR
 
-.PHONY: all help check build build-ios build-android build-rn test test-ios test-android test-rn format format-ios lint-ios lint-actions zizmor run-example-ios run-example-android run-example-rn version submit-version clean
+.PHONY: all help check build build-ios build-android build-rn test test-ios test-android test-rn format format-ios lint lint-ios lint-actions zizmor run-example-ios run-example-android run-example-rn version submit-version clean
 
 help:
 	@echo "Poltio Mobile SDK - Monorepo Makefile Commands:"
@@ -18,6 +18,7 @@ help:
 	@echo "  make test-rn             - Run React Native tests & linter"
 	@echo "  make format              - Format code across all platforms"
 	@echo "  make format-ios          - Format Swift source files with swiftformat"
+	@echo "  make lint                - Run all linters (Swift, GitHub Actions)"
 	@echo "  make lint-ios            - Lint Swift source files with swiftformat --lint"
 	@echo "  make lint-actions        - Lint GitHub Actions workflows with zizmor"
 	@echo "  make zizmor              - Alias for lint-actions"
@@ -46,6 +47,8 @@ format-ios:
 	else \
 		echo "swiftformat is not installed. Install via: brew install swiftformat"; \
 	fi
+
+lint: lint-ios lint-actions
 
 lint-ios:
 	@echo "==> Linting Swift files with swiftformat..."
