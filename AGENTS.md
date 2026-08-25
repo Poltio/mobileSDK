@@ -80,6 +80,7 @@ AI agents MUST use and maintain the root `Makefile` targets for executing builds
 | `make format` | Formats code across all platforms. |
 | `make format-ios` | Formats all Swift files using `swiftformat`. |
 | `make lint-ios` | Lints Swift files using `swiftformat --lint`. |
+| `make lint-actions` | Lints GitHub Actions workflows using `zizmor`. |
 | `make build-android` | Builds Android AAR library via Gradle. |
 | `make test-android` | Runs Android unit tests via Gradle. |
 | `make build-rn` | Builds React Native TypeScript package. |
@@ -100,6 +101,8 @@ AI agents MUST use and maintain the root `Makefile` targets for executing builds
   - Follow Apple API Design Guidelines, standard Swift naming (`camelCase` for properties, `PascalCase` for types).
 - **Kotlin**: Follow official Kotlin style guides, explicit visibility modifiers, immutability (`val` over `var` where possible).
 - **TypeScript**: Strict mode enabled, explicit return types on exported functions/classes, detailed JSDoc comments for public SDK APIs.
+- **GitHub Actions / YAML**:
+  - **Linting**: If any GitHub Actions YAML workflow files (`.github/**`) are added or modified, agents **MUST** run `make lint-actions` (or `make zizmor`) to verify security and standards compliance.
 
 ---
 
