@@ -14,7 +14,7 @@ Welcome to the **Poltio Mobile SDK** monorepo. This repository houses native mob
 │   └── IOS.md              # iOS SDK & Simulator setup guide
 ├── ios/                    # Pure Swift SDK (Swift Package Manager & CocoaPods)
 ├── android/                # Pure Kotlin SDK (Gradle & Maven Central)
-├── react-native/           # React Native SDK wrapper (npm)
+├── react-native/           # React Native SDK wrapper (npm) (WIP)
 ├── example/                # Integrated sample apps
 │   ├── ios/                # iOS TechStore E-Commerce App (SwiftUI)
 │   ├── android/            # Android TechStore E-Commerce App (Jetpack Compose)
@@ -35,9 +35,9 @@ make check
 ### 2. Run Example Applications
 Launch sample apps directly on simulators/emulators with a single Makefile command:
 
-- **iOS**: [`make run-example-ios`](docs/IOS.md)
-- **Android**: [`make run-example-android`](docs/ANDROID.md)
-- **React Native**: `make run-example-rn`
+- [X] **iOS**: [`make run-example-ios`](docs/IOS.md)
+- [X] **Android**: [`make run-example-android`](docs/ANDROID.md)
+- [ ] **React Native**: `make run-example-rn` (WIP)
 
 ---
 
