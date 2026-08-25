@@ -22,7 +22,7 @@ fi
 
 # 2. Android Gradle manifest (if present)
 if [ -f "android/poltio-sdk/build.gradle.kts" ]; then
-    sed -i.bak -E "s/version[[:space:]]*=[[:space:]]*['\"][^'\"]+['\"]/version = '${NEW_VERSION}'/" android/poltio-sdk/build.gradle.kts
+    sed -i.bak -E "s/^([[:space:]]*)version[[:space:]]*=[[:space:]]*['\"\"][^'\"\"]+['\"\"]/\\1version = \"${NEW_VERSION}\"/" android/poltio-sdk/build.gradle.kts
     rm -f android/poltio-sdk/build.gradle.kts.bak
     echo "  ✅ Updated android/poltio-sdk/build.gradle.kts -> ${NEW_VERSION}"
 fi
