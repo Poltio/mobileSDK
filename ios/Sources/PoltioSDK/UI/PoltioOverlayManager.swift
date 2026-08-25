@@ -65,7 +65,7 @@
                 pendingShowWorkItem = nil
 
                 guard widget.overlayOptions.isBoxTrigger || widget.overlayOptions.isPillTrigger else {
-                    print("[PoltioSDK] Trigger type '\(widget.overlayOptions.triggerType ?? "none")' is not currently handled (supported: 'box', 'pill').")
+                    PoltioLogger.warning("Trigger type '\(widget.overlayOptions.triggerType ?? "none")' is not currently handled (supported: 'box', 'pill').")
                     hideTrigger()
                     return
                 }
@@ -87,7 +87,7 @@
                 currentTriggerType = targetTriggerType
 
                 guard let windowScene = findActiveWindowScene() else {
-                    print("[PoltioSDK] UIWindowScene not ready yet, retrying showTrigger after 0.2s...")
+                    PoltioLogger.debug("UIWindowScene not ready yet, retrying showTrigger after 0.2s...")
                     let workItem = DispatchWorkItem { [weak self] in
                         guard let self, currentPublicId == widget.publicId else { return }
                         showTrigger(widget: widget, puid: puid)
@@ -150,7 +150,7 @@
                 overlayWindow = window
                 window.isHidden = false
 
-                print("[PoltioSDK] Attached floating trigger overlay for widget '\(widget.publicId)' (type: \(widget.overlayOptions.triggerType ?? "unknown")) in dedicated passthrough window.")
+                PoltioLogger.info("Attached floating trigger overlay for widget '\(widget.publicId)' (type: \(widget.overlayOptions.triggerType ?? "unknown")) in dedicated passthrough window.")
 
                 triggerView.alpha = 0
                 triggerView.transform = CGAffineTransform(translationX: 80, y: 0)
@@ -212,7 +212,7 @@
         public func presentWidgetWebView(publicId: String, puid: String?) {
             DispatchQueue.main.async { [weak self] in
                 guard let self, let topVC = findTopmostHostViewController() else {
-                    print("[PoltioSDK] Error: Unable to find topmost view controller to present widget.")
+                    PoltioLogger.error("Unable to find topmost view controller to present widget.")
                     return
                 }
 

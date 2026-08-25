@@ -578,6 +578,49 @@ final class PoltioSDKTests: XCTestCase {
             XCTAssertTrue(swipeRecognizers.contains(where: { $0.direction == .left }))
         }
     #endif
+
+    func testLogLevelOrderingAndConfiguration() {
+        XCTAssertTrue(PoltioLogLevel.none < PoltioLogLevel.error)
+        XCTAssertTrue(PoltioLogLevel.error < PoltioLogLevel.warning)
+        XCTAssertTrue(PoltioLogLevel.warning < PoltioLogLevel.info)
+        XCTAssertTrue(PoltioLogLevel.info < PoltioLogLevel.debug)
+
+        PoltioSDK.configure(clientKey: "pk_test_log_level", logLevel: .error)
+        XCTAssertEqual(PoltioSDK.logLevel, .error)
+
+        PoltioSDK.logLevel = .none
+        XCTAssertEqual(PoltioSDK.logLevel, .none)
+
+        PoltioSDK.logLevel = .debug
+        XCTAssertEqual(PoltioSDK.logLevel, .debug)
+    }
+
+    func testInFlightRequestCancellationOnSubsequentView() {
+        let mockSession = createMockSession()
+        let client = PoltioAPIClient(session: mockSession)
+
+        let cancelExpectation = expectation(description: "First request cancelled")
+
+        let task = client.resolveMobileWidget(
+            clientKey: "pk_test_cancel",
+            deviceId: "dev_123",
+            targetURL: "https://app.poltio.com/first"
+        ) { result in
+            switch result {
+            case .success:
+                XCTFail("Should have been cancelled")
+            case let .failure(error):
+                let nsError = error as NSError
+                XCTAssertEqual(nsError.code, NSURLErrorCancelled)
+                cancelExpectation.fulfill()
+            }
+        }
+
+        XCTAssertNotNil(task)
+        task?.cancel()
+
+        waitForExpectations(timeout: 2.0)
+    }
 }
 
 private extension URLRequest {

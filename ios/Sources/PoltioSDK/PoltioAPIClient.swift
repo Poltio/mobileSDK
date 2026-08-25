@@ -39,17 +39,19 @@ final class PoltioAPIClient {
     ///   - deviceId: Unique SDK device identifier (`sdk_id`).
     ///   - targetURL: Absolute URL string representing the active screen or content.
     ///   - completion: Optional completion handler indicating success or failure with decoded PoltioWidgetResponse.
+    /// - Returns: The in-flight `URLSessionDataTask` which can be cancelled if the user navigates away before completion.
+    @discardableResult
     func resolveMobileWidget(
         clientKey: String,
         deviceId: String,
         targetURL: String,
         completion: ((Result<PoltioWidgetResponse, Error>) -> Void)? = nil
-    ) {
+    ) -> URLSessionDataTask? {
         let endpointString = "\(baseURL)\(PoltioAPIClient.widgetEndpointPath)"
         guard let requestURL = URL(string: endpointString) else {
-            print("[PoltioSDK] Error: Invalid API endpoint URL '\(endpointString)'.")
+            PoltioLogger.error("Invalid API endpoint URL '\(endpointString)'.")
             completion?(.failure(URLError(.badURL)))
-            return
+            return nil
         }
 
         var request = URLRequest(url: requestURL)
@@ -65,55 +67,58 @@ final class PoltioAPIClient {
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
         } catch {
-            print("[PoltioSDK] Error: Failed to serialize request payload: \(error.localizedDescription)")
+            PoltioLogger.error("Failed to serialize request payload: \(error.localizedDescription)")
             completion?(.failure(error))
-            return
+            return nil
         }
 
         let task = session.dataTask(with: request) { data, response, error in
             if let error {
-                print("[PoltioSDK] Network request failed for '\(targetURL)': \(error.localizedDescription)")
+                if (error as? URLError)?.code == .cancelled || (error as NSError).code == NSURLErrorCancelled {
+                    PoltioLogger.debug("Widget resolution request cancelled for '\(targetURL)' (navigated to newer screen).")
+                } else {
+                    PoltioLogger.error("Network request failed for '\(targetURL)': \(error.localizedDescription)")
+                }
                 completion?(.failure(error))
                 return
             }
 
             guard let httpResponse = response as? HTTPURLResponse else {
                 let invalidRespErr = URLError(.cannotParseResponse)
-                print("[PoltioSDK] Error: Received non-HTTP response from server.")
+                PoltioLogger.error("Received non-HTTP response from server.")
                 completion?(.failure(invalidRespErr))
                 return
             }
 
             if (200 ... 299).contains(httpResponse.statusCode) {
                 guard let responseData = data, !responseData.isEmpty else {
-                    print("[PoltioSDK] resolveMobileWidget succeeded (Status: \(httpResponse.statusCode)) but response body was empty.")
+                    PoltioLogger.warning("resolveMobileWidget succeeded (Status: \(httpResponse.statusCode)) but response body was empty.")
                     completion?(.failure(URLError(.cannotDecodeRawData)))
                     return
                 }
 
-                #if DEBUG
-                    if let bodyString = String(data: responseData, encoding: .utf8) {
-                        print("[PoltioSDK] resolveMobileWidget response body (Status \(httpResponse.statusCode)):\n\(bodyString)")
-                    }
-                #endif
+                if let bodyString = String(data: responseData, encoding: .utf8) {
+                    PoltioLogger.debug("resolveMobileWidget response body (Status \(httpResponse.statusCode)):\n\(bodyString)")
+                }
 
                 do {
                     let widgetResponse = try JSONDecoder().decode(PoltioWidgetResponse.self, from: responseData)
-                    print("[PoltioSDK] Successfully resolved widget '\(widgetResponse.publicId)' with trigger type '\(widgetResponse.overlayOptions.triggerType ?? "none")'.")
+                    PoltioLogger.info("Successfully resolved widget '\(widgetResponse.publicId)' with trigger type '\(widgetResponse.overlayOptions.triggerType ?? "none")'.")
                     completion?(.success(widgetResponse))
                 } catch {
-                    print("[PoltioSDK] Error: Failed to decode widget response: \(error.localizedDescription)")
+                    PoltioLogger.error("Failed to decode widget response: \(error.localizedDescription)")
                     completion?(.failure(error))
                 }
             } else if httpResponse.statusCode == 404 {
-                print("[PoltioSDK] No widget configured for URL: '\(targetURL)' (404).")
+                PoltioLogger.debug("No widget configured for URL: '\(targetURL)' (404).")
                 completion?(.failure(URLError(.resourceUnavailable)))
             } else {
-                print("[PoltioSDK] resolveMobileWidget server returned status \(httpResponse.statusCode) for URL: '\(targetURL)'")
+                PoltioLogger.warning("resolveMobileWidget server returned status \(httpResponse.statusCode) for URL: '\(targetURL)'")
                 completion?(.failure(URLError(.badServerResponse)))
             }
         }
 
         task.resume()
+        return task
     }
 }
