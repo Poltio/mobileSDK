@@ -3,7 +3,7 @@
 DEVELOPER_DIR ?= /Applications/Xcode.app/Contents/Developer
 export DEVELOPER_DIR
 
-.PHONY: all help check build build-ios build-android build-rn test test-ios test-android test-rn format format-ios lint-ios run-example-ios run-example-android run-example-rn version submit-version clean
+.PHONY: all help check build build-ios build-android build-rn test test-ios test-android test-rn format format-ios lint lint-ios lint-actions zizmor run-example-ios run-example-android run-example-rn version submit-version clean
 
 help:
 	@echo "Poltio Mobile SDK - Monorepo Makefile Commands:"
@@ -18,7 +18,10 @@ help:
 	@echo "  make test-rn             - Run React Native tests & linter"
 	@echo "  make format              - Format code across all platforms"
 	@echo "  make format-ios          - Format Swift source files with swiftformat"
+	@echo "  make lint                - Run all linters (Swift, GitHub Actions)"
 	@echo "  make lint-ios            - Lint Swift source files with swiftformat --lint"
+	@echo "  make lint-actions        - Lint GitHub Actions workflows with zizmor"
+	@echo "  make zizmor              - Alias for lint-actions"
 	@echo "  make run-example-ios     - Launch iOS Example App in simulator"
 	@echo "  make run-example-android - Launch Android Example App in emulator"
 	@echo "  make run-example-rn      - Launch React Native Example App"
@@ -45,6 +48,8 @@ format-ios:
 		echo "swiftformat is not installed. Install via: brew install swiftformat"; \
 	fi
 
+lint: lint-ios lint-actions
+
 lint-ios:
 	@echo "==> Linting Swift files with swiftformat..."
 	@if command -v swiftformat >/dev/null 2>&1; then \
@@ -55,6 +60,19 @@ lint-ios:
 		echo "Error: swiftformat is not installed. Install via: brew install swiftformat"; \
 		exit 1; \
 	fi
+
+lint-actions:
+	@echo "==> Linting GitHub Actions workflows with zizmor..."
+	@if command -v zizmor >/dev/null 2>&1; then \
+		zizmor --persona=pedantic .github/workflows/; \
+	elif [ -f "/opt/homebrew/bin/zizmor" ]; then \
+		/opt/homebrew/bin/zizmor --persona=pedantic .github/workflows/; \
+	else \
+		echo "Error: zizmor is not installed. Install via: brew install zizmor"; \
+		exit 1; \
+	fi
+
+zizmor: lint-actions
 
 all: build test
 
