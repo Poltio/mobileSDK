@@ -41,6 +41,55 @@ Launch sample apps directly on simulators/emulators with a single Makefile comma
 
 ---
 
+## 📦 Installation
+
+### iOS
+
+#### Option 1: Swift Package Manager (Recommended)
+
+##### In Xcode:
+1. Open your project in Xcode.
+2. Navigate to **File** > **Add Package Dependencies...** (or select your project in the Project Navigator > **Package Dependencies** > **+**).
+3. Enter the repository URL:
+   ```text
+   https://github.com/Poltio/mobileSDK.git
+   ```
+4. Set the **Dependency Rule** to **Up to Next Major Version** starting from `1.0.0`.
+5. Select **PoltioSDK** and add it to your application target.
+
+##### In `Package.swift`:
+```swift
+dependencies: [
+    .package(url: "https://github.com/Poltio/mobileSDK.git", from: "1.0.0")
+],
+targets: [
+    .target(
+        name: "YourAppTarget",
+        dependencies: [
+            .product(name: "PoltioSDK", package: "mobileSDK")
+        ]
+    )
+]
+```
+
+#### Option 2: CocoaPods
+
+Add `PoltioSDK` to your project's `Podfile`:
+
+```ruby
+target 'YourAppTarget' do
+  use_frameworks!
+  pod 'PoltioSDK', '~> 1.0.0'
+end
+```
+
+Then install the pod:
+```bash
+pod install
+```
+
+---
+
 ## 💻 Usage Example
 
 ### iOS (Swift)
