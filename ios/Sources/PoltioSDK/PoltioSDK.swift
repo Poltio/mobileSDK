@@ -13,6 +13,7 @@ public final class PoltioSDK {
     private var _currentViewRequestId: UInt64 = 0
 
     private var _activeWidgetTask: URLSessionDataTask?
+    private let _widgetCache = PoltioWidgetCache()
 
     private let queue = DispatchQueue(label: "com.poltio.sdk", attributes: .concurrent)
 
@@ -23,6 +24,45 @@ public final class PoltioSDK {
     public static var logLevel: PoltioLogLevel {
         get { PoltioLogger.logLevel }
         set { PoltioLogger.logLevel = newValue }
+    }
+
+    /// Time-to-live in seconds for widget resolution in-memory cache (default: 300 seconds / 5 minutes).
+    public static var cacheTTL: TimeInterval {
+        get { shared.cacheTTL }
+        set { shared.cacheTTL = newValue }
+    }
+
+    /// Instance property for cache TTL.
+    public var cacheTTL: TimeInterval {
+        get { _widgetCache.defaultTTL }
+        set { _widgetCache.defaultTTL = newValue }
+    }
+
+    /// Maximum number of widget responses retained in the in-memory cache (default: 100).
+    public static var cacheLimit: Int {
+        get { shared.cacheLimit }
+        set { shared.cacheLimit = newValue }
+    }
+
+    /// Instance property for cache item limit.
+    public var cacheLimit: Int {
+        get { _widgetCache.countLimit }
+        set { _widgetCache.countLimit = newValue }
+    }
+
+    /// Clears the in-memory widget resolution cache.
+    public static func clearCache() {
+        shared.clearCache()
+    }
+
+    /// Instance method to clear the in-memory widget cache.
+    public func clearCache() {
+        _widgetCache.clear()
+    }
+
+    /// Internal access to the widget cache (for unit testing).
+    var widgetCache: PoltioWidgetCache {
+        _widgetCache
     }
 
     /// The client key configured for this SDK session.
@@ -117,6 +157,9 @@ public final class PoltioSDK {
                 self._activeWidgetTask?.cancel()
                 self._activeWidgetTask = nil
                 self._currentViewRequestId = 0
+                self._widgetCache.clear()
+                self._widgetCache.defaultTTL = 300.0
+                self._widgetCache.countLimit = 100
                 UserDefaults.standard.removeObject(forKey: PoltioSDK.sdkIdStorageKey)
                 UserDefaults.standard.removeObject(forKey: PoltioSDK.puidStorageKey)
             }
@@ -231,6 +274,29 @@ public final class PoltioSDK {
             let targetURL = PoltioSDK.sanitizeOrFormatURL(rawUrl)
             let activePuid = puid
 
+            // Check in-memory cache first
+            if let cachedResult = _widgetCache.get(for: targetURL) {
+                queue.sync(flags: .barrier) {
+                    self._activeWidgetTask?.cancel()
+                    self._activeWidgetTask = nil
+                    self._currentViewRequestId &+= 1
+                }
+
+                switch cachedResult {
+                case let .widget(widgetResponse):
+                    PoltioLogger.debug("Using cached widget response for '\(targetURL)' (public_id: \(widgetResponse.publicId)).")
+                    #if canImport(UIKit)
+                        PoltioOverlayManager.shared.showTrigger(widget: widgetResponse, puid: activePuid)
+                    #endif
+                case .noWidget:
+                    PoltioLogger.debug("Using cached negative widget resolution for '\(targetURL)' (no widget).")
+                    #if canImport(UIKit)
+                        PoltioOverlayManager.shared.hideTrigger()
+                    #endif
+                }
+                return
+            }
+
             // Cancel any in-flight widget resolution task for previous screen
             queue.sync(flags: .barrier) {
                 self._activeWidgetTask?.cancel()
@@ -258,6 +324,7 @@ public final class PoltioSDK {
 
                 switch result {
                 case let .success(widgetResponse):
+                    _widgetCache.set(result: .widget(widgetResponse), for: targetURL)
                     #if canImport(UIKit)
                         PoltioOverlayManager.shared.showTrigger(widget: widgetResponse, puid: activePuid)
                     #endif
@@ -265,6 +332,11 @@ public final class PoltioSDK {
                     #if canImport(UIKit)
                         PoltioOverlayManager.shared.hideTrigger()
                     #endif
+
+                    if (error as? URLError)?.code == .resourceUnavailable {
+                        _widgetCache.set(result: .noWidget, for: targetURL)
+                    }
+
                     if (error as? URLError)?.code != .cancelled, (error as NSError).code != NSURLErrorCancelled {
                         PoltioLogger.warning("Widget resolution skipped/failed for '\(targetURL)': \(error.localizedDescription)")
                     }

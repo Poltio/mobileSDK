@@ -141,6 +141,11 @@ PoltioSDK.configure(clientKey: "YOUR_CLIENT_KEY", logLevel: .info)
 // 2. Identify user (optional)
 PoltioSDK.identify(puid: "user_12345")
 
-// 3. Track screen / view events
+// 3. Track screen / view events (cached in-memory for 5 minutes)
 PoltioSDK.track(event: "view", params: ["url": "https://app.poltio.com/home"])
+
+// 4. Cache management (optional)
+// PoltioSDK.cacheTTL = 300.0  // Default: 5 minutes (300 seconds)
+// PoltioSDK.cacheLimit = 100   // Default: 100 entries max
+// PoltioSDK.clearCache()       // Clear cache manually
 ```
