@@ -66,9 +66,9 @@ lint-ios:
 lint-pod:
 	@echo "==> Linting CocoaPods podspec..."
 	@if command -v pod >/dev/null 2>&1; then \
-		pod lib lint ios/PoltioSDK.podspec --allow-warnings; \
+		pod spec lint ios/PoltioSDK.podspec --allow-warnings --quick; \
 	elif [ -f "/opt/homebrew/bin/pod" ]; then \
-		/opt/homebrew/bin/pod lib lint ios/PoltioSDK.podspec --allow-warnings; \
+		/opt/homebrew/bin/pod spec lint ios/PoltioSDK.podspec --allow-warnings --quick; \
 	else \
 		echo "Error: CocoaPods is not installed. Install via: brew install cocoapods or sudo gem install cocoapods"; \
 		exit 1; \

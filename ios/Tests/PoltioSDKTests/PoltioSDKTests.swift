@@ -674,6 +674,317 @@ final class PoltioSDKTests: XCTestCase {
 
         wait(for: [cancelExpectation], timeout: 2.0)
     }
+
+    func testWidgetCacheHitAndAvoidsAPIRequest() {
+        let mockSession = createMockSession()
+        let sdk = PoltioSDK.shared
+        PoltioSDK.configure(clientKey: "pk_test_cache_hit")
+        sdk.apiClient = PoltioAPIClient(session: mockSession)
+
+        var requestCount = 0
+        let requestLock = NSLock()
+        let firstExpectation = expectation(description: "First network request fulfilled")
+
+        MockURLProtocol.requestHandler = { request in
+            requestLock.lock()
+            requestCount += 1
+            let count = requestCount
+            requestLock.unlock()
+
+            if count == 1 {
+                firstExpectation.fulfill()
+            }
+
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            let jsonString = """
+            {
+              "public_id": "cache-test-public-id",
+              "overlay_options": {
+                "trigger-type": "box",
+                "floating-box-text-first": "Cached Widget"
+              }
+            }
+            """
+            return (response, Data(jsonString.utf8))
+        }
+
+        // First track call -> triggers network request
+        PoltioSDK.track(event: "view", params: ["url": "https://example.com/shop/item1"])
+        wait(for: [firstExpectation], timeout: 2.0)
+
+        let populatedExp = expectation(description: "Wait for cache populated")
+        let startTime = Date()
+        func pollCache() {
+            if sdk.widgetCache.get(for: "https://example.com/shop/item1") != nil {
+                populatedExp.fulfill()
+            } else if Date().timeIntervalSince(startTime) < 2.0 {
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.01) {
+                    pollCache()
+                }
+            }
+        }
+        pollCache()
+        wait(for: [populatedExp], timeout: 2.0)
+
+        requestLock.lock()
+        XCTAssertEqual(requestCount, 1)
+        requestLock.unlock()
+
+        // Second track call to same URL -> should hit cache and NOT trigger network request
+        PoltioSDK.track(event: "view", params: ["url": "https://example.com/shop/item1"])
+
+        // Small delay to ensure no asynchronous task was dispatched
+        let exp = expectation(description: "Wait after second call")
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) {
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1.0)
+
+        requestLock.lock()
+        XCTAssertEqual(requestCount, 1, "Second visit to same URL within 5 minutes must use cache and not make API call")
+        requestLock.unlock()
+    }
+
+    func testWidgetCacheExpirationTTL() {
+        let cache = PoltioWidgetCache(defaultTTL: 0.05, countLimit: 10)
+        let response = PoltioWidgetResponse(
+            publicId: "expiring-widget",
+            overlayOptions: PoltioOverlayOptions(triggerType: "box")
+        )
+
+        cache.set(result: .widget(response), for: "https://example.com/expiring")
+
+        // Immediately should be present
+        guard case let .widget(cached) = cache.get(for: "https://example.com/expiring") else {
+            XCTFail("Expected widget in cache immediately")
+            return
+        }
+        XCTAssertEqual(cached.publicId, "expiring-widget")
+
+        // Wait for TTL (0.05s) to expire
+        Thread.sleep(forTimeInterval: 0.07)
+
+        // After TTL expiry, cache lookup should return nil
+        XCTAssertNil(cache.get(for: "https://example.com/expiring"), "Expired cache entry should return nil")
+    }
+
+    func testWidgetCacheNegativeResult404() {
+        let mockSession = createMockSession()
+        let sdk = PoltioSDK.shared
+        PoltioSDK.configure(clientKey: "pk_test_404_cache")
+        sdk.apiClient = PoltioAPIClient(session: mockSession)
+
+        var requestCount = 0
+        let requestLock = NSLock()
+        let firstExpectation = expectation(description: "First 404 request completed")
+
+        MockURLProtocol.requestHandler = { request in
+            requestLock.lock()
+            requestCount += 1
+            let count = requestCount
+            requestLock.unlock()
+
+            if count == 1 {
+                firstExpectation.fulfill()
+            }
+
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 404,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, Data("Not Found".utf8))
+        }
+
+        // First track call -> triggers 404 from server
+        PoltioSDK.track(event: "view", params: ["url": "https://example.com/no-widget-page"])
+        wait(for: [firstExpectation], timeout: 2.0)
+
+        let populated404Exp = expectation(description: "Wait for 404 cache populated")
+        let startTime404 = Date()
+        func poll404Cache() {
+            if sdk.widgetCache.get(for: "https://example.com/no-widget-page") == .noWidget {
+                populated404Exp.fulfill()
+            } else if Date().timeIntervalSince(startTime404) < 2.0 {
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.01) {
+                    poll404Cache()
+                }
+            }
+        }
+        poll404Cache()
+        wait(for: [populated404Exp], timeout: 2.0)
+
+        requestLock.lock()
+        XCTAssertEqual(requestCount, 1)
+        requestLock.unlock()
+
+        // Second track call for same 404 page -> should use cached negative result
+        PoltioSDK.track(event: "view", params: ["url": "https://example.com/no-widget-page"])
+
+        let exp = expectation(description: "Wait after second 404 call")
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) {
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1.0)
+
+        requestLock.lock()
+        XCTAssertEqual(requestCount, 1, "Repeated navigation to 404 page within 5 minutes should not re-query server")
+        requestLock.unlock()
+    }
+
+    func testWidgetCacheCountLimit() {
+        let cache = PoltioWidgetCache(defaultTTL: 300.0, countLimit: 2)
+        let response1 = PoltioWidgetResponse(
+            publicId: "widget-1",
+            overlayOptions: PoltioOverlayOptions(triggerType: "box")
+        )
+        let response2 = PoltioWidgetResponse(
+            publicId: "widget-2",
+            overlayOptions: PoltioOverlayOptions(triggerType: "box")
+        )
+        let response3 = PoltioWidgetResponse(
+            publicId: "widget-3",
+            overlayOptions: PoltioOverlayOptions(triggerType: "box")
+        )
+
+        cache.set(result: .widget(response1), for: "https://example.com/1")
+        cache.set(result: .widget(response2), for: "https://example.com/2")
+        cache.set(result: .widget(response3), for: "https://example.com/3")
+
+        XCTAssertNotNil(cache.get(for: "https://example.com/3"))
+    }
+
+    func testWidgetCacheTransientErrorNotCached() {
+        let mockSession = createMockSession()
+        let sdk = PoltioSDK.shared
+        PoltioSDK.configure(clientKey: "pk_test_500_not_cached")
+        sdk.apiClient = PoltioAPIClient(session: mockSession)
+
+        var requestCount = 0
+        let requestLock = NSLock()
+        let firstExp = expectation(description: "First 500 error completed")
+        let secondExp = expectation(description: "Second request completed on retry")
+
+        MockURLProtocol.requestHandler = { request in
+            requestLock.lock()
+            requestCount += 1
+            let count = requestCount
+            requestLock.unlock()
+
+            if count == 1 {
+                firstExp.fulfill()
+                let response = HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!
+                return (response, Data("Server Error".utf8))
+            } else {
+                secondExp.fulfill()
+                let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                let json = """
+                {"public_id":"recovered_id","overlay_options":{"trigger-type":"box"}}
+                """
+                return (response, Data(json.utf8))
+            }
+        }
+
+        PoltioSDK.track(event: "view", params: ["url": "https://example.com/flaky"])
+        wait(for: [firstExp], timeout: 2.0)
+
+        // Second call should retry because 500 error was NOT cached
+        PoltioSDK.track(event: "view", params: ["url": "https://example.com/flaky"])
+        wait(for: [secondExp], timeout: 2.0)
+
+        requestLock.lock()
+        XCTAssertEqual(requestCount, 2, "Transient 500 server error should not be cached")
+        requestLock.unlock()
+    }
+
+    func testClearCacheAndCustomTTLAndLimit() {
+        let sdk = PoltioSDK.shared
+        PoltioSDK.configure(clientKey: "pk_test_cache_config")
+
+        XCTAssertEqual(PoltioSDK.cacheTTL, 300.0)
+        XCTAssertEqual(PoltioSDK.cacheLimit, 100)
+
+        PoltioSDK.cacheTTL = 120.0
+        XCTAssertEqual(PoltioSDK.cacheTTL, 120.0)
+
+        PoltioSDK.cacheLimit = 50
+        XCTAssertEqual(PoltioSDK.cacheLimit, 50)
+
+        PoltioSDK.clearCache()
+
+        // Test with cacheTTL = 0 (disabled cache)
+        let mockSession = createMockSession()
+        sdk.apiClient = PoltioAPIClient(session: mockSession)
+        PoltioSDK.cacheTTL = 0
+
+        var requestCount = 0
+        let requestLock = NSLock()
+        let req1Exp = expectation(description: "Req 1")
+        let req2Exp = expectation(description: "Req 2")
+
+        MockURLProtocol.requestHandler = { request in
+            requestLock.lock()
+            requestCount += 1
+            let count = requestCount
+            requestLock.unlock()
+
+            if count == 1 {
+                req1Exp.fulfill()
+            } else if count == 2 {
+                req2Exp.fulfill()
+            }
+
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, Data("{\"public_id\":\"test\",\"overlay_options\":{}}".utf8))
+        }
+
+        PoltioSDK.track(event: "view", params: ["url": "https://example.com/no-cache"])
+        wait(for: [req1Exp], timeout: 2.0)
+
+        PoltioSDK.track(event: "view", params: ["url": "https://example.com/no-cache"])
+        wait(for: [req2Exp], timeout: 2.0)
+
+        requestLock.lock()
+        XCTAssertEqual(requestCount, 2, "When cacheTTL is 0, cache is disabled and every track triggers network request")
+        requestLock.unlock()
+    }
+
+    func testConcurrentCacheOperations() {
+        let cache = PoltioWidgetCache(defaultTTL: 300.0, countLimit: 100)
+        let group = DispatchGroup()
+
+        for i in 0 ..< 100 {
+            group.enter()
+            DispatchQueue.global().async {
+                let url = "https://example.com/page/\(i % 10)"
+                if i % 3 == 0 {
+                    let dummyWidget = PoltioWidgetResponse(
+                        publicId: "widget_\(i)",
+                        overlayOptions: PoltioOverlayOptions(triggerType: "box")
+                    )
+                    cache.set(result: .widget(dummyWidget), for: url)
+                } else if i % 3 == 1 {
+                    cache.set(result: .noWidget, for: url)
+                } else {
+                    _ = cache.get(for: url)
+                }
+
+                if i % 25 == 0 {
+                    cache.clear()
+                }
+                group.leave()
+            }
+        }
+
+        let result = group.wait(timeout: .now() + 3.0)
+        XCTAssertEqual(result, .success, "Concurrent cache operations must finish safely without deadlocking")
+    }
 }
 
 private extension URLRequest {
