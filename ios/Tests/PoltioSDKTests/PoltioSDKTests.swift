@@ -1105,6 +1105,15 @@ final class PoltioSDKTests: XCTestCase {
             XCTAssertEqual(round(g * 255), 255)
             XCTAssertEqual(round(b * 255), 255)
 
+            // 8-digit hex follows CSS Color Module Level 4: #RRGGBBAA
+            let hex8 = PoltioColorParser.parse("#00A3FF80")
+            XCTAssertNotNil(hex8)
+            hex8?.getRed(&r, green: &g, blue: &b, alpha: &a)
+            XCTAssertEqual(round(r * 255), 0)
+            XCTAssertEqual(round(g * 255), 163)
+            XCTAssertEqual(round(b * 255), 255)
+            XCTAssertEqual(round(a * 255), 128)
+
             // RGB / RGBA tests
             let rgb = PoltioColorParser.parse("rgb(100, 150, 200)")
             XCTAssertNotNil(rgb)

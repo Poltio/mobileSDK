@@ -234,28 +234,27 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         return _floatingMobileTopBorderRadius
     }
 
+    /// Design type version identifier for the card/slideover trigger, e.g. "2025-01".
+    private static let cardDesignType2025 = "2025-01"
+
+    /// Resolved trigger type string, respecting mobile overrides if present.
+    private var resolvedRawTriggerType: String? {
+        if let mobile = _mobile,
+           let val = mobile["trigger-type"]?.stringValue ?? mobile["trigger_type"]?.stringValue
+        {
+            return val.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }
+        return _triggerType?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
     /// Convenience check for box trigger type.
     public var isBoxTrigger: Bool {
-        let type = _triggerType?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if type == "box" {
-            return true
-        }
-        if let mobile = _mobile, let val = mobile["trigger-type"]?.stringValue ?? mobile["trigger_type"]?.stringValue {
-            return val.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "box"
-        }
-        return false
+        resolvedRawTriggerType == "box"
     }
 
     /// Convenience check for pill trigger type.
     public var isPillTrigger: Bool {
-        let type = _triggerType?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if type == "pill" {
-            return true
-        }
-        if let mobile = _mobile, let val = mobile["trigger-type"]?.stringValue ?? mobile["trigger_type"]?.stringValue {
-            return val.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "pill"
-        }
-        return false
+        resolvedRawTriggerType == "pill"
     }
 
     /// Convenience check for card trigger type (rounded slideover/card trigger).
@@ -263,18 +262,12 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         if isBoxTrigger || isPillTrigger {
             return false
         }
-        let rawType = _triggerType?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if rawType == "card" || rawType == "slideover" || rawType == "2025-01" {
+        let rawType = resolvedRawTriggerType
+        if rawType == "card" || rawType == "slideover" || rawType == Self.cardDesignType2025 {
             return true
         }
-        if let mobile = _mobile, let val = mobile["trigger-type"]?.stringValue ?? mobile["trigger_type"]?.stringValue {
-            let mType = val.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            if mType == "card" || mType == "slideover" || mType == "2025-01" {
-                return true
-            }
-        }
         let designType = floatingDesignType?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if designType == "2025-01" || designType == "card" || designType == "slideover" {
+        if designType == Self.cardDesignType2025 || designType == "card" || designType == "slideover" {
             return true
         }
         let displayType = floatingDisplayType?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -575,10 +568,11 @@ public struct PoltioOverlayOptions: Codable, Equatable {
                 let b = CGFloat(hexValue & 0x0000FF) / 255.0
                 return UIColor(red: r, green: g, blue: b, alpha: 1.0)
             } else if hex.count == 8 {
-                let a = CGFloat((hexValue & 0xFF00_0000) >> 24) / 255.0
-                let r = CGFloat((hexValue & 0x00FF_0000) >> 16) / 255.0
-                let g = CGFloat((hexValue & 0x0000_FF00) >> 8) / 255.0
-                let b = CGFloat(hexValue & 0x0000_00FF) / 255.0
+                // 8-digit hex follows the CSS Color Module Level 4 format: #RRGGBBAA.
+                let r = CGFloat((hexValue & 0xFF00_0000) >> 24) / 255.0
+                let g = CGFloat((hexValue & 0x00FF_0000) >> 16) / 255.0
+                let b = CGFloat((hexValue & 0x0000_FF00) >> 8) / 255.0
+                let a = CGFloat(hexValue & 0x0000_00FF) / 255.0
                 return UIColor(red: r, green: g, blue: b, alpha: a)
             }
 

@@ -34,11 +34,68 @@
         private var widthConstraint: NSLayoutConstraint!
         private var heightConstraint: NSLayoutConstraint!
 
-        private static let collapsedWidth: CGFloat = 44
-        private static let collapsedHeight: CGFloat = 104
-        private static let expandedCardWidth: CGFloat = 290
-        private static let expandedCardMargin: CGFloat = 16
-        private static let expandedTotalWidth: CGFloat = 290 + 16
+        /// UI layout and styling constants for the collapsed/expanded card trigger.
+        private enum Constants {
+            static let collapsedWidth: CGFloat = 44
+            static let collapsedHeight: CGFloat = 104
+            static let collapsedCornerRadius: CGFloat = 24
+            static let collapsedShadowOpacity: Float = 0.20
+            static let collapsedShadowOffset = CGSize(width: -2, height: 3)
+            static let collapsedShadowRadius: CGFloat = 8
+            static let collapsedSparkleTopInset: CGFloat = 14
+            static let collapsedSparkleSize: CGFloat = 28
+            static let collapsedChevronBottomInset: CGFloat = -16
+            static let collapsedChevronSize: CGFloat = 16
+            static let collapsedChevronPointSize: CGFloat = 13
+
+            static let expandedCardWidth: CGFloat = 290
+            static let expandedCardMargin: CGFloat = 16
+            static let expandedTotalWidth: CGFloat = expandedCardWidth + expandedCardMargin
+            static let expandedCornerRadius: CGFloat = 24
+            static let expandedShadowOpacity: Float = 0.22
+            static let expandedShadowOffset = CGSize(width: 0, height: 6)
+            static let expandedShadowRadius: CGFloat = 14
+            static let expandedInitialHeight: CGFloat = 230
+            static let expandedMinHeight: CGFloat = 210
+
+            static let sparkleLeadingInset: CGFloat = 20
+            static let sparkleTopInset: CGFloat = 18
+            static let sparkleSize: CGFloat = 32
+            static let closeButtonTrailingInset: CGFloat = -8
+            static let closeButtonSize: CGFloat = 44
+            static let closeButtonPointSize: CGFloat = 13
+
+            static let titleFontSize: CGFloat = 18
+            static let titleTopSpacing: CGFloat = 12
+            static let descFontSize: CGFloat = 13.5
+            static let descTopSpacing: CGFloat = 6
+            static let descTextAlpha: CGFloat = 0.95
+            static let contentHorizontalInset: CGFloat = 20
+
+            static let actionButtonCornerRadius: CGFloat = 20
+            static let actionButtonTopSpacing: CGFloat = 16
+            static let actionButtonBottomInset: CGFloat = -20
+            static let actionButtonHeight: CGFloat = 40
+            static let actionButtonHorizontalInset: CGFloat = 24
+            static let actionButtonFontSize: CGFloat = 15
+            static let actionButtonShadowOpacity: Float = 0.12
+            static let actionButtonShadowOffset = CGSize(width: 0, height: 2)
+            static let actionButtonShadowRadius: CGFloat = 4
+
+            static let animationDuration: TimeInterval = 0.35
+            static let animationDamping: CGFloat = 0.82
+            static let animationInitialVelocity: CGFloat = 0.5
+            static let collapseTransformOffsetX: CGFloat = 30
+        }
+
+        /// Fallback copy shown when no widget-provided text is available.
+        /// Centralized here to make future localization straightforward.
+        private enum DefaultStrings {
+            static let title = "Let us choose together"
+            static let description = "Let's find your perfect match together"
+            static let actionButton = "Start Now"
+            static let closeAccessibilityLabel = "Close Poltio Widget Card"
+        }
 
         public init(
             widget: PoltioWidgetResponse,
@@ -63,8 +120,8 @@
             backgroundColor = .clear
             clipsToBounds = false
 
-            let initialWidth = (currentState == .expanded) ? Self.expandedTotalWidth : Self.collapsedWidth
-            let initialHeight = (currentState == .expanded) ? 230 : Self.collapsedHeight
+            let initialWidth = (currentState == .expanded) ? Constants.expandedTotalWidth : Constants.collapsedWidth
+            let initialHeight = (currentState == .expanded) ? Constants.expandedInitialHeight : Constants.collapsedHeight
 
             widthConstraint = widthAnchor.constraint(equalToConstant: initialWidth)
             heightConstraint = heightAnchor.constraint(equalToConstant: initialHeight)
@@ -94,12 +151,12 @@
         private func setupCollapsedContainer() {
             collapsedContainer.translatesAutoresizingMaskIntoConstraints = false
             collapsedContainer.backgroundColor = widget.overlayOptions.resolvedBgColor
-            collapsedContainer.layer.cornerRadius = 24
+            collapsedContainer.layer.cornerRadius = Constants.collapsedCornerRadius
             collapsedContainer.layer.maskedCorners = [.layerMinXMinYCorner, .layerMinXMaxYCorner]
             collapsedContainer.layer.shadowColor = UIColor.black.cgColor
-            collapsedContainer.layer.shadowOpacity = 0.20
-            collapsedContainer.layer.shadowOffset = CGSize(width: -2, height: 3)
-            collapsedContainer.layer.shadowRadius = 8
+            collapsedContainer.layer.shadowOpacity = Constants.collapsedShadowOpacity
+            collapsedContainer.layer.shadowOffset = Constants.collapsedShadowOffset
+            collapsedContainer.layer.shadowRadius = Constants.collapsedShadowRadius
             collapsedContainer.isUserInteractionEnabled = true
 
             // Top sparkle icon
@@ -110,7 +167,7 @@
             collapsedChevron.translatesAutoresizingMaskIntoConstraints = false
             collapsedChevron.contentMode = .scaleAspectFit
             collapsedChevron.tintColor = widget.overlayOptions.resolvedIconColor
-            let chevronConfig = UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)
+            let chevronConfig = UIImage.SymbolConfiguration(pointSize: Constants.collapsedChevronPointSize, weight: .bold)
             collapsedChevron.image = UIImage(systemName: "chevron.left", withConfiguration: chevronConfig)
             collapsedContainer.addSubview(collapsedChevron)
 
@@ -119,18 +176,18 @@
             NSLayoutConstraint.activate([
                 collapsedContainer.trailingAnchor.constraint(equalTo: trailingAnchor),
                 collapsedContainer.centerYAnchor.constraint(equalTo: centerYAnchor),
-                collapsedContainer.widthAnchor.constraint(equalToConstant: Self.collapsedWidth),
-                collapsedContainer.heightAnchor.constraint(equalToConstant: Self.collapsedHeight),
+                collapsedContainer.widthAnchor.constraint(equalToConstant: Constants.collapsedWidth),
+                collapsedContainer.heightAnchor.constraint(equalToConstant: Constants.collapsedHeight),
 
                 collapsedSparkleIcon.centerXAnchor.constraint(equalTo: collapsedContainer.centerXAnchor),
-                collapsedSparkleIcon.topAnchor.constraint(equalTo: collapsedContainer.topAnchor, constant: 14),
-                collapsedSparkleIcon.widthAnchor.constraint(equalToConstant: 28),
-                collapsedSparkleIcon.heightAnchor.constraint(equalToConstant: 28),
+                collapsedSparkleIcon.topAnchor.constraint(equalTo: collapsedContainer.topAnchor, constant: Constants.collapsedSparkleTopInset),
+                collapsedSparkleIcon.widthAnchor.constraint(equalToConstant: Constants.collapsedSparkleSize),
+                collapsedSparkleIcon.heightAnchor.constraint(equalToConstant: Constants.collapsedSparkleSize),
 
                 collapsedChevron.centerXAnchor.constraint(equalTo: collapsedContainer.centerXAnchor),
-                collapsedChevron.bottomAnchor.constraint(equalTo: collapsedContainer.bottomAnchor, constant: -16),
-                collapsedChevron.widthAnchor.constraint(equalToConstant: 16),
-                collapsedChevron.heightAnchor.constraint(equalToConstant: 16),
+                collapsedChevron.bottomAnchor.constraint(equalTo: collapsedContainer.bottomAnchor, constant: Constants.collapsedChevronBottomInset),
+                collapsedChevron.widthAnchor.constraint(equalToConstant: Constants.collapsedChevronSize),
+                collapsedChevron.heightAnchor.constraint(equalToConstant: Constants.collapsedChevronSize),
             ])
         }
 
@@ -139,11 +196,11 @@
         private func setupExpandedContainer() {
             expandedContainer.translatesAutoresizingMaskIntoConstraints = false
             expandedContainer.backgroundColor = widget.overlayOptions.resolvedBgColor
-            expandedContainer.layer.cornerRadius = 24
+            expandedContainer.layer.cornerRadius = Constants.expandedCornerRadius
             expandedContainer.layer.shadowColor = UIColor.black.cgColor
-            expandedContainer.layer.shadowOpacity = 0.22
-            expandedContainer.layer.shadowOffset = CGSize(width: 0, height: 6)
-            expandedContainer.layer.shadowRadius = 14
+            expandedContainer.layer.shadowOpacity = Constants.expandedShadowOpacity
+            expandedContainer.layer.shadowOffset = Constants.expandedShadowOffset
+            expandedContainer.layer.shadowRadius = Constants.expandedShadowRadius
             expandedContainer.clipsToBounds = false
             expandedContainer.isUserInteractionEnabled = true
 
@@ -154,19 +211,19 @@
             // 2. Top-Right Close Button
             closeButton.translatesAutoresizingMaskIntoConstraints = false
             closeButton.tintColor = widget.overlayOptions.resolvedIconColor
-            let xmarkConfig = UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)
+            let xmarkConfig = UIImage.SymbolConfiguration(pointSize: Constants.closeButtonPointSize, weight: .bold)
             closeButton.setImage(UIImage(systemName: "xmark", withConfiguration: xmarkConfig), for: .normal)
             closeButton.addTarget(self, action: #selector(handleCloseTap), for: .touchUpInside)
-            closeButton.accessibilityLabel = "Close Poltio Widget Card"
+            closeButton.accessibilityLabel = DefaultStrings.closeAccessibilityLabel
             expandedContainer.addSubview(closeButton)
 
             // 3. Title Label
             let titleText = widget.overlayOptions.floatingTitle
                 ?? widget.overlayOptions.floatingBoxTextFirst
-                ?? "Let us choose together"
+                ?? DefaultStrings.title
             titleLabel.translatesAutoresizingMaskIntoConstraints = false
             titleLabel.text = titleText
-            titleLabel.font = .systemFont(ofSize: 18, weight: .heavy)
+            titleLabel.font = .systemFont(ofSize: Constants.titleFontSize, weight: .heavy)
             titleLabel.textColor = widget.overlayOptions.resolvedTextColor
             titleLabel.numberOfLines = 2
             titleLabel.lineBreakMode = .byWordWrapping
@@ -175,64 +232,67 @@
             // 4. Description Label
             let descText = widget.overlayOptions.floatingDesc
                 ?? widget.overlayOptions.floatingBoxTextSecond
-                ?? "Let's find your perfect match together"
+                ?? DefaultStrings.description
             descLabel.translatesAutoresizingMaskIntoConstraints = false
             descLabel.text = descText
-            descLabel.font = .systemFont(ofSize: 13.5, weight: .medium)
-            descLabel.textColor = widget.overlayOptions.resolvedTextColor.withAlphaComponent(0.95)
+            descLabel.font = .systemFont(ofSize: Constants.descFontSize, weight: .medium)
+            descLabel.textColor = widget.overlayOptions.resolvedTextColor.withAlphaComponent(Constants.descTextAlpha)
             descLabel.numberOfLines = 0
             descLabel.lineBreakMode = .byWordWrapping
             expandedContainer.addSubview(descLabel)
 
             // 5. Action Button ("Start Now")
-            let btnText = widget.overlayOptions.floatingButtonText ?? "Start Now"
+            let btnText = widget.overlayOptions.floatingButtonText ?? DefaultStrings.actionButton
             actionButton.translatesAutoresizingMaskIntoConstraints = false
             actionButton.backgroundColor = .white
-            actionButton.layer.cornerRadius = 20
+            actionButton.layer.cornerRadius = Constants.actionButtonCornerRadius
             actionButton.setTitle(btnText, for: .normal)
             actionButton.setTitleColor(.black, for: .normal)
-            actionButton.titleLabel?.font = .systemFont(ofSize: 15, weight: .bold)
-            actionButton.contentEdgeInsets = UIEdgeInsets(top: 0, left: 24, bottom: 0, right: 24)
+            actionButton.titleLabel?.font = .systemFont(ofSize: Constants.actionButtonFontSize, weight: .bold)
+            actionButton.contentEdgeInsets = UIEdgeInsets(
+                top: 0, left: Constants.actionButtonHorizontalInset,
+                bottom: 0, right: Constants.actionButtonHorizontalInset
+            )
             actionButton.layer.shadowColor = UIColor.black.cgColor
-            actionButton.layer.shadowOpacity = 0.12
-            actionButton.layer.shadowOffset = CGSize(width: 0, height: 2)
-            actionButton.layer.shadowRadius = 4
+            actionButton.layer.shadowOpacity = Constants.actionButtonShadowOpacity
+            actionButton.layer.shadowOffset = Constants.actionButtonShadowOffset
+            actionButton.layer.shadowRadius = Constants.actionButtonShadowRadius
             actionButton.addTarget(self, action: #selector(handleActionTap), for: .touchUpInside)
             expandedContainer.addSubview(actionButton)
 
             addSubview(expandedContainer)
 
             NSLayoutConstraint.activate([
-                expandedContainer.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.expandedCardMargin),
+                expandedContainer.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Constants.expandedCardMargin),
                 expandedContainer.centerYAnchor.constraint(equalTo: centerYAnchor),
-                expandedContainer.widthAnchor.constraint(equalToConstant: Self.expandedCardWidth),
+                expandedContainer.widthAnchor.constraint(equalToConstant: Constants.expandedCardWidth),
 
                 // Top icons row
-                expandedSparkleIcon.leadingAnchor.constraint(equalTo: expandedContainer.leadingAnchor, constant: 20),
-                expandedSparkleIcon.topAnchor.constraint(equalTo: expandedContainer.topAnchor, constant: 18),
-                expandedSparkleIcon.widthAnchor.constraint(equalToConstant: 32),
-                expandedSparkleIcon.heightAnchor.constraint(equalToConstant: 32),
+                expandedSparkleIcon.leadingAnchor.constraint(equalTo: expandedContainer.leadingAnchor, constant: Constants.sparkleLeadingInset),
+                expandedSparkleIcon.topAnchor.constraint(equalTo: expandedContainer.topAnchor, constant: Constants.sparkleTopInset),
+                expandedSparkleIcon.widthAnchor.constraint(equalToConstant: Constants.sparkleSize),
+                expandedSparkleIcon.heightAnchor.constraint(equalToConstant: Constants.sparkleSize),
 
-                closeButton.trailingAnchor.constraint(equalTo: expandedContainer.trailingAnchor, constant: -8),
+                closeButton.trailingAnchor.constraint(equalTo: expandedContainer.trailingAnchor, constant: Constants.closeButtonTrailingInset),
                 closeButton.centerYAnchor.constraint(equalTo: expandedSparkleIcon.centerYAnchor),
-                closeButton.widthAnchor.constraint(equalToConstant: 44),
-                closeButton.heightAnchor.constraint(equalToConstant: 44),
+                closeButton.widthAnchor.constraint(equalToConstant: Constants.closeButtonSize),
+                closeButton.heightAnchor.constraint(equalToConstant: Constants.closeButtonSize),
 
                 // Title
-                titleLabel.leadingAnchor.constraint(equalTo: expandedContainer.leadingAnchor, constant: 20),
-                titleLabel.trailingAnchor.constraint(equalTo: expandedContainer.trailingAnchor, constant: -20),
-                titleLabel.topAnchor.constraint(equalTo: expandedSparkleIcon.bottomAnchor, constant: 12),
+                titleLabel.leadingAnchor.constraint(equalTo: expandedContainer.leadingAnchor, constant: Constants.contentHorizontalInset),
+                titleLabel.trailingAnchor.constraint(equalTo: expandedContainer.trailingAnchor, constant: -Constants.contentHorizontalInset),
+                titleLabel.topAnchor.constraint(equalTo: expandedSparkleIcon.bottomAnchor, constant: Constants.titleTopSpacing),
 
                 // Description
-                descLabel.leadingAnchor.constraint(equalTo: expandedContainer.leadingAnchor, constant: 20),
-                descLabel.trailingAnchor.constraint(equalTo: expandedContainer.trailingAnchor, constant: -20),
-                descLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 6),
+                descLabel.leadingAnchor.constraint(equalTo: expandedContainer.leadingAnchor, constant: Constants.contentHorizontalInset),
+                descLabel.trailingAnchor.constraint(equalTo: expandedContainer.trailingAnchor, constant: -Constants.contentHorizontalInset),
+                descLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: Constants.descTopSpacing),
 
                 // Action Button
-                actionButton.leadingAnchor.constraint(equalTo: expandedContainer.leadingAnchor, constant: 20),
-                actionButton.topAnchor.constraint(equalTo: descLabel.bottomAnchor, constant: 16),
-                actionButton.bottomAnchor.constraint(equalTo: expandedContainer.bottomAnchor, constant: -20),
-                actionButton.heightAnchor.constraint(equalToConstant: 40),
+                actionButton.leadingAnchor.constraint(equalTo: expandedContainer.leadingAnchor, constant: Constants.contentHorizontalInset),
+                actionButton.topAnchor.constraint(equalTo: descLabel.bottomAnchor, constant: Constants.actionButtonTopSpacing),
+                actionButton.bottomAnchor.constraint(equalTo: expandedContainer.bottomAnchor, constant: Constants.actionButtonBottomInset),
+                actionButton.heightAnchor.constraint(equalToConstant: Constants.actionButtonHeight),
             ])
         }
 
@@ -250,20 +310,20 @@
 
         private func applyState(_ state: TriggerState, animated: Bool) {
             let isExpanded = (state == .expanded)
-            let targetWidth = isExpanded ? Self.expandedTotalWidth : Self.collapsedWidth
+            let targetWidth = isExpanded ? Constants.expandedTotalWidth : Constants.collapsedWidth
 
             // Measure height needed for expanded state
             let targetHeight: CGFloat = if isExpanded {
                 expandedContainer.systemLayoutSizeFitting(
-                    CGSize(width: Self.expandedCardWidth, height: UIView.layoutFittingCompressedSize.height),
+                    CGSize(width: Constants.expandedCardWidth, height: UIView.layoutFittingCompressedSize.height),
                     withHorizontalFittingPriority: .required,
                     verticalFittingPriority: .fittingSizeLevel
                 ).height
             } else {
-                Self.collapsedHeight
+                Constants.collapsedHeight
             }
 
-            let effectiveHeight = max(targetHeight, isExpanded ? 210 : Self.collapsedHeight)
+            let effectiveHeight = max(targetHeight, isExpanded ? Constants.expandedMinHeight : Constants.collapsedHeight)
 
             if !animated {
                 widthConstraint.constant = targetWidth
@@ -284,10 +344,10 @@
             layoutIfNeeded()
 
             UIView.animate(
-                withDuration: 0.35,
+                withDuration: Constants.animationDuration,
                 delay: 0,
-                usingSpringWithDamping: 0.82,
-                initialSpringVelocity: 0.5,
+                usingSpringWithDamping: Constants.animationDamping,
+                initialSpringVelocity: Constants.animationInitialVelocity,
                 options: [.curveEaseInOut, .allowUserInteraction],
                 animations: { [weak self] in
                     guard let self else { return }
@@ -295,8 +355,8 @@
                     heightConstraint.constant = effectiveHeight
                     collapsedContainer.alpha = isExpanded ? 0.0 : 1.0
                     expandedContainer.alpha = isExpanded ? 1.0 : 0.0
-                    collapsedContainer.transform = isExpanded ? CGAffineTransform(translationX: 30, y: 0) : .identity
-                    expandedContainer.transform = isExpanded ? .identity : CGAffineTransform(translationX: 30, y: 0)
+                    collapsedContainer.transform = isExpanded ? CGAffineTransform(translationX: Constants.collapseTransformOffsetX, y: 0) : .identity
+                    expandedContainer.transform = isExpanded ? .identity : CGAffineTransform(translationX: Constants.collapseTransformOffsetX, y: 0)
                     superview?.layoutIfNeeded()
                 },
                 completion: { [weak self] _ in
