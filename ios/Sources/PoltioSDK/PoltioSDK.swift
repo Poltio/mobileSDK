@@ -382,18 +382,21 @@ public final class PoltioSDK {
             // Decide whether encoding is needed by inspecting the actual characters present, not by
             // trusting `URL(string:)` to reject invalid input — Foundation's URL parser is lenient enough
             // to happily parse raw, unescaped spaces, so a "does it parse?" check can't distinguish
-            // "already valid" from "needs encoding".
+            // "already valid" from "needs encoding". '%' is deliberately NOT in the allowed set: any
+            // percent sign — valid escape or stray/invalid one — routes through the normalization pass
+            // below instead of being trusted as-is.
             let needsEncoding = trimmed.rangeOfCharacter(from: CharacterSet.poltioURLAllowed.inverted) != nil
             guard needsEncoding else {
-                // Already well-formed (including already percent-encoded). Re-encoding here would
-                // double-encode existing '%XX' sequences (turning "%20" into "%2520") and corrupt the
-                // target URL sent to the widget resolution endpoint.
+                // No percent signs and nothing else needs escaping — already well-formed.
                 return trimmed
             }
 
-            // Encode only the characters that actually need it, leaving existing URL syntax
-            // (scheme/path/query/fragment delimiters and already-escaped '%XX' sequences) untouched.
-            if let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .poltioURLAllowed),
+            // Normalize by decoding any existing percent-escapes back to raw characters first, then
+            // re-encoding the whole thing from scratch. This handles literal unescaped characters
+            // (spaces, etc.) and stray/invalid '%' signs (e.g. "50%off" -> "50%25off") consistently,
+            // without double-encoding already-valid sequences (e.g. "%20" staying "%20", not "%2520").
+            let decoded = trimmed.removingPercentEncoding ?? trimmed
+            if let encoded = decoded.addingPercentEncoding(withAllowedCharacters: .poltioURLAllowed),
                let parsed = URL(string: encoded), parsed.scheme != nil, parsed.host != nil
             {
                 return encoded
@@ -411,12 +414,14 @@ public final class PoltioSDK {
 }
 
 private extension CharacterSet {
-    /// Broader than `.urlQueryAllowed`: covers the full set of characters that are valid, unescaped,
-    /// anywhere in a URL (scheme, path, query, or fragment), so a fallback encoding pass doesn't
-    /// escape delimiters like ':', '/', '#', '?' or already-valid '%' escape sequences.
+    /// Broader than `.urlQueryAllowed`: covers the set of characters that are valid, unescaped,
+    /// anywhere in a URL (scheme, path, query, or fragment), so an encoding pass doesn't escape
+    /// delimiters like ':', '/', '#', '?'. '%' is intentionally excluded — after decoding, any
+    /// remaining literal '%' should always be re-escaped to '%25' rather than treated as a
+    /// pre-existing (and possibly invalid) escape prefix.
     static let poltioURLAllowed: CharacterSet = {
         var set = CharacterSet.alphanumerics
-        set.insert(charactersIn: "-._~:/?#[]@!$&'()*+,;=%")
+        set.insert(charactersIn: "-._~:/?#[]@!$&'()*+,;=")
         return set
     }()
 }

@@ -56,12 +56,15 @@
 
         deinit {
             // WKWebView APIs are main-thread-only; deinit can run on any thread, so hop over defensively.
-            let webViewToClean = webView
+            // Explicitly typed as optional (rather than relying on the IUO directly) and guarded so
+            // there's nothing to dispatch when the controller is deallocated before its view ever loaded.
+            let webViewToClean: WKWebView? = webView
+            guard let webViewToClean else { return }
             let handlerName = Self.bridgeHandlerName
             DispatchQueue.main.async {
-                webViewToClean?.stopLoading()
-                webViewToClean?.configuration.userContentController.removeScriptMessageHandler(forName: handlerName)
-                webViewToClean?.navigationDelegate = nil
+                webViewToClean.stopLoading()
+                webViewToClean.configuration.userContentController.removeScriptMessageHandler(forName: handlerName)
+                webViewToClean.navigationDelegate = nil
             }
         }
 

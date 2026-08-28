@@ -87,9 +87,16 @@
                     return
                 }
 
+                // A retry (scheduled by this same method below) re-enters here for the same widget while
+                // it's still waiting on a UIWindowScene. Only reset the retry counter for a genuinely new
+                // widget — otherwise it gets zeroed on every retry and the cap below never trips.
+                let isRetryForSameWidget = currentPublicId == widget.publicId
+
                 // Clean up previous overlay and update state immediately
                 teardownOverlaySynchronously()
-                showTriggerRetryCount = 0
+                if !isRetryForSameWidget {
+                    showTriggerRetryCount = 0
+                }
                 currentPublicId = widget.publicId
                 currentTriggerType = targetTriggerType
 
