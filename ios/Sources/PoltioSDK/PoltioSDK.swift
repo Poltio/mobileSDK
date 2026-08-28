@@ -346,10 +346,22 @@ public final class PoltioSDK {
             queue.sync(flags: .barrier) {
                 if thisRequestId == self._currentViewRequestId {
                     self._activeWidgetTask = task
+                } else {
+                    // A newer screen already superseded this request before it could be stored;
+                    // cancel it explicitly instead of letting it run to completion unused.
+                    task?.cancel()
                 }
             }
         }
     }
+
+    // MARK: - Public Widget Event Bridge
+
+    /// Optional callback invoked when the widget WebView emits a bridge event (e.g. "close", "complete",
+    /// "leadSubmit"). The widget page communicates via
+    /// `window.webkit.messageHandlers.poltioNative.postMessage({ event: "...", data: { ... } })`.
+    /// Delivered on the main thread. Set this once, e.g. alongside `configure(clientKey:)`.
+    public static var onWidgetEvent: ((_ event: String, _ data: [String: Any]?) -> Void)?
 
     // MARK: - Internal Helpers
 
@@ -367,7 +379,21 @@ public final class PoltioSDK {
         }
 
         if trimmed.contains("://") {
-            if let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+            // Decide whether encoding is needed by inspecting the actual characters present, not by
+            // trusting `URL(string:)` to reject invalid input — Foundation's URL parser is lenient enough
+            // to happily parse raw, unescaped spaces, so a "does it parse?" check can't distinguish
+            // "already valid" from "needs encoding".
+            let needsEncoding = trimmed.rangeOfCharacter(from: CharacterSet.poltioURLAllowed.inverted) != nil
+            guard needsEncoding else {
+                // Already well-formed (including already percent-encoded). Re-encoding here would
+                // double-encode existing '%XX' sequences (turning "%20" into "%2520") and corrupt the
+                // target URL sent to the widget resolution endpoint.
+                return trimmed
+            }
+
+            // Encode only the characters that actually need it, leaving existing URL syntax
+            // (scheme/path/query/fragment delimiters and already-escaped '%XX' sequences) untouched.
+            if let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .poltioURLAllowed),
                let parsed = URL(string: encoded), parsed.scheme != nil, parsed.host != nil
             {
                 return encoded
@@ -382,4 +408,15 @@ public final class PoltioSDK {
         let cleanPath = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         return "https://app.poltio.com/\(cleanPath)"
     }
+}
+
+private extension CharacterSet {
+    /// Broader than `.urlQueryAllowed`: covers the full set of characters that are valid, unescaped,
+    /// anywhere in a URL (scheme, path, query, or fragment), so a fallback encoding pass doesn't
+    /// escape delimiters like ':', '/', '#', '?' or already-valid '%' escape sequences.
+    static let poltioURLAllowed: CharacterSet = {
+        var set = CharacterSet.alphanumerics
+        set.insert(charactersIn: "-._~:/?#[]@!$&'()*+,;=%")
+        return set
+    }()
 }
