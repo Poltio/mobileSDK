@@ -64,8 +64,8 @@
                 pendingShowWorkItem?.cancel()
                 pendingShowWorkItem = nil
 
-                guard widget.overlayOptions.isBoxTrigger || widget.overlayOptions.isPillTrigger else {
-                    PoltioLogger.warning("Trigger type '\(widget.overlayOptions.triggerType ?? "none")' is not currently handled (supported: 'box', 'pill').")
+                guard widget.overlayOptions.isBoxTrigger || widget.overlayOptions.isPillTrigger || widget.overlayOptions.isCardTrigger else {
+                    PoltioLogger.warning("Trigger type '\(widget.overlayOptions.triggerType ?? "none")' is not currently handled (supported: 'box', 'pill', 'card').")
                     hideTrigger()
                     return
                 }
@@ -131,6 +131,19 @@
                         pillView.bottomAnchor.constraint(equalTo: rootVC.view.safeAreaLayoutGuide.bottomAnchor, constant: -70),
                     ])
                     triggerView = pillView
+                } else if widget.overlayOptions.isCardTrigger {
+                    let cardView = PoltioFloatingCardTriggerView(
+                        widget: widget,
+                        onOpenWidget: onOpenWidget
+                    )
+                    cardView.translatesAutoresizingMaskIntoConstraints = false
+                    rootVC.view.addSubview(cardView)
+
+                    NSLayoutConstraint.activate([
+                        cardView.trailingAnchor.constraint(equalTo: rootVC.view.trailingAnchor),
+                        cardView.bottomAnchor.constraint(equalTo: rootVC.view.safeAreaLayoutGuide.bottomAnchor, constant: -70),
+                    ])
+                    triggerView = cardView
                 } else {
                     let boxView = PoltioFloatingBoxTriggerView(
                         widget: widget,

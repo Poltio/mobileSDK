@@ -985,6 +985,229 @@ final class PoltioSDKTests: XCTestCase {
         let result = group.wait(timeout: .now() + 3.0)
         XCTAssertEqual(result, .success, "Concurrent cache operations must finish safely without deadlocking")
     }
+
+    func testCardTriggerResponseDecodingWithLivePayload() throws {
+        let json = """
+        {
+          "id": 401,
+          "public_id": "6c964c1d-6eb4-4c19-ad16-342bd59bdac3",
+          "overlay_options": {
+            "floating-bar-text-button": "Get Started",
+            "floating-bar-text-color-button": "black",
+            "floating-bar-text-color-first": "white",
+            "floating-bar-text-color-second": "white",
+            "floating-bar-text-first": "Try Our",
+            "floating-bar-text-second": "Product Finder",
+            "floating-bgcolor": "rgb(174, 174, 209)",
+            "floating-box-bg-color-first": "white",
+            "floating-box-bg-color-second": "white",
+            "floating-box-close-remember-duration": "48",
+            "floating-box-full-image-mode": "false",
+            "floating-box-open-on-scroll": "true",
+            "floating-box-resize": "1",
+            "floating-box-show-close-button": "false",
+            "floating-box-start-mode": "closed",
+            "floating-box-text-align-first": "flex-start",
+            "floating-box-text-align-second": "flex-start",
+            "floating-box-text-color-first": "black",
+            "floating-box-text-color-second": "black",
+            "floating-box-text-first-font-size": "1rem",
+            "floating-box-text-first-font-weight": "700",
+            "floating-box-text-second-font-size": "1.25rem",
+            "floating-box-text-second-font-weight": "700",
+            "floating-buttontext": "Start Now",
+            "floating-desc": "Let's find your perfect new TV together",
+            "floating-design-type": "2025-01",
+            "floating-display-type": "slideover",
+            "floating-hide-button": "false",
+            "floating-icon-color": "#1E3D54",
+            "floating-initial-position": "collapsed",
+            "floating-mobile-top-border-radius": "1.75em",
+            "floating-pill-close-remember-duration": "48",
+            "floating-pill-show-close-button": "false",
+            "floating-pill-start-mode": "closed",
+            "floating-position": "bottom-right",
+            "floating-product-card-enabled": "false",
+            "floating-pulsate-color": "white",
+            "floating-show-pulsate": "true",
+            "floating-text-color-first": "white",
+            "floating-text-color-second": "white",
+            "floating-text-color-third": "#CA9B6F",
+            "floating-text-first": "Try our",
+            "floating-text-second": "PRODUCT",
+            "floating-text-third": "FINDER",
+            "floating-textcolor": "white",
+            "floating-title": "TV Finder",
+            "floating-widget-icon-color": "#1E3D54",
+            "floating-zindex": "100",
+            "widget-bgcolor": "white",
+            "widget-disclaimer": "off"
+          }
+        }
+        """
+        let data = Data(json.utf8)
+        let decoded = try JSONDecoder().decode(PoltioWidgetResponse.self, from: data)
+
+        XCTAssertEqual(decoded.publicId, "6c964c1d-6eb4-4c19-ad16-342bd59bdac3")
+        XCTAssertTrue(decoded.overlayOptions.isCardTrigger, "Should detect card / slideover trigger")
+        XCTAssertFalse(decoded.overlayOptions.isBoxTrigger, "Should not be box trigger")
+        XCTAssertFalse(decoded.overlayOptions.isPillTrigger, "Should not be pill trigger")
+        XCTAssertEqual(decoded.overlayOptions.triggerType, "card")
+        XCTAssertEqual(decoded.overlayOptions.floatingTitle, "TV Finder")
+        XCTAssertEqual(decoded.overlayOptions.floatingDesc, "Let's find your perfect new TV together")
+        XCTAssertEqual(decoded.overlayOptions.floatingButtonText, "Start Now")
+        XCTAssertEqual(decoded.overlayOptions.floatingDesignType, "2025-01")
+        XCTAssertEqual(decoded.overlayOptions.floatingDisplayType, "slideover")
+        XCTAssertEqual(decoded.overlayOptions.floatingBgColor, "rgb(174, 174, 209)")
+        XCTAssertEqual(decoded.overlayOptions.floatingTextColor, "white")
+        XCTAssertEqual(decoded.overlayOptions.floatingIconColor, "#1E3D54")
+        XCTAssertEqual(decoded.overlayOptions.floatingPosition, "bottom-right")
+        XCTAssertEqual(decoded.overlayOptions.floatingMobileTopBorderRadius, "1.75em")
+        XCTAssertFalse(decoded.overlayOptions.isInitialActive)
+
+        #if canImport(UIKit)
+            let bgColor = decoded.overlayOptions.resolvedBgColor
+            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            bgColor.getRed(&r, green: &g, blue: &b, alpha: &a)
+            XCTAssertEqual(round(r * 255), 174)
+            XCTAssertEqual(round(g * 255), 174)
+            XCTAssertEqual(round(b * 255), 209)
+
+            let iconColor = decoded.overlayOptions.resolvedIconColor
+            iconColor.getRed(&r, green: &g, blue: &b, alpha: &a)
+            XCTAssertEqual(round(r * 255), 0x1E)
+            XCTAssertEqual(round(g * 255), 0x3D)
+            XCTAssertEqual(round(b * 255), 0x54)
+
+            let textColor = decoded.overlayOptions.resolvedTextColor
+            textColor.getRed(&r, green: &g, blue: &b, alpha: &a)
+            XCTAssertEqual(round(r * 255), 255)
+            XCTAssertEqual(round(g * 255), 255)
+            XCTAssertEqual(round(b * 255), 255)
+        #endif
+    }
+
+    #if canImport(UIKit)
+        func testColorParser() {
+            // Hex tests
+            let hex6 = PoltioColorParser.parse("#00A3FF")
+            XCTAssertNotNil(hex6)
+            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            hex6?.getRed(&r, green: &g, blue: &b, alpha: &a)
+            XCTAssertEqual(round(r * 255), 0)
+            XCTAssertEqual(round(g * 255), 163)
+            XCTAssertEqual(round(b * 255), 255)
+
+            let hex3 = PoltioColorParser.parse("#FFF")
+            XCTAssertNotNil(hex3)
+            hex3?.getRed(&r, green: &g, blue: &b, alpha: &a)
+            XCTAssertEqual(round(r * 255), 255)
+            XCTAssertEqual(round(g * 255), 255)
+            XCTAssertEqual(round(b * 255), 255)
+
+            // 8-digit hex follows CSS Color Module Level 4: #RRGGBBAA
+            let hex8 = PoltioColorParser.parse("#00A3FF80")
+            XCTAssertNotNil(hex8)
+            hex8?.getRed(&r, green: &g, blue: &b, alpha: &a)
+            XCTAssertEqual(round(r * 255), 0)
+            XCTAssertEqual(round(g * 255), 163)
+            XCTAssertEqual(round(b * 255), 255)
+            XCTAssertEqual(round(a * 255), 128)
+
+            // RGB / RGBA tests
+            let rgb = PoltioColorParser.parse("rgb(100, 150, 200)")
+            XCTAssertNotNil(rgb)
+            rgb?.getRed(&r, green: &g, blue: &b, alpha: &a)
+            XCTAssertEqual(round(r * 255), 100)
+            XCTAssertEqual(round(g * 255), 150)
+            XCTAssertEqual(round(b * 255), 200)
+
+            let rgba = PoltioColorParser.parse("rgba(100, 150, 200, 0.5)")
+            XCTAssertNotNil(rgba)
+            rgba?.getRed(&r, green: &g, blue: &b, alpha: &a)
+            XCTAssertEqual(a, 0.5, accuracy: 0.01)
+
+            // Named colors
+            let white = PoltioColorParser.parse("white")
+            XCTAssertEqual(white, UIColor.white)
+            let black = PoltioColorParser.parse("black")
+            XCTAssertEqual(black, UIColor.black)
+
+            // Invalid string
+            let invalid = PoltioColorParser.parse("not_a_valid_color_string")
+            XCTAssertNil(invalid)
+        }
+
+        func testFloatingCardTriggerViewInteractions() {
+            let options = PoltioOverlayOptions(
+                floatingTitle: "Custom Title",
+                floatingDesc: "Custom Description",
+                floatingButtonText: "Let's Go",
+                floatingBgColor: "#00A3FF",
+                floatingTextColor: "white",
+                floatingIconColor: "#1E3D54",
+                floatingDesignType: "2025-01",
+                floatingDisplayType: "slideover"
+            )
+            let widget = PoltioWidgetResponse(
+                publicId: "card_widget_123",
+                overlayOptions: options
+            )
+
+            var openCount = 0
+            let cardView = PoltioFloatingCardTriggerView(
+                widget: widget,
+                onOpenWidget: {
+                    openCount += 1
+                }
+            )
+
+            XCTAssertEqual(cardView.currentState, .collapsed)
+
+            // Expand
+            cardView.setState(.expanded, animated: false)
+            XCTAssertEqual(cardView.currentState, .expanded)
+
+            // Reset to collapsed
+            cardView.resetToCollapsed(animated: false)
+            XCTAssertEqual(cardView.currentState, .collapsed)
+
+            // Test initial active option
+            let activeOptions = PoltioOverlayOptions(
+                floatingTitle: "Active Title",
+                floatingInitialPosition: "active",
+                floatingDesignType: "2025-01"
+            )
+            let activeWidget = PoltioWidgetResponse(publicId: "active_1", overlayOptions: activeOptions)
+            let activeCardView = PoltioFloatingCardTriggerView(widget: activeWidget, onOpenWidget: {})
+            XCTAssertEqual(activeCardView.currentState, .expanded)
+        }
+
+        func testOverlayManagerCardTriggerPresentation() {
+            let options = PoltioOverlayOptions(
+                floatingTitle: "TV Finder",
+                floatingDesc: "Let's find your perfect new TV together",
+                floatingButtonText: "Start Now",
+                floatingBgColor: "rgb(174, 174, 209)",
+                floatingDesignType: "2025-01",
+                floatingDisplayType: "slideover"
+            )
+            let widget = PoltioWidgetResponse(
+                publicId: "tv_widget_401",
+                overlayOptions: options
+            )
+
+            let overlayManager = PoltioOverlayManager.shared
+            overlayManager.showTrigger(widget: widget, puid: "test_puid_tv")
+
+            let exp = expectation(description: "Wait for overlay manager async dispatch")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                overlayManager.hideTrigger()
+                exp.fulfill()
+            }
+            wait(for: [exp], timeout: 1.0)
+        }
+    #endif
 }
 
 private extension URLRequest {
