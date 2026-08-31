@@ -42,11 +42,17 @@
     public final class PoltioOverlayManager {
         public static let shared = PoltioOverlayManager()
 
+        /// Maximum number of times `showTrigger` will retry while waiting for a `UIWindowScene` to
+        /// become available, before giving up. Caps retries at 10 * 0.2s = 2s so a host app that never
+        /// produces an active scene (e.g. unusual lifecycle, extension context) doesn't loop forever.
+        private static let maxShowTriggerRetries = 10
+
         private var overlayWindow: PoltioPassthroughWindow?
         private var activeTriggerView: (UIView & PoltioTriggerPresentable)?
         private var currentPublicId: String?
         private var currentTriggerType: String?
         private var pendingShowWorkItem: DispatchWorkItem?
+        private var showTriggerRetryCount = 0
 
         private init() {}
 
@@ -81,13 +87,29 @@
                     return
                 }
 
+                // A retry (scheduled by this same method below) re-enters here for the same widget while
+                // it's still waiting on a UIWindowScene. Only reset the retry counter for a genuinely new
+                // widget — otherwise it gets zeroed on every retry and the cap below never trips.
+                let isRetryForSameWidget = currentPublicId == widget.publicId
+
                 // Clean up previous overlay and update state immediately
                 teardownOverlaySynchronously()
+                if !isRetryForSameWidget {
+                    showTriggerRetryCount = 0
+                }
                 currentPublicId = widget.publicId
                 currentTriggerType = targetTriggerType
 
                 guard let windowScene = findActiveWindowScene() else {
-                    PoltioLogger.debug("UIWindowScene not ready yet, retrying showTrigger after 0.2s...")
+                    guard showTriggerRetryCount < Self.maxShowTriggerRetries else {
+                        PoltioLogger.warning("UIWindowScene still not available after \(Self.maxShowTriggerRetries) retries; giving up on showing trigger for widget '\(widget.publicId)'.")
+                        showTriggerRetryCount = 0
+                        currentPublicId = nil
+                        currentTriggerType = nil
+                        return
+                    }
+                    showTriggerRetryCount += 1
+                    PoltioLogger.debug("UIWindowScene not ready yet, retrying showTrigger (\(showTriggerRetryCount)/\(Self.maxShowTriggerRetries)) after 0.2s...")
                     let workItem = DispatchWorkItem { [weak self] in
                         guard let self, currentPublicId == widget.publicId else { return }
                         showTrigger(widget: widget, puid: puid)
@@ -96,6 +118,8 @@
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: workItem)
                     return
                 }
+
+                showTriggerRetryCount = 0
 
                 let window: PoltioPassthroughWindow
                 if #available(iOS 13.0, *) {
@@ -233,6 +257,9 @@
                 overlayWindow?.isHidden = true
 
                 let webVC = PoltioWebViewController(publicId: publicId, puid: puid)
+                webVC.onWidgetEvent = { event, data in
+                    PoltioSDK.onWidgetEvent?(event, data)
+                }
                 webVC.onDismiss = { [weak self] in
                     DispatchQueue.main.async {
                         guard let self, let window = self.overlayWindow, let trigger = self.activeTriggerView else {

@@ -2,15 +2,36 @@
     import UIKit
     import WebKit
 
+    /// Proxy `WKScriptMessageHandler` that holds only a weak reference to its target.
+    /// `WKUserContentController` retains its message handlers strongly, so registering a view controller
+    /// directly would create a retain cycle (controller -> webView -> userContentController -> controller).
+    private final class PoltioWeakScriptMessageHandler: NSObject, WKScriptMessageHandler {
+        private weak var target: WKScriptMessageHandler?
+
+        init(target: WKScriptMessageHandler) {
+            self.target = target
+        }
+
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            target?.userContentController(userContentController, didReceive: message)
+        }
+    }
+
     /// In-app browser modal presenting the interactive Poltio widget WebView.
-    public final class PoltioWebViewController: UIViewController, WKNavigationDelegate, UIAdaptivePresentationControllerDelegate {
+    public final class PoltioWebViewController: UIViewController, WKNavigationDelegate, WKScriptMessageHandler, UIAdaptivePresentationControllerDelegate {
         private let publicId: String
         private let puid: String?
         private var webView: WKWebView!
         private var activityIndicator: UIActivityIndicatorView!
 
+        /// Name of the JS bridge message handler. The widget page communicates back to native code via
+        /// `window.webkit.messageHandlers.poltioNative.postMessage({ event: "close" | "complete" | "leadSubmit", data: {...} })`.
+        private static let bridgeHandlerName = "poltioNative"
+
         /// Callback invoked when the modal is dismissed (via close button or swipe down).
         public var onDismiss: (() -> Void)?
+        /// Callback invoked when the widget page sends a bridge event (e.g. "close", "complete", "leadSubmit").
+        public var onWidgetEvent: ((_ event: String, _ data: [String: Any]?) -> Void)?
         private var isDismissHandled = false
 
         public init(publicId: String, puid: String? = nil, onDismiss: (() -> Void)? = nil) {
@@ -31,6 +52,20 @@
             presentationController?.delegate = self
             setupUI()
             loadWidgetURL()
+        }
+
+        deinit {
+            // WKWebView APIs are main-thread-only; deinit can run on any thread, so hop over defensively.
+            // Explicitly typed as optional (rather than relying on the IUO directly) and guarded so
+            // there's nothing to dispatch when the controller is deallocated before its view ever loaded.
+            let webViewToClean: WKWebView? = webView
+            guard let webViewToClean else { return }
+            let handlerName = Self.bridgeHandlerName
+            DispatchQueue.main.async {
+                webViewToClean.stopLoading()
+                webViewToClean.configuration.userContentController.removeScriptMessageHandler(forName: handlerName)
+                webViewToClean.navigationDelegate = nil
+            }
         }
 
         private func setupUI() {
@@ -54,6 +89,10 @@
             let config = WKWebViewConfiguration()
             config.allowsInlineMediaPlayback = true
             config.defaultWebpagePreferences.allowsContentJavaScript = true
+
+            let contentController = WKUserContentController()
+            contentController.add(PoltioWeakScriptMessageHandler(target: self), name: Self.bridgeHandlerName)
+            config.userContentController = contentController
 
             webView = WKWebView(frame: .zero, configuration: config)
             webView.translatesAutoresizingMaskIntoConstraints = false
@@ -126,7 +165,16 @@
         private func notifyDismiss() {
             guard !isDismissHandled else { return }
             isDismissHandled = true
+            cleanupWebView()
             onDismiss?()
+        }
+
+        /// Stops any in-flight navigation and detaches the JS bridge handler. Safe to call more than once.
+        private func cleanupWebView() {
+            guard webView != nil else { return }
+            webView.stopLoading()
+            webView.configuration.userContentController.removeScriptMessageHandler(forName: Self.bridgeHandlerName)
+            webView.navigationDelegate = nil
         }
 
         @objc private func didTapClose() {
@@ -160,6 +208,27 @@
         public func webView(_: WKWebView, didFailProvisionalNavigation _: WKNavigation!, withError error: Error) {
             activityIndicator.stopAnimating()
             PoltioLogger.error("Webview provisional navigation failed: \(error.localizedDescription)")
+        }
+
+        // MARK: - WKScriptMessageHandler
+
+        public func userContentController(_: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard message.name == Self.bridgeHandlerName else { return }
+
+            guard let body = message.body as? [String: Any], let event = body["event"] as? String else {
+                PoltioLogger.warning("Received malformed widget bridge message: \(message.body)")
+                return
+            }
+
+            let data = body["data"] as? [String: Any]
+            PoltioLogger.debug("Received widget bridge event '\(event)'.")
+            onWidgetEvent?(event, data)
+
+            if event == "close" {
+                dismiss(animated: true) { [weak self] in
+                    self?.notifyDismiss()
+                }
+            }
         }
     }
 #endif

@@ -113,20 +113,11 @@
         private let cardContainer = UIView()
         private let iconView = PoltioSparkleIconView()
         private let remoteImageView = UIImageView()
-        /// Lightweight WKWebView used to render remote vector SVGs without introducing external third-party dependencies.
+        /// Lightweight WKWebView used to render remote vector SVGs without introducing external third-party
+        /// dependencies. Created on demand — see `ensureSvgWebView()` — since most triggers never load an SVG
+        /// and spinning up WebKit's WebContent process for every trigger would be wasteful.
         /// Hardened with JavaScript disabled and scroll disabled for minimal overhead and security.
-        private lazy var svgWebView: WKWebView = {
-            let config = WKWebViewConfiguration()
-            config.defaultWebpagePreferences.allowsContentJavaScript = false
-            let webView = WKWebView(frame: .zero, configuration: config)
-            webView.translatesAutoresizingMaskIntoConstraints = false
-            webView.isOpaque = false
-            webView.backgroundColor = .clear
-            webView.scrollView.backgroundColor = .clear
-            webView.scrollView.isScrollEnabled = false
-            webView.isUserInteractionEnabled = false
-            return webView
-        }()
+        private var svgWebView: WKWebView?
 
         private let textStackView = UIStackView()
         private let subtitleLabel = UILabel()
@@ -172,13 +163,45 @@
 
         deinit {
             let timer = autoCollapseTimer
+            let webView = svgWebView
             DispatchQueue.main.async {
                 timer?.invalidate()
+                webView?.stopLoading()
             }
             if let observer = scrollObserver {
                 NotificationCenter.default.removeObserver(observer)
             }
             imageDownloadTask?.cancel()
+        }
+
+        /// Lazily creates and attaches the SVG-rendering WKWebView the first time it's actually needed,
+        /// instead of paying WebKit's WebContent-process cost for every trigger up front.
+        private func ensureSvgWebView() -> WKWebView {
+            if let existing = svgWebView {
+                return existing
+            }
+
+            let config = WKWebViewConfiguration()
+            config.defaultWebpagePreferences.allowsContentJavaScript = false
+            let webView = WKWebView(frame: .zero, configuration: config)
+            webView.translatesAutoresizingMaskIntoConstraints = false
+            webView.isOpaque = false
+            webView.backgroundColor = .clear
+            webView.scrollView.backgroundColor = .clear
+            webView.scrollView.isScrollEnabled = false
+            webView.isUserInteractionEnabled = false
+            webView.isHidden = true
+            cardContainer.addSubview(webView)
+
+            NSLayoutConstraint.activate([
+                webView.centerXAnchor.constraint(equalTo: iconView.centerXAnchor),
+                webView.centerYAnchor.constraint(equalTo: iconView.centerYAnchor),
+                webView.widthAnchor.constraint(equalToConstant: 32),
+                webView.heightAnchor.constraint(equalToConstant: 32),
+            ])
+
+            svgWebView = webView
+            return webView
         }
 
         private func setupView() {
@@ -203,10 +226,6 @@
             remoteImageView.clipsToBounds = true
             remoteImageView.isHidden = true
             cardContainer.addSubview(remoteImageView)
-
-            // SVG Web View (for crisp dynamic SVG vector rendering)
-            cardContainer.addSubview(svgWebView)
-            svgWebView.isHidden = true
 
             // Sparkle Icon View (default fallback)
             iconView.translatesAutoresizingMaskIntoConstraints = false
@@ -267,11 +286,6 @@
                 iconView.centerYAnchor.constraint(equalTo: cardContainer.centerYAnchor),
                 iconView.widthAnchor.constraint(equalToConstant: 40),
                 iconView.heightAnchor.constraint(equalToConstant: 40),
-
-                svgWebView.centerXAnchor.constraint(equalTo: iconView.centerXAnchor),
-                svgWebView.centerYAnchor.constraint(equalTo: iconView.centerYAnchor),
-                svgWebView.widthAnchor.constraint(equalToConstant: 32),
-                svgWebView.heightAnchor.constraint(equalToConstant: 32),
 
                 remoteImageView.centerXAnchor.constraint(equalTo: iconView.centerXAnchor),
                 remoteImageView.centerYAnchor.constraint(equalTo: iconView.centerYAnchor),
@@ -474,8 +488,9 @@
                     </html>
                     """
                     DispatchQueue.main.async {
-                        self.svgWebView.loadHTMLString(html, baseURL: nil)
-                        self.svgWebView.isHidden = false
+                        let webView = self.ensureSvgWebView()
+                        webView.loadHTMLString(html, baseURL: nil)
+                        webView.isHidden = false
                         self.remoteImageView.isHidden = true
                         self.iconView.isHidden = true
                     }
@@ -483,7 +498,9 @@
                     DispatchQueue.main.async {
                         self.remoteImageView.image = image
                         self.remoteImageView.isHidden = false
-                        self.svgWebView.isHidden = true
+                        // Only hide svgWebView if it was actually created — don't force it into
+                        // existence here just to hide it.
+                        self.svgWebView?.isHidden = true
                         self.iconView.isHidden = true
                     }
                 }
