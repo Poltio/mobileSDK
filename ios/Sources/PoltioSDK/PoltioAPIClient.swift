@@ -2,14 +2,28 @@ import Foundation
 
 /// Internal network service responsible for sending API requests to Poltio servers.
 final class PoltioAPIClient {
-    /// Default base URL for the Poltio SDK API.
-    static let defaultBaseURL = "https://sdk-stage.poltio.com"
+    /// Base URL for the Poltio SDK production API.
+    static let productionBaseURL = "https://sdk.poltio.com"
+
+    /// Base URL for the Poltio SDK stage API.
+    static let stageBaseURL = "https://sdk-stage.poltio.com"
+
+    /// Default base URL used when an API client is constructed without going through
+    /// `PoltioSDK.configure(clientKey:)` (e.g. direct/unit-test usage).
+    static let defaultBaseURL = stageBaseURL
 
     /// Endpoint path for resolving mobile widgets.
     static let widgetEndpointPath = "/sdk/mobile/v1/widget"
 
     private let baseURL: String
     private let session: URLSession
+
+    /// Exposes the resolved base URL. Used exclusively for unit testing.
+    /// Not gated behind `#if DEBUG`: `PoltioAPIClient` is `internal`, so this never reaches the SDK's
+    /// public API surface, and tests must still be able to access it when run in a Release configuration.
+    var baseURLForTesting: String {
+        baseURL
+    }
 
     /// Initializes a new API client with custom base URL and URLSession configuration.
     /// - Parameters:

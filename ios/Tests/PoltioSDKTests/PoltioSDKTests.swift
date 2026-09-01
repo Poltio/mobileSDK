@@ -93,6 +93,33 @@ final class PoltioSDKTests: XCTestCase {
         XCTAssertFalse(sdk.sdkId.isEmpty)
     }
 
+    func testConfigureAutoDetectsEnvironmentMatchingBuildConfiguration() {
+        // With no `useStage` override, the resolved base URL must match automatic detection for
+        // whatever build configuration is executing this test (Debug vs. Release).
+        let sdk = PoltioSDK()
+        sdk.configure(clientKey: "pk_test_auto_env")
+
+        #if DEBUG
+            XCTAssertEqual(sdk.apiClient.baseURLForTesting, PoltioAPIClient.stageBaseURL)
+        #else
+            XCTAssertEqual(sdk.apiClient.baseURLForTesting, PoltioAPIClient.productionBaseURL)
+        #endif
+    }
+
+    func testConfigureWithUseStageFalseForcesProduction() {
+        let sdk = PoltioSDK()
+        sdk.configure(clientKey: "pk_test_force_prod", useStage: false)
+
+        XCTAssertEqual(sdk.apiClient.baseURLForTesting, PoltioAPIClient.productionBaseURL)
+    }
+
+    func testConfigureWithUseStageTrueForcesStage() {
+        let sdk = PoltioSDK()
+        sdk.configure(clientKey: "pk_test_force_stage", useStage: true)
+
+        XCTAssertEqual(sdk.apiClient.baseURLForTesting, PoltioAPIClient.stageBaseURL)
+    }
+
     func testConfigureWithEmptyKeyFails() {
         let sdk = PoltioSDK()
         sdk.configure(clientKey: "   ")
