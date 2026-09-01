@@ -138,6 +138,12 @@ import PoltioSDK
 // 1. Configure in AppDelegate / App initialization
 PoltioSDK.configure(clientKey: "YOUR_CLIENT_KEY", logLevel: .info)
 
+// By default the SDK auto-detects the API environment from your app's build configuration:
+// Debug builds use https://sdk-stage.poltio.com, Release builds (incl. TestFlight/App Store)
+// use https://sdk.poltio.com. Pass `useStage` to override this detection explicitly, e.g. to
+// test production from a Debug build, or stage from a Release build:
+// PoltioSDK.configure(clientKey: "YOUR_CLIENT_KEY", useStage: false)
+
 // 2. Identify user (optional)
 PoltioSDK.identify(puid: "user_12345")
 

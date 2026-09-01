@@ -172,20 +172,26 @@ public final class PoltioSDK {
     /// Configures the Poltio SDK with your publishable client key and optional log level.
     /// - Parameters:
     ///   - clientKey: Poltio client key (e.g. "poltio_test_pk...")
+    ///   - useStage: Forces the stage (`true`) or production (`false`) API endpoint. Defaults to `nil`,
+    ///     which auto-detects the environment from the app's build configuration: Debug builds resolve
+    ///     to stage, Release builds (including TestFlight/App Store) resolve to production. Pass an
+    ///     explicit value to override this detection.
     ///   - logLevel: Verbosity level of console logging (defaults to `.info`).
     /// - Returns: The configured shared instance.
     @discardableResult
     public static func configure(
         clientKey: String,
+        useStage: Bool? = nil,
         logLevel: PoltioLogLevel = .info
     ) -> PoltioSDK {
-        shared.configure(clientKey: clientKey, logLevel: logLevel)
+        shared.configure(clientKey: clientKey, useStage: useStage, logLevel: logLevel)
     }
 
     /// Instance method to configure the SDK.
     @discardableResult
     func configure(
         clientKey: String,
+        useStage: Bool? = nil,
         logLevel: PoltioLogLevel = .info
     ) -> PoltioSDK {
         let trimmedKey = clientKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -196,9 +202,16 @@ public final class PoltioSDK {
             return self
         }
 
+        let environment = PoltioEnvironment.resolve(useStage: useStage)
+
         queue.sync(flags: .barrier) {
             self._clientKey = trimmedKey
             self._isInitialized = true
+            self._apiClient = PoltioAPIClient(baseURL: environment.baseURL)
+        }
+
+        if environment == .stage {
+            PoltioLogger.info("Using STAGE API endpoint (\(environment.baseURL)). Pass useStage: false to configure(clientKey:) once you're ready to point at production.")
         }
 
         PoltioLogger.info("Configured successfully (SDK ID: \(sdkId)).")
