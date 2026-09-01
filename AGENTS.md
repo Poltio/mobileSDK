@@ -8,6 +8,7 @@ Welcome to the **Poltio Mobile SDK** repository. This file provides guidelines, 
 > 2. **Monorepo Architecture**: This repository is a monorepo for all Poltio mobile SDKs. Code for iOS, Android, and React Native MUST be isolated in their respective `/ios`, `/android`, and `/react-native` directories.
 > 3. **Example Apps**: Sample apps MUST reside in `/example` (`/example/ios`, `/example/android`, `/example/rn`). Every sample app MUST be runnable directly via root `Makefile` targets.
 > 4. **Target Current Active Branch/PR**: When asked to check PR review comments, always make sure you check the PR corresponding to the current active git branch. Use `gh pr view --comments` (without providing a specific PR ID) so GitHub CLI automatically resolves the active pull request for the current branch.
+> 5. **No Unsolicited Git Writes**: NEVER perform any write action with git or `gh` (e.g. `git commit`, `git push`, `git tag`, `gh pr comment`, `gh pr create`, `gh pr merge`, `gh pr review`) unless the user explicitly requests that specific action in that turn. Preparing/staging changes and read-only inspection (`git diff`, `git status`, `git log`, `gh pr view`) are always fine; committing, pushing, or commenting are not, even after a related task (like fixing a review comment) is complete — ask or wait for an explicit command instead.
 
 ---
 

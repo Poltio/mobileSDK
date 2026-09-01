@@ -18,12 +18,12 @@ final class PoltioAPIClient {
     private let baseURL: String
     private let session: URLSession
 
-    #if DEBUG
-        /// Exposes the resolved base URL. Used exclusively for unit testing.
-        var baseURLForTesting: String {
-            baseURL
-        }
-    #endif
+    /// Exposes the resolved base URL. Used exclusively for unit testing.
+    /// Not gated behind `#if DEBUG`: `PoltioAPIClient` is `internal`, so this never reaches the SDK's
+    /// public API surface, and tests must still be able to access it when run in a Release configuration.
+    var baseURLForTesting: String {
+        baseURL
+    }
 
     /// Initializes a new API client with custom base URL and URLSession configuration.
     /// - Parameters:
