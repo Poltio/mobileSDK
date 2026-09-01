@@ -106,6 +106,9 @@
 
         private let widget: PoltioWidgetResponse
         private let onOpenWidget: () -> Void
+        /// Invoked when the user taps the explicit close (X) button (`pillShowCloseButton`). Records a
+        /// `pillCloseRememberDuration`-hour dismissal and fully hides the trigger (not just a collapse).
+        private let onDismissForever: (Double) -> Void
 
         public private(set) var currentState: TriggerState
 
@@ -118,10 +121,14 @@
         /// and spinning up WebKit's WebContent process for every trigger would be wasteful.
         /// Hardened with JavaScript disabled and scroll disabled for minimal overhead and security.
         private var svgWebView: WKWebView?
+        /// Pulsating ring shown behind the collapsed pill, gated by `showPulsate`.
+        private let pulsateLayer = CAShapeLayer()
 
         private let textStackView = UIStackView()
-        private let subtitleLabel = UILabel()
-        private let titleLabel = UILabel()
+        private let firstLabel = UILabel()
+        private let secondLabel = UILabel()
+        private let thirdLabel = UILabel()
+        private let closeButton = UIButton(type: .custom)
 
         // Layout Constraints
         private var widthConstraint: NSLayoutConstraint!
@@ -135,14 +142,19 @@
 
         /// Bounce Animation Key
         private static let bounceAnimationKey = "poltio.pill.bounce"
+        /// Pulsate Animation Key
+        private static let pulsateAnimationKey = "poltio.pill.pulsate"
 
         public init(
             widget: PoltioWidgetResponse,
-            onOpenWidget: @escaping () -> Void
+            onOpenWidget: @escaping () -> Void,
+            onDismissForever: @escaping (Double) -> Void = { _ in }
         ) {
             self.widget = widget
             self.onOpenWidget = onOpenWidget
-            let shouldStartExpanded = widget.overlayOptions.isInitialActive || widget.overlayOptions.floatingInitialPosition?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "expanded"
+            self.onDismissForever = onDismissForever
+            let shouldStartExpanded = widget.overlayOptions.isInitialExpanded
+                || widget.overlayOptions.pillStartMode?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "open"
             currentState = shouldStartExpanded ? .expanded : .collapsed
             super.init(frame: .zero)
 
@@ -209,9 +221,14 @@
             backgroundColor = .clear
             clipsToBounds = false
 
+            // Pulsating ring behind the collapsed puck, gated by `showPulsate`.
+            pulsateLayer.fillColor = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.pulsateColor, fallback: .white).cgColor
+            pulsateLayer.opacity = 0
+            layer.insertSublayer(pulsateLayer, at: 0)
+
             // Main outer container with shadow
             cardContainer.translatesAutoresizingMaskIntoConstraints = false
-            cardContainer.backgroundColor = UIColor(red: 0.0, green: 0.64, blue: 0.98, alpha: 1.0) // Vibrant Poltio blue
+            cardContainer.backgroundColor = widget.overlayOptions.resolvedBgColor
             cardContainer.layer.cornerRadius = 28
             cardContainer.layer.shadowColor = UIColor.black.cgColor
             cardContainer.layer.shadowOpacity = 0.22
@@ -231,7 +248,7 @@
             iconView.translatesAutoresizingMaskIntoConstraints = false
             cardContainer.addSubview(iconView)
 
-            // Text Stack for Title and Subtitle
+            // Text Stack: three segments (e.g. "Try our" / "PRODUCT" / "FINDER")
             textStackView.translatesAutoresizingMaskIntoConstraints = false
             textStackView.axis = .vertical
             textStackView.alignment = .leading
@@ -239,31 +256,32 @@
             textStackView.spacing = 2
             textStackView.isUserInteractionEnabled = false
 
-            // Subtitle ("Try our")
-            let firstText = widget.overlayOptions.floatingBoxTextFirst ?? "Try our"
-            subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
-            subtitleLabel.text = firstText
-            subtitleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-            subtitleLabel.textColor = .white
-            subtitleLabel.numberOfLines = 1
-            subtitleLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
-            textStackView.addArrangedSubview(subtitleLabel)
+            firstLabel.translatesAutoresizingMaskIntoConstraints = false
+            firstLabel.text = widget.overlayOptions.textFirst ?? "Try our"
+            firstLabel.font = widget.overlayOptions.resolvedFont(size: 13, weight: .semibold)
+            firstLabel.textColor = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.textColorFirst, fallback: .white)
+            firstLabel.numberOfLines = 1
+            firstLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+            textStackView.addArrangedSubview(firstLabel)
 
-            // Title ("PRODUCT FINDER")
-            let secondText = widget.overlayOptions.floatingBoxTextSecond ?? "PRODUCT FINDER"
-            titleLabel.translatesAutoresizingMaskIntoConstraints = false
-            titleLabel.text = secondText.uppercased()
-            titleLabel.font = .systemFont(ofSize: 15, weight: .heavy)
-            titleLabel.textColor = UIColor(red: 0.88, green: 0.63, blue: 0.35, alpha: 1.0) // Warm Golden Tan
-            titleLabel.numberOfLines = 1
-            titleLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+            let accentColor = UIColor(red: 0.88, green: 0.63, blue: 0.35, alpha: 1.0) // Warm Golden Tan (default accent)
 
-            // Apply slight kerning / tracking to uppercase title
-            let attributedTitle = NSMutableAttributedString(string: secondText.uppercased())
-            attributedTitle.addAttribute(.kern, value: 0.8, range: NSRange(location: 0, length: attributedTitle.length))
-            titleLabel.attributedText = attributedTitle
+            secondLabel.translatesAutoresizingMaskIntoConstraints = false
+            secondLabel.font = widget.overlayOptions.resolvedFont(size: 15, weight: .heavy)
+            secondLabel.textColor = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.textColorSecond, fallback: accentColor)
+            secondLabel.numberOfLines = 1
+            secondLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+            secondLabel.attributedText = Self.kerned((widget.overlayOptions.textSecond ?? "PRODUCT").uppercased(), kern: 0.8)
+            textStackView.addArrangedSubview(secondLabel)
 
-            textStackView.addArrangedSubview(titleLabel)
+            thirdLabel.translatesAutoresizingMaskIntoConstraints = false
+            thirdLabel.font = widget.overlayOptions.resolvedFont(size: 15, weight: .heavy)
+            thirdLabel.textColor = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.textColorThird, fallback: accentColor)
+            thirdLabel.numberOfLines = 1
+            thirdLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+            thirdLabel.attributedText = Self.kerned((widget.overlayOptions.textThird ?? "FINDER").uppercased(), kern: 0.8)
+            textStackView.addArrangedSubview(thirdLabel)
+
             cardContainer.addSubview(textStackView)
 
             // Setup Width and Constraints
@@ -294,8 +312,31 @@
 
                 textStackView.centerYAnchor.constraint(equalTo: cardContainer.centerYAnchor),
                 textStackView.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 8),
-                textStackView.trailingAnchor.constraint(equalTo: cardContainer.trailingAnchor, constant: -20),
             ])
+
+            // Close button (X), only laid out/shown when `pillShowCloseButton` is set — kept out of the
+            // constraint chain entirely otherwise so the default layout is unaffected.
+            if widget.overlayOptions.pillShowCloseButton {
+                closeButton.translatesAutoresizingMaskIntoConstraints = false
+                closeButton.tintColor = widget.overlayOptions.resolvedTextColor
+                let xmarkConfig = UIImage.SymbolConfiguration(pointSize: 11, weight: .bold)
+                closeButton.setImage(UIImage(systemName: "xmark", withConfiguration: xmarkConfig), for: .normal)
+                closeButton.addTarget(self, action: #selector(handleCloseTap), for: .touchUpInside)
+                closeButton.accessibilityLabel = "Close"
+                cardContainer.addSubview(closeButton)
+
+                NSLayoutConstraint.activate([
+                    textStackView.trailingAnchor.constraint(equalTo: closeButton.leadingAnchor, constant: -2),
+                    closeButton.trailingAnchor.constraint(equalTo: cardContainer.trailingAnchor, constant: -8),
+                    closeButton.centerYAnchor.constraint(equalTo: cardContainer.centerYAnchor),
+                    closeButton.widthAnchor.constraint(equalToConstant: 28),
+                    closeButton.heightAnchor.constraint(equalToConstant: 28),
+                ])
+            } else {
+                NSLayoutConstraint.activate([
+                    textStackView.trailingAnchor.constraint(equalTo: cardContainer.trailingAnchor, constant: -20),
+                ])
+            }
 
             // Tap Gesture on the Trigger
             let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap))
@@ -309,6 +350,22 @@
             let swipeLeft = UISwipeGestureRecognizer(target: self, action: #selector(handleSwipe))
             swipeLeft.direction = .left
             cardContainer.addGestureRecognizer(swipeLeft)
+        }
+
+        override public func layoutSubviews() {
+            super.layoutSubviews()
+            // The collapsed puck always occupies the trailing 56x56 region regardless of the view's
+            // current (possibly expanded) width, since the trailing edge is what's pinned by the overlay.
+            let size: CGFloat = 56
+            let rect = CGRect(x: bounds.width - size, y: bounds.height - size, width: size, height: size)
+            pulsateLayer.frame = bounds
+            pulsateLayer.path = UIBezierPath(ovalIn: rect).cgPath
+        }
+
+        private static func kerned(_ text: String, kern: Double) -> NSAttributedString {
+            let attributed = NSMutableAttributedString(string: text)
+            attributed.addAttribute(.kern, value: kern, range: NSRange(location: 0, length: attributed.length))
+            return attributed
         }
 
         // MARK: - State Management
@@ -339,6 +396,7 @@
                 iconCenterConstraint.isActive = false
                 iconLeadingConstraint.isActive = true
                 stopBouncingAnimation()
+                stopPulsateAnimation()
                 if widget.overlayOptions.isInitialActive {
                     scheduleAutoCollapse()
                 }
@@ -346,6 +404,7 @@
                 iconLeadingConstraint.isActive = false
                 iconCenterConstraint.isActive = true
                 startBouncingAnimation()
+                startPulsateAnimation()
             }
 
             let animations = {
@@ -369,13 +428,46 @@
         }
 
         private func calculateExpandedWidth() -> CGFloat {
-            let subtitleWidth = subtitleLabel.intrinsicContentSize.width
-            let titleWidth = titleLabel.intrinsicContentSize.width
-            let textWidth = max(subtitleWidth, titleWidth)
+            let textWidth = [firstLabel, secondLabel, thirdLabel]
+                .map(\.intrinsicContentSize.width)
+                .max() ?? 0
+            let trailingReserve: CGFloat = widget.overlayOptions.pillShowCloseButton ? 20 + 2 + 28 : 20
 
-            // 14 (icon leading) + 40 (icon width) + 8 (spacing) + textWidth + 20 (trailing)
-            let total = 14 + 40 + 8 + textWidth + 20
+            // 14 (icon leading) + 40 (icon width) + 8 (spacing) + textWidth + trailing reserve
+            let total = 14 + 40 + 8 + textWidth + trailingReserve
             return max(total, 210)
+        }
+
+        // MARK: - Pulsate Animation
+
+        private func startPulsateAnimation() {
+            guard widget.overlayOptions.showPulsate else { return }
+            guard pulsateLayer.animation(forKey: PoltioFloatingPillTriggerView.pulsateAnimationKey) == nil else {
+                return
+            }
+
+            let scale = CABasicAnimation(keyPath: "transform.scale")
+            scale.fromValue = 1.0
+            scale.toValue = 1.6
+
+            let opacity = CABasicAnimation(keyPath: "opacity")
+            opacity.fromValue = 0.35
+            opacity.toValue = 0.0
+
+            let group = CAAnimationGroup()
+            group.animations = [scale, opacity]
+            group.duration = 1.6
+            group.repeatCount = .infinity
+            group.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            group.isRemovedOnCompletion = false
+
+            pulsateLayer.opacity = 0.35
+            pulsateLayer.add(group, forKey: PoltioFloatingPillTriggerView.pulsateAnimationKey)
+        }
+
+        private func stopPulsateAnimation() {
+            pulsateLayer.removeAnimation(forKey: PoltioFloatingPillTriggerView.pulsateAnimationKey)
+            pulsateLayer.opacity = 0
         }
 
         // MARK: - Bouncing Animation
@@ -522,6 +614,12 @@
             if currentState == .expanded {
                 setState(.collapsed, animated: true)
             }
+        }
+
+        @objc private func handleCloseTap() {
+            autoCollapseTimer?.invalidate()
+            autoCollapseTimer = nil
+            onDismissForever(widget.overlayOptions.pillCloseRememberDuration)
         }
     }
 #endif

@@ -30,6 +30,11 @@
         private let descLabel = UILabel()
         private let actionButton = UIButton(type: .custom)
 
+        /// Loads `floatingSvg`/`floatingImg` into the collapsed/expanded icon slots when configured,
+        /// falling back to `PoltioSparkleIconView` (created eagerly above) otherwise.
+        private var collapsedIconLoader: PoltioTriggerIconLoader?
+        private var expandedIconLoader: PoltioTriggerIconLoader?
+
         // Dimensions constraints
         private var widthConstraint: NSLayoutConstraint!
         private var heightConstraint: NSLayoutConstraint!
@@ -103,7 +108,7 @@
         ) {
             self.widget = widget
             self.onOpenWidget = onOpenWidget
-            currentState = widget.overlayOptions.isInitialActive ? .expanded : .collapsed
+            currentState = widget.overlayOptions.isInitialExpanded ? .expanded : .collapsed
             super.init(frame: .zero)
 
             setupView()
@@ -189,6 +194,12 @@
                 collapsedChevron.widthAnchor.constraint(equalToConstant: Constants.collapsedChevronSize),
                 collapsedChevron.heightAnchor.constraint(equalToConstant: Constants.collapsedChevronSize),
             ])
+
+            let loader = PoltioTriggerIconLoader(container: collapsedContainer, size: Constants.collapsedSparkleSize)
+            collapsedIconLoader = loader
+            loader.load(from: widget.overlayOptions, centeredOn: collapsedSparkleIcon) { [weak self] in
+                self?.collapsedSparkleIcon.isHidden = true
+            }
         }
 
         // MARK: - Expanded View Setup
@@ -196,7 +207,7 @@
         private func setupExpandedContainer() {
             expandedContainer.translatesAutoresizingMaskIntoConstraints = false
             expandedContainer.backgroundColor = widget.overlayOptions.resolvedBgColor
-            expandedContainer.layer.cornerRadius = Constants.expandedCornerRadius
+            expandedContainer.layer.cornerRadius = widget.overlayOptions.resolvedMobileTopBorderRadius
             expandedContainer.layer.shadowColor = UIColor.black.cgColor
             expandedContainer.layer.shadowOpacity = Constants.expandedShadowOpacity
             expandedContainer.layer.shadowOffset = Constants.expandedShadowOffset
@@ -223,7 +234,7 @@
                 ?? DefaultStrings.title
             titleLabel.translatesAutoresizingMaskIntoConstraints = false
             titleLabel.text = titleText
-            titleLabel.font = .systemFont(ofSize: Constants.titleFontSize, weight: .heavy)
+            titleLabel.font = widget.overlayOptions.resolvedFont(size: Constants.titleFontSize, weight: .heavy)
             titleLabel.textColor = widget.overlayOptions.resolvedTextColor
             titleLabel.numberOfLines = 2
             titleLabel.lineBreakMode = .byWordWrapping
@@ -235,7 +246,7 @@
                 ?? DefaultStrings.description
             descLabel.translatesAutoresizingMaskIntoConstraints = false
             descLabel.text = descText
-            descLabel.font = .systemFont(ofSize: Constants.descFontSize, weight: .medium)
+            descLabel.font = widget.overlayOptions.resolvedFont(size: Constants.descFontSize, weight: .medium)
             descLabel.textColor = widget.overlayOptions.resolvedTextColor.withAlphaComponent(Constants.descTextAlpha)
             descLabel.numberOfLines = 0
             descLabel.lineBreakMode = .byWordWrapping
@@ -248,7 +259,7 @@
             actionButton.layer.cornerRadius = Constants.actionButtonCornerRadius
             actionButton.setTitle(btnText, for: .normal)
             actionButton.setTitleColor(.black, for: .normal)
-            actionButton.titleLabel?.font = .systemFont(ofSize: Constants.actionButtonFontSize, weight: .bold)
+            actionButton.titleLabel?.font = widget.overlayOptions.resolvedFont(size: Constants.actionButtonFontSize, weight: .bold)
             actionButton.contentEdgeInsets = UIEdgeInsets(
                 top: 0, left: Constants.actionButtonHorizontalInset,
                 bottom: 0, right: Constants.actionButtonHorizontalInset
@@ -294,6 +305,12 @@
                 actionButton.bottomAnchor.constraint(equalTo: expandedContainer.bottomAnchor, constant: Constants.actionButtonBottomInset),
                 actionButton.heightAnchor.constraint(equalToConstant: Constants.actionButtonHeight),
             ])
+
+            let loader = PoltioTriggerIconLoader(container: expandedContainer, size: Constants.sparkleSize)
+            expandedIconLoader = loader
+            loader.load(from: widget.overlayOptions, centeredOn: expandedSparkleIcon) { [weak self] in
+                self?.expandedSparkleIcon.isHidden = true
+            }
         }
 
         // MARK: - State Management
