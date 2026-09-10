@@ -38,223 +38,108 @@ public struct PoltioWidgetResponse: Codable, Equatable {
 }
 
 /// Overlay presentation and style options for native triggers.
+///
+/// Backed by a single normalized `[String: String]` bag (`fields`) rather than one stored property
+/// per parameter — the mobile widget parameter surface (see `WIDGET_PARAMS.md`) is 60+ entries and
+/// mirrors the web SDK's `data-poltio-*` attributes almost 1:1, so a per-field stored property with
+/// duplicated mobile-override lookup logic doesn't scale. Every key (top-level and inside the
+/// `mobile` override object) is normalized to kebab-case (`_` → `-`) and merged into one dictionary,
+/// with `mobile` entries winning — that merge happens once at decode time instead of on every access.
 public struct PoltioOverlayOptions: Codable, Equatable {
-    private let _triggerType: String?
-    private let _floatingBoxTextFirst: String?
-    private let _floatingBoxTextSecond: String?
-    private let _floatingImg: String?
-    private let _floatingSvg: String?
-    private let _floatingInitialPosition: String?
-    private let _floatingTitle: String?
-    private let _floatingDesc: String?
-    private let _floatingButtonText: String?
-    private let _floatingBgColor: String?
-    private let _floatingTextColor: String?
-    private let _floatingIconColor: String?
-    private let _floatingDesignType: String?
-    private let _floatingDisplayType: String?
-    private let _floatingPosition: String?
-    private let _floatingMobileTopBorderRadius: String?
-    private let _mobile: [String: AnyCodable]?
-
-    /// The resolved trigger type (e.g. "box", "pill", "card"), respecting mobile overrides if present.
-    public var triggerType: String? {
-        if let mobile = _mobile, let val = mobile["trigger-type"]?.stringValue ?? mobile["trigger_type"]?.stringValue {
-            return val
-        }
-        if let type = _triggerType {
-            return type
-        }
-        if isCardTrigger {
-            return "card"
-        }
-        return nil
-    }
-
-    /// First header text line for floating box trigger, respecting mobile overrides if present.
-    public var floatingBoxTextFirst: String? {
-        if let mobile = _mobile,
-           let val = mobile["floating-box-text-first"]?.stringValue ?? mobile["floating_box_text_first"]?.stringValue
-        {
-            return val
-        }
-        return _floatingBoxTextFirst
-    }
-
-    /// Second footer text line for floating box trigger, respecting mobile overrides if present.
-    public var floatingBoxTextSecond: String? {
-        if let mobile = _mobile,
-           let val = mobile["floating-box-text-second"]?.stringValue ?? mobile["floating_box_text_second"]?.stringValue
-        {
-            return val
-        }
-        return _floatingBoxTextSecond
-    }
-
-    /// Image path or URL for floating trigger, respecting mobile overrides if present.
-    public var floatingImg: String? {
-        if let mobile = _mobile,
-           let val = mobile["floating-img"]?.stringValue ?? mobile["floating_img"]?.stringValue
-        {
-            return val
-        }
-        return _floatingImg
-    }
-
-    /// SVG asset path or URL for floating trigger, respecting mobile overrides if present.
-    public var floatingSvg: String? {
-        if let mobile = _mobile,
-           let val = mobile["floating-svg"]?.stringValue ?? mobile["floating_svg"]?.stringValue
-        {
-            return val
-        }
-        return _floatingSvg
-    }
-
-    /// Initial trigger position / state (e.g. "active", "collapsed"), respecting mobile overrides if present.
-    public var floatingInitialPosition: String? {
-        if let mobile = _mobile,
-           let val = mobile["floating-initial-position"]?.stringValue ?? mobile["floating_initial_position"]?.stringValue
-        {
-            return val
-        }
-        return _floatingInitialPosition
-    }
-
-    /// Title for card trigger, respecting mobile overrides if present.
-    public var floatingTitle: String? {
-        if let mobile = _mobile,
-           let val = mobile["floating-title"]?.stringValue ?? mobile["floating_title"]?.stringValue
-        {
-            return val
-        }
-        return _floatingTitle
-    }
-
-    /// Description text for card trigger, respecting mobile overrides if present.
-    public var floatingDesc: String? {
-        if let mobile = _mobile,
-           let val = mobile["floating-desc"]?.stringValue ?? mobile["floating_desc"]?.stringValue
-        {
-            return val
-        }
-        return _floatingDesc
-    }
-
-    /// Action button label for card trigger, respecting mobile overrides if present.
-    public var floatingButtonText: String? {
-        if let mobile = _mobile,
-           let val = mobile["floating-buttontext"]?.stringValue
-           ?? mobile["floating_buttontext"]?.stringValue
-           ?? mobile["floating-button-text"]?.stringValue
-           ?? mobile["floating_button_text"]?.stringValue
-           ?? mobile["floating-bar-text-button"]?.stringValue
-        {
-            return val
-        }
-        return _floatingButtonText
-    }
-
-    /// Floating background color string (e.g. "rgb(174, 174, 209)" or "#00A3FF"), respecting mobile overrides.
-    public var floatingBgColor: String? {
-        if let mobile = _mobile,
-           let val = mobile["floating-bgcolor"]?.stringValue
-           ?? mobile["floating_bgcolor"]?.stringValue
-           ?? mobile["floating-bg-color"]?.stringValue
-           ?? mobile["floating_bg_color"]?.stringValue
-        {
-            return val
-        }
-        return _floatingBgColor
-    }
-
-    /// Floating text color string (e.g. "white" or "#FFFFFF"), respecting mobile overrides.
-    public var floatingTextColor: String? {
-        if let mobile = _mobile,
-           let val = mobile["floating-textcolor"]?.stringValue
-           ?? mobile["floating_textcolor"]?.stringValue
-           ?? mobile["floating-text-color"]?.stringValue
-           ?? mobile["floating_text_color"]?.stringValue
-        {
-            return val
-        }
-        return _floatingTextColor
-    }
-
-    /// Floating icon color string (e.g. "#1E3D54"), respecting mobile overrides.
-    public var floatingIconColor: String? {
-        if let mobile = _mobile,
-           let val = mobile["floating-icon-color"]?.stringValue
-           ?? mobile["floating_icon_color"]?.stringValue
-           ?? mobile["floating-widget-icon-color"]?.stringValue
-           ?? mobile["floating_widget_icon_color"]?.stringValue
-        {
-            return val
-        }
-        return _floatingIconColor
-    }
-
-    /// Design type version identifier (e.g. "2025-01"), respecting mobile overrides.
-    public var floatingDesignType: String? {
-        if let mobile = _mobile,
-           let val = mobile["floating-design-type"]?.stringValue ?? mobile["floating_design_type"]?.stringValue
-        {
-            return val
-        }
-        return _floatingDesignType
-    }
-
-    /// Display type identifier (e.g. "slideover", "card"), respecting mobile overrides.
-    public var floatingDisplayType: String? {
-        if let mobile = _mobile,
-           let val = mobile["floating-display-type"]?.stringValue ?? mobile["floating_display_type"]?.stringValue
-        {
-            return val
-        }
-        return _floatingDisplayType
-    }
-
-    /// Screen dock position (e.g. "bottom-right"), respecting mobile overrides.
-    public var floatingPosition: String? {
-        if let mobile = _mobile,
-           let val = mobile["floating-position"]?.stringValue ?? mobile["floating_position"]?.stringValue
-        {
-            return val
-        }
-        return _floatingPosition
-    }
-
-    /// Border radius specification, respecting mobile overrides.
-    public var floatingMobileTopBorderRadius: String? {
-        if let mobile = _mobile,
-           let val = mobile["floating-mobile-top-border-radius"]?.stringValue ?? mobile["floating_mobile_top_border_radius"]?.stringValue
-        {
-            return val
-        }
-        return _floatingMobileTopBorderRadius
-    }
+    /// Normalized (kebab-case), merged raw fields: top-level `overlay_options` keys with any
+    /// matching `mobile` override applied on top. All lookups go through `field(_:)`.
+    private let fields: [String: String]
 
     /// Design type version identifier for the card/slideover trigger, e.g. "2025-01".
     private static let cardDesignType2025 = "2025-01"
 
-    /// Resolved trigger type string, respecting mobile overrides if present.
-    private var resolvedRawTriggerType: String? {
-        if let mobile = _mobile,
-           let val = mobile["trigger-type"]?.stringValue ?? mobile["trigger_type"]?.stringValue
-        {
-            return val.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    // MARK: - Key normalization & lookup
+
+    /// Normalizes a raw JSON key to the canonical kebab-case form used for all internal lookups.
+    /// The real API always sends kebab-case keys (see `fields.json` / the docs table); this only
+    /// guards against a stray snake_case variant reaching the SDK.
+    private static func normalizeKey(_ raw: String) -> String {
+        raw.replacingOccurrences(of: "_", with: "-").lowercased()
+    }
+
+    /// Returns the first non-nil value among the given canonical (already-normalized) keys.
+    /// Most fields have exactly one key; a few carry legacy aliases from earlier API shapes.
+    private func field(_ keys: String...) -> String? {
+        for key in keys {
+            if let value = fields[key] {
+                return value
+            }
         }
-        return _triggerType?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return nil
+    }
+
+    private static func stringify(_ any: AnyCodable) -> String? {
+        switch any.value {
+        case let s as String: s
+        case let i as Int: String(i)
+        case let d as Double: String(d)
+        case let b as Bool: b ? "true" : "false"
+        default: nil
+        }
+    }
+
+    private static func boolValue(_ raw: String?, default defaultValue: Bool) -> Bool {
+        guard let normalized = raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !normalized.isEmpty else {
+            return defaultValue
+        }
+        return normalized == "true" || normalized == "1"
+    }
+
+    private static func numericValue(_ raw: String?) -> Double? {
+        guard let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
+            return nil
+        }
+        return Double(trimmed)
+    }
+
+    /// Merges the top-level object and its nested `mobile` override object (mobile wins) into one
+    /// normalized-key dictionary.
+    private static func buildFields(from raw: [String: AnyCodable]) -> [String: String] {
+        var result: [String: String] = [:]
+        for (key, value) in raw where key != "mobile" {
+            if let str = stringify(value) {
+                result[normalizeKey(key)] = str
+            }
+        }
+        if let mobileAny = raw["mobile"], let mobileDict = mobileAny.value as? [String: AnyCodable] {
+            for (key, value) in mobileDict {
+                if let str = stringify(value) {
+                    result[normalizeKey(key)] = str
+                }
+            }
+        }
+        return result
+    }
+
+    // MARK: - Trigger type resolution
+
+    /// Resolved trigger type string, ignoring the `isCardTrigger` heuristic fallback (used internally
+    /// to avoid recursion between `triggerType` and `isCardTrigger`).
+    private var rawTriggerType: String? {
+        field("trigger-type")?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    /// The resolved trigger type (e.g. "box", "pill", "card"), respecting mobile overrides if present.
+    public var triggerType: String? {
+        if let raw = rawTriggerType {
+            return raw
+        }
+        return isCardTrigger ? "card" : nil
     }
 
     /// Convenience check for box trigger type.
     public var isBoxTrigger: Bool {
-        resolvedRawTriggerType == "box"
+        rawTriggerType == "box"
     }
 
     /// Convenience check for pill trigger type.
     public var isPillTrigger: Bool {
-        resolvedRawTriggerType == "pill"
+        rawTriggerType == "pill"
     }
 
     /// Convenience check for card trigger type (rounded slideover/card trigger).
@@ -262,8 +147,7 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         if isBoxTrigger || isPillTrigger {
             return false
         }
-        let rawType = resolvedRawTriggerType
-        if rawType == "card" || rawType == "slideover" || rawType == Self.cardDesignType2025 {
+        if let raw = rawTriggerType, raw == "card" || raw == "slideover" || raw == Self.cardDesignType2025 {
             return true
         }
         let designType = floatingDesignType?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -280,9 +164,357 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         return false
     }
 
-    /// Convenience check whether initial state should be active / expanded.
+    /// Convenience check whether initial state should be active (auto-expand then auto-collapse).
     public var isInitialActive: Bool {
         floatingInitialPosition?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "active"
+    }
+
+    /// Convenience check whether the trigger should start in its expanded state at all
+    /// (`active`, which also auto-collapses, or `expanded`, which stays open).
+    public var isInitialExpanded: Bool {
+        let value = floatingInitialPosition?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return value == "active" || value == "expanded"
+    }
+
+    // MARK: - identity / iframe query params (passed through to the WebView URL)
+
+    /// Free-form content identifier passed to the widget page, respecting mobile overrides.
+    public var content: String? {
+        field("widget-content")
+    }
+
+    /// Custom identifier passed to the widget page, respecting mobile overrides.
+    public var customId: String? {
+        field("widget-custom-id")
+    }
+
+    /// Location/placement identifier passed to the widget page, respecting mobile overrides.
+    public var loc: String? {
+        field("widget-loc")
+    }
+
+    /// Result-fit display mode (`off`/`sc`/`fit`/`vf`) passed to the widget page.
+    public var resultfit: String? {
+        field("widget-resultfit")
+    }
+
+    /// Disclaimer display mode (`on`/`off`) passed to the widget page.
+    public var disclaimer: String? {
+        field("widget-disclaimer")
+    }
+
+    // MARK: - common
+
+    /// Design type version identifier (e.g. "2025-01"), respecting mobile overrides.
+    public var floatingDesignType: String? {
+        field("floating-design-type")
+    }
+
+    /// Display type identifier (e.g. "slideover", "modal"), respecting mobile overrides.
+    public var floatingDisplayType: String? {
+        field("floating-display-type")
+    }
+
+    /// Floating background color string (e.g. "rgb(174, 174, 209)" or "#00A3FF"), respecting mobile overrides.
+    public var floatingBgColor: String? {
+        field("floating-bgcolor", "floating-bg-color")
+    }
+
+    /// Background color for the expanded panel's content surface, respecting mobile overrides.
+    public var widgetBg: String? {
+        field("widget-bgcolor")
+    }
+
+    /// Background image URL for the expanded panel, respecting mobile overrides.
+    public var widgetBgImage: String? {
+        field("widget-bg-image")
+    }
+
+    /// Title for card trigger, respecting mobile overrides if present.
+    public var floatingTitle: String? {
+        field("floating-title")
+    }
+
+    /// Description text for card trigger, respecting mobile overrides if present.
+    public var floatingDesc: String? {
+        field("floating-desc")
+    }
+
+    /// Raw z-index string, respecting mobile overrides. Prefer `floatingZindex` for numeric use.
+    public var floatingZindexRaw: String? {
+        field("floating-zindex")
+    }
+
+    /// Parsed z-index value (default 100, matching the documented default).
+    public var floatingZindex: Double {
+        Self.numericValue(floatingZindexRaw) ?? 100
+    }
+
+    /// Custom font family name, respecting mobile overrides. Falls back to the system font if the
+    /// named font isn't registered in the host app.
+    public var floatingFontFamily: String? {
+        field("floating-font-family")
+    }
+
+    /// Border radius specification, respecting mobile overrides.
+    public var floatingMobileTopBorderRadius: String? {
+        field("floating-mobile-top-border-radius")
+    }
+
+    /// Whether the entire floating trigger should be suppressed, respecting mobile overrides.
+    public var hideButton: Bool {
+        Self.boolValue(field("floating-hide-button"), default: false)
+    }
+
+    /// Screen dock position (e.g. "bottom-right"), respecting mobile overrides.
+    public var floatingPosition: String? {
+        field("floating-position")
+    }
+
+    /// Vertical component of `floatingPosition` (`top`/`center`/`bottom`), default `bottom`.
+    public var verticalPosition: String {
+        String((floatingPosition ?? "bottom-right").split(separator: "-", maxSplits: 1).first ?? "bottom")
+    }
+
+    /// Horizontal component of `floatingPosition` (`left`/`right`), default `right`.
+    public var horizontalPosition: String {
+        let parts = (floatingPosition ?? "bottom-right").split(separator: "-", maxSplits: 1)
+        return parts.count > 1 ? String(parts[1]) : "right"
+    }
+
+    /// Initial trigger position / state (e.g. "active", "collapsed", "expanded"), respecting mobile overrides.
+    public var floatingInitialPosition: String? {
+        field("floating-initial-position")
+    }
+
+    /// Scroll offset (px) at which the JS SDK reveals the trigger. No native equivalent (there's no
+    /// generic host-scroll hook); decoded for parity only.
+    public var floatingScrollThreshold: Double {
+        Self.numericValue(field("floating-scroll-threshold")) ?? 300
+    }
+
+    /// SVG asset path or URL for floating trigger, respecting mobile overrides if present.
+    public var floatingSvg: String? {
+        field("floating-svg")
+    }
+
+    /// Whether the product-card variant is enabled. No native product_card trigger exists yet;
+    /// decoded for parity only.
+    public var productCardEnabled: Bool {
+        Self.boolValue(field("floating-product-card-enabled"), default: false)
+    }
+
+    // MARK: - card
+
+    /// Action button label for card trigger, respecting mobile overrides if present.
+    public var floatingButtonText: String? {
+        field("floating-buttontext", "floating-button-text", "floating-bar-text-button")
+    }
+
+    /// Floating text color string (e.g. "white" or "#FFFFFF"), respecting mobile overrides.
+    public var floatingTextColor: String? {
+        field("floating-textcolor", "floating-text-color")
+    }
+
+    /// Floating icon color string (e.g. "#1E3D54"), respecting mobile overrides.
+    public var floatingIconColor: String? {
+        field("floating-icon-color", "floating-widget-icon-color")
+    }
+
+    // MARK: - pill
+
+    /// First pill text segment (e.g. "Try our"), respecting mobile overrides.
+    public var textFirst: String? {
+        field("floating-text-first")
+    }
+
+    /// Second pill text segment (e.g. "PRODUCT"), respecting mobile overrides.
+    public var textSecond: String? {
+        field("floating-text-second")
+    }
+
+    /// Third pill text segment (e.g. "FINDER"), respecting mobile overrides.
+    public var textThird: String? {
+        field("floating-text-third")
+    }
+
+    /// Color for `textFirst`, respecting mobile overrides.
+    public var textColorFirst: String? {
+        field("floating-text-color-first")
+    }
+
+    /// Color for `textSecond`, respecting mobile overrides.
+    public var textColorSecond: String? {
+        field("floating-text-color-second")
+    }
+
+    /// Color for `textThird`, respecting mobile overrides.
+    public var textColorThird: String? {
+        field("floating-text-color-third")
+    }
+
+    /// Pulsate ring color, respecting mobile overrides.
+    public var pulsateColor: String? {
+        field("floating-pulsate-color")
+    }
+
+    /// Whether the pulsate animation is shown (default true), respecting mobile overrides.
+    public var showPulsate: Bool {
+        Self.boolValue(field("floating-show-pulsate"), default: true)
+    }
+
+    /// Initial pill state (`closed`/`open`), respecting mobile overrides.
+    public var pillStartMode: String? {
+        field("floating-pill-start-mode")
+    }
+
+    /// Whether the pill shows an explicit close button (default false), respecting mobile overrides.
+    public var pillShowCloseButton: Bool {
+        Self.boolValue(field("floating-pill-show-close-button"), default: false)
+    }
+
+    /// Hours to suppress the trigger after an explicit close (default 48), respecting mobile overrides.
+    public var pillCloseRememberDuration: Double {
+        Self.numericValue(field("floating-pill-close-remember-duration")) ?? 48
+    }
+
+    // MARK: - box
+
+    /// Image path or URL for floating trigger, respecting mobile overrides if present.
+    public var floatingImg: String? {
+        field("floating-img")
+    }
+
+    /// First header text line for floating box trigger, respecting mobile overrides if present.
+    public var floatingBoxTextFirst: String? {
+        field("floating-box-text-first")
+    }
+
+    /// Second footer text line for floating box trigger, respecting mobile overrides if present.
+    public var floatingBoxTextSecond: String? {
+        field("floating-box-text-second")
+    }
+
+    /// Color for the box header text, respecting mobile overrides.
+    public var boxTextColorFirst: String? {
+        field("floating-box-text-color-first")
+    }
+
+    /// Color for the box footer text, respecting mobile overrides.
+    public var boxTextColorSecond: String? {
+        field("floating-box-text-color-second")
+    }
+
+    /// Background color for the box's outer chrome, respecting mobile overrides.
+    public var boxBgColorFirst: String? {
+        field("floating-box-bg-color-first")
+    }
+
+    /// Background color for the box's inner content surface, respecting mobile overrides.
+    public var boxBgColorSecond: String? {
+        field("floating-box-bg-color-second")
+    }
+
+    /// Raw CSS font size for the box header text (e.g. "1rem"), respecting mobile overrides.
+    public var boxTextFirstFontSizeRaw: String? {
+        field("floating-box-text-first-font-size")
+    }
+
+    /// Raw CSS font weight for the box header text (e.g. "700"), respecting mobile overrides.
+    public var boxTextFirstFontWeightRaw: String? {
+        field("floating-box-text-first-font-weight")
+    }
+
+    /// Raw CSS font size for the box footer text (e.g. "1.25rem"), respecting mobile overrides.
+    public var boxTextSecondFontSizeRaw: String? {
+        field("floating-box-text-second-font-size")
+    }
+
+    /// Raw CSS font weight for the box footer text (e.g. "700"), respecting mobile overrides.
+    public var boxTextSecondFontWeightRaw: String? {
+        field("floating-box-text-second-font-weight")
+    }
+
+    /// Raw CSS text alignment for the box header text (`flex-start`/`center`/`flex-end`), respecting mobile overrides.
+    public var boxTextAlignFirstRaw: String? {
+        field("floating-box-text-align-first")
+    }
+
+    /// Raw CSS text alignment for the box footer text, respecting mobile overrides.
+    public var boxTextAlignSecondRaw: String? {
+        field("floating-box-text-align-second")
+    }
+
+    /// Initial box state (`closed`/`open`), respecting mobile overrides.
+    public var boxStartMode: String? {
+        field("floating-box-start-mode")
+    }
+
+    /// Whether the box should auto-expand on host scroll (default true). No generic host-scroll hook
+    /// is available natively; decoded for parity only.
+    public var boxOpenOnScroll: Bool {
+        Self.boolValue(field("floating-box-open-on-scroll"), default: true)
+    }
+
+    /// Milliseconds after which the box auto-expands once, if set. `nil` disables auto-expand.
+    public var boxOpenOnTime: Double? {
+        Self.numericValue(field("floating-box-open-on-time"))
+    }
+
+    /// Whether the box shows an explicit close button (default false), respecting mobile overrides.
+    public var boxShowCloseButton: Bool {
+        Self.boolValue(field("floating-box-show-close-button"), default: false)
+    }
+
+    /// Hours to suppress the trigger after an explicit close (default 48), respecting mobile overrides.
+    public var boxCloseRememberDuration: Double {
+        Self.numericValue(field("floating-box-close-remember-duration")) ?? 48
+    }
+
+    /// Uniform scale factor applied to the box trigger's dimensions (default 1), respecting mobile overrides.
+    public var boxResize: Double {
+        Self.numericValue(field("floating-box-resize")) ?? 1
+    }
+
+    /// Whether the banner image should fill the entire expanded card (default false), respecting mobile overrides.
+    public var boxFullImageMode: Bool {
+        Self.boolValue(field("floating-box-full-image-mode"), default: false)
+    }
+
+    // MARK: - product_card (decoded for parity; no native product_card trigger exists yet)
+
+    public var productParent: String? {
+        field("floating-product-parent")
+    }
+
+    public var productParentNumber: String? {
+        field("floating-product-parent-number")
+    }
+
+    public var productSibling: String? {
+        field("floating-product-sibling")
+    }
+
+    public var productChildNumber: String? {
+        field("floating-product-child-number")
+    }
+
+    public var productImage: String? {
+        field("floating-product-image")
+    }
+
+    // MARK: - iframe (decoded for parity; DOM-embedding only, no native equivalent)
+
+    public var parentId: String? {
+        field("floating-parent-id")
+    }
+
+    public var parentClassName: String? {
+        field("floating-parent-class-name")
+    }
+
+    public var parentHeight: String? {
+        field("floating-parent-height")
     }
 
     #if canImport(UIKit)
@@ -308,6 +540,115 @@ public struct PoltioOverlayOptions: Codable, Equatable {
                 return color
             }
             return UIColor(red: 0.12, green: 0.24, blue: 0.33, alpha: 1.0)
+        }
+
+        /// Resolved widget/panel background color with fallback to white.
+        public var resolvedWidgetBgColor: UIColor {
+            if let colorStr = widgetBg, let color = PoltioColorParser.parse(colorStr) {
+                return color
+            }
+            return .white
+        }
+
+        /// Resolves a raw color string against `PoltioColorParser`, falling back to a caller-provided default.
+        public static func resolvedColor(_ raw: String?, fallback: UIColor) -> UIColor {
+            guard let raw, let color = PoltioColorParser.parse(raw) else {
+                return fallback
+            }
+            return color
+        }
+
+        /// Resolves a custom font family name, falling back to the system font of the same size/weight
+        /// if the named font isn't registered in the host app (custom fonts can't be downloaded natively).
+        public func resolvedFont(size: CGFloat, weight: UIFont.Weight = .regular) -> UIFont {
+            if let family = floatingFontFamily?.trimmingCharacters(in: .whitespacesAndNewlines), !family.isEmpty,
+               let font = UIFont(name: family, size: size)
+            {
+                return font
+            }
+            return .systemFont(ofSize: size, weight: weight)
+        }
+
+        /// Parses a CSS length string (`"1.75em"`, `"1rem"`, `"16px"`, `"16"`) into points.
+        /// `em`/`rem` are resolved against a 16pt base, matching typical browser defaults.
+        public static func cssLength(_ raw: String?, default defaultValue: CGFloat) -> CGFloat {
+            guard let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !trimmed.isEmpty else {
+                return defaultValue
+            }
+            if trimmed.hasSuffix("rem") {
+                return Double(trimmed.dropLast(3)).map { CGFloat($0) * 16.0 } ?? defaultValue
+            }
+            if trimmed.hasSuffix("em") {
+                return Double(trimmed.dropLast(2)).map { CGFloat($0) * 16.0 } ?? defaultValue
+            }
+            if trimmed.hasSuffix("px") {
+                return Double(trimmed.dropLast(2)).map { CGFloat($0) } ?? defaultValue
+            }
+            return Double(trimmed).map { CGFloat($0) } ?? defaultValue
+        }
+
+        /// Maps a CSS numeric font-weight string (`"400"`…`"900"`) to `UIFont.Weight`.
+        public static func fontWeight(_ raw: String?, default defaultValue: UIFont.Weight) -> UIFont.Weight {
+            guard let value = numericValue(raw) else { return defaultValue }
+            switch value {
+            case ..<250: return .ultraLight
+            case 250 ..< 350: return .thin
+            case 350 ..< 450: return .light
+            case 450 ..< 550: return .regular
+            case 550 ..< 650: return .medium
+            case 650 ..< 720: return .semibold
+            case 720 ..< 850: return .bold
+            case 850 ..< 950: return .heavy
+            default: return .black
+            }
+        }
+
+        /// Maps a CSS flexbox alignment keyword (`flex-start`/`center`/`flex-end`, or `left`/`right`) to `NSTextAlignment`.
+        public static func textAlignment(_ raw: String?, default defaultValue: NSTextAlignment) -> NSTextAlignment {
+            guard let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !value.isEmpty else {
+                return defaultValue
+            }
+            switch value {
+            case "flex-start", "left", "start": return .left
+            case "center": return .center
+            case "flex-end", "right", "end": return .right
+            default: return defaultValue
+            }
+        }
+
+        /// Parsed box header font size (default 16pt / "1rem").
+        public var boxTextFirstFontSize: CGFloat {
+            Self.cssLength(boxTextFirstFontSizeRaw, default: 16)
+        }
+
+        /// Parsed box header font weight (default bold / "700").
+        public var boxTextFirstFontWeight: UIFont.Weight {
+            Self.fontWeight(boxTextFirstFontWeightRaw, default: .bold)
+        }
+
+        /// Parsed box footer font size (default 20pt / "1.25rem").
+        public var boxTextSecondFontSize: CGFloat {
+            Self.cssLength(boxTextSecondFontSizeRaw, default: 20)
+        }
+
+        /// Parsed box footer font weight (default bold / "700").
+        public var boxTextSecondFontWeight: UIFont.Weight {
+            Self.fontWeight(boxTextSecondFontWeightRaw, default: .bold)
+        }
+
+        /// Parsed box header text alignment (default `.left` / "flex-start").
+        public var boxTextAlignFirst: NSTextAlignment {
+            Self.textAlignment(boxTextAlignFirstRaw, default: .left)
+        }
+
+        /// Parsed box footer text alignment (default `.left` / "flex-start").
+        public var boxTextAlignSecond: NSTextAlignment {
+            Self.textAlignment(boxTextAlignSecondRaw, default: .left)
+        }
+
+        /// Parsed top-corner radius (default 28pt / "1.75em").
+        public var resolvedMobileTopBorderRadius: CGFloat {
+            Self.cssLength(floatingMobileTopBorderRadius, default: 28)
         }
     #endif
 
@@ -341,6 +682,10 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         return URL(string: "\(cleanPrefix)/\(cleanPath)")
     }
 
+    // MARK: - Init
+
+    /// Memberwise initializer for manual construction (e.g. unit tests). Every parameter maps to its
+    /// documented API field; pass `mobile` to simulate per-platform overrides.
     public init(
         triggerType: String? = nil,
         floatingBoxTextFirst: String? = nil,
@@ -358,131 +703,148 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         floatingDisplayType: String? = nil,
         floatingPosition: String? = nil,
         floatingMobileTopBorderRadius: String? = nil,
+        content: String? = nil,
+        customId: String? = nil,
+        loc: String? = nil,
+        resultfit: String? = nil,
+        disclaimer: String? = nil,
+        widgetBg: String? = nil,
+        widgetBgImage: String? = nil,
+        floatingZindex: String? = nil,
+        floatingFontFamily: String? = nil,
+        hideButton: String? = nil,
+        floatingScrollThreshold: String? = nil,
+        productCardEnabled: String? = nil,
+        textFirst: String? = nil,
+        textSecond: String? = nil,
+        textThird: String? = nil,
+        textColorFirst: String? = nil,
+        textColorSecond: String? = nil,
+        textColorThird: String? = nil,
+        pulsateColor: String? = nil,
+        showPulsate: String? = nil,
+        pillStartMode: String? = nil,
+        pillShowCloseButton: String? = nil,
+        pillCloseRememberDuration: String? = nil,
+        boxTextColorFirst: String? = nil,
+        boxTextColorSecond: String? = nil,
+        boxBgColorFirst: String? = nil,
+        boxBgColorSecond: String? = nil,
+        boxTextFirstFontSize: String? = nil,
+        boxTextFirstFontWeight: String? = nil,
+        boxTextSecondFontSize: String? = nil,
+        boxTextSecondFontWeight: String? = nil,
+        boxTextAlignFirst: String? = nil,
+        boxTextAlignSecond: String? = nil,
+        boxStartMode: String? = nil,
+        boxOpenOnScroll: String? = nil,
+        boxOpenOnTime: String? = nil,
+        boxShowCloseButton: String? = nil,
+        boxCloseRememberDuration: String? = nil,
+        boxResize: String? = nil,
+        boxFullImageMode: String? = nil,
+        productParent: String? = nil,
+        productParentNumber: String? = nil,
+        productSibling: String? = nil,
+        productChildNumber: String? = nil,
+        productImage: String? = nil,
+        parentId: String? = nil,
+        parentClassName: String? = nil,
+        parentHeight: String? = nil,
         mobile: [String: AnyCodable]? = nil
     ) {
-        _triggerType = triggerType
-        _floatingBoxTextFirst = floatingBoxTextFirst
-        _floatingBoxTextSecond = floatingBoxTextSecond
-        _floatingImg = floatingImg
-        _floatingSvg = floatingSvg
-        _floatingInitialPosition = floatingInitialPosition
-        _floatingTitle = floatingTitle
-        _floatingDesc = floatingDesc
-        _floatingButtonText = floatingButtonText
-        _floatingBgColor = floatingBgColor
-        _floatingTextColor = floatingTextColor
-        _floatingIconColor = floatingIconColor
-        _floatingDesignType = floatingDesignType
-        _floatingDisplayType = floatingDisplayType
-        _floatingPosition = floatingPosition
-        _floatingMobileTopBorderRadius = floatingMobileTopBorderRadius
-        _mobile = mobile
+        var built: [String: String] = [:]
+        func set(_ key: String, _ value: String?) {
+            guard let value else { return }
+            built[key] = value
+        }
+
+        set("trigger-type", triggerType)
+        set("floating-box-text-first", floatingBoxTextFirst)
+        set("floating-box-text-second", floatingBoxTextSecond)
+        set("floating-img", floatingImg)
+        set("floating-svg", floatingSvg)
+        set("floating-initial-position", floatingInitialPosition)
+        set("floating-title", floatingTitle)
+        set("floating-desc", floatingDesc)
+        set("floating-buttontext", floatingButtonText)
+        set("floating-bgcolor", floatingBgColor)
+        set("floating-textcolor", floatingTextColor)
+        set("floating-icon-color", floatingIconColor)
+        set("floating-design-type", floatingDesignType)
+        set("floating-display-type", floatingDisplayType)
+        set("floating-position", floatingPosition)
+        set("floating-mobile-top-border-radius", floatingMobileTopBorderRadius)
+        set("widget-content", content)
+        set("widget-custom-id", customId)
+        set("widget-loc", loc)
+        set("widget-resultfit", resultfit)
+        set("widget-disclaimer", disclaimer)
+        set("widget-bgcolor", widgetBg)
+        set("widget-bg-image", widgetBgImage)
+        set("floating-zindex", floatingZindex)
+        set("floating-font-family", floatingFontFamily)
+        set("floating-hide-button", hideButton)
+        set("floating-scroll-threshold", floatingScrollThreshold)
+        set("floating-product-card-enabled", productCardEnabled)
+        set("floating-text-first", textFirst)
+        set("floating-text-second", textSecond)
+        set("floating-text-third", textThird)
+        set("floating-text-color-first", textColorFirst)
+        set("floating-text-color-second", textColorSecond)
+        set("floating-text-color-third", textColorThird)
+        set("floating-pulsate-color", pulsateColor)
+        set("floating-show-pulsate", showPulsate)
+        set("floating-pill-start-mode", pillStartMode)
+        set("floating-pill-show-close-button", pillShowCloseButton)
+        set("floating-pill-close-remember-duration", pillCloseRememberDuration)
+        set("floating-box-text-color-first", boxTextColorFirst)
+        set("floating-box-text-color-second", boxTextColorSecond)
+        set("floating-box-bg-color-first", boxBgColorFirst)
+        set("floating-box-bg-color-second", boxBgColorSecond)
+        set("floating-box-text-first-font-size", boxTextFirstFontSize)
+        set("floating-box-text-first-font-weight", boxTextFirstFontWeight)
+        set("floating-box-text-second-font-size", boxTextSecondFontSize)
+        set("floating-box-text-second-font-weight", boxTextSecondFontWeight)
+        set("floating-box-text-align-first", boxTextAlignFirst)
+        set("floating-box-text-align-second", boxTextAlignSecond)
+        set("floating-box-start-mode", boxStartMode)
+        set("floating-box-open-on-scroll", boxOpenOnScroll)
+        set("floating-box-open-on-time", boxOpenOnTime)
+        set("floating-box-show-close-button", boxShowCloseButton)
+        set("floating-box-close-remember-duration", boxCloseRememberDuration)
+        set("floating-box-resize", boxResize)
+        set("floating-box-full-image-mode", boxFullImageMode)
+        set("floating-product-parent", productParent)
+        set("floating-product-parent-number", productParentNumber)
+        set("floating-product-sibling", productSibling)
+        set("floating-product-child-number", productChildNumber)
+        set("floating-product-image", productImage)
+        set("floating-parent-id", parentId)
+        set("floating-parent-class-name", parentClassName)
+        set("floating-parent-height", parentHeight)
+
+        if let mobile {
+            for (key, value) in mobile {
+                if let str = Self.stringify(value) {
+                    built[Self.normalizeKey(key)] = str
+                }
+            }
+        }
+
+        fields = built
     }
 
     public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: DynamicCodingKeys.self)
-
-        func decodeString(forKeys keys: [String]) -> String? {
-            for key in keys {
-                if let codingKey = DynamicCodingKeys(stringValue: key),
-                   let val = try? container.decode(String.self, forKey: codingKey)
-                {
-                    return val
-                }
-            }
-            return nil
-        }
-
-        _triggerType = decodeString(forKeys: ["trigger-type", "trigger_type", "triggerType"])
-        _floatingBoxTextFirst = decodeString(forKeys: ["floating-box-text-first", "floating_box_text_first", "floatingBoxTextFirst"])
-        _floatingBoxTextSecond = decodeString(forKeys: ["floating-box-text-second", "floating_box_text_second", "floatingBoxTextSecond"])
-        _floatingImg = decodeString(forKeys: ["floating-img", "floating_img", "floatingImg"])
-        _floatingSvg = decodeString(forKeys: ["floating-svg", "floating_svg", "floatingSvg"])
-        _floatingInitialPosition = decodeString(forKeys: ["floating-initial-position", "floating_initial_position", "floatingInitialPosition"])
-        _floatingTitle = decodeString(forKeys: ["floating-title", "floating_title", "floatingTitle"])
-        _floatingDesc = decodeString(forKeys: ["floating-desc", "floating_desc", "floatingDesc"])
-        _floatingButtonText = decodeString(forKeys: [
-            "floating-buttontext", "floating_buttontext", "floatingButtonText",
-            "floating-button-text", "floating_button_text", "floating-bar-text-button",
-        ])
-        _floatingBgColor = decodeString(forKeys: [
-            "floating-bgcolor", "floating_bgcolor", "floatingBgColor",
-            "floating-bg-color", "floating_bg_color",
-        ])
-        _floatingTextColor = decodeString(forKeys: [
-            "floating-textcolor", "floating_textcolor", "floatingTextColor",
-            "floating-text-color", "floating_text_color",
-        ])
-        _floatingIconColor = decodeString(forKeys: [
-            "floating-icon-color", "floating_icon_color", "floatingIconColor",
-            "floating-widget-icon-color", "floating_widget_icon_color",
-        ])
-        _floatingDesignType = decodeString(forKeys: ["floating-design-type", "floating_design_type", "floatingDesignType"])
-        _floatingDisplayType = decodeString(forKeys: ["floating-display-type", "floating_display_type", "floatingDisplayType"])
-        _floatingPosition = decodeString(forKeys: ["floating-position", "floating_position", "floatingPosition"])
-        _floatingMobileTopBorderRadius = decodeString(forKeys: ["floating-mobile-top-border-radius", "floating_mobile_top_border_radius", "floatingMobileTopBorderRadius"])
-
-        if let mobileKey = DynamicCodingKeys(stringValue: "mobile"),
-           let mobileDict = try? container.decode([String: AnyCodable].self, forKey: mobileKey)
-        {
-            _mobile = mobileDict
-        } else {
-            _mobile = nil
-        }
+        let raw = try [String: AnyCodable](from: decoder)
+        fields = Self.buildFields(from: raw)
     }
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: DynamicCodingKeys.self)
-        if let triggerType = _triggerType, let key = DynamicCodingKeys(stringValue: "trigger-type") {
-            try container.encode(triggerType, forKey: key)
-        }
-        if let textFirst = _floatingBoxTextFirst, let key = DynamicCodingKeys(stringValue: "floating-box-text-first") {
-            try container.encode(textFirst, forKey: key)
-        }
-        if let textSecond = _floatingBoxTextSecond, let key = DynamicCodingKeys(stringValue: "floating-box-text-second") {
-            try container.encode(textSecond, forKey: key)
-        }
-        if let img = _floatingImg, let key = DynamicCodingKeys(stringValue: "floating-img") {
-            try container.encode(img, forKey: key)
-        }
-        if let svg = _floatingSvg, let key = DynamicCodingKeys(stringValue: "floating-svg") {
-            try container.encode(svg, forKey: key)
-        }
-        if let pos = _floatingInitialPosition, let key = DynamicCodingKeys(stringValue: "floating-initial-position") {
-            try container.encode(pos, forKey: key)
-        }
-        if let title = _floatingTitle, let key = DynamicCodingKeys(stringValue: "floating-title") {
-            try container.encode(title, forKey: key)
-        }
-        if let desc = _floatingDesc, let key = DynamicCodingKeys(stringValue: "floating-desc") {
-            try container.encode(desc, forKey: key)
-        }
-        if let btn = _floatingButtonText, let key = DynamicCodingKeys(stringValue: "floating-buttontext") {
-            try container.encode(btn, forKey: key)
-        }
-        if let bg = _floatingBgColor, let key = DynamicCodingKeys(stringValue: "floating-bgcolor") {
-            try container.encode(bg, forKey: key)
-        }
-        if let textCol = _floatingTextColor, let key = DynamicCodingKeys(stringValue: "floating-textcolor") {
-            try container.encode(textCol, forKey: key)
-        }
-        if let iconCol = _floatingIconColor, let key = DynamicCodingKeys(stringValue: "floating-icon-color") {
-            try container.encode(iconCol, forKey: key)
-        }
-        if let dType = _floatingDesignType, let key = DynamicCodingKeys(stringValue: "floating-design-type") {
-            try container.encode(dType, forKey: key)
-        }
-        if let dispType = _floatingDisplayType, let key = DynamicCodingKeys(stringValue: "floating-display-type") {
-            try container.encode(dispType, forKey: key)
-        }
-        if let pos = _floatingPosition, let key = DynamicCodingKeys(stringValue: "floating-position") {
-            try container.encode(pos, forKey: key)
-        }
-        if let rad = _floatingMobileTopBorderRadius, let key = DynamicCodingKeys(stringValue: "floating-mobile-top-border-radius") {
-            try container.encode(rad, forKey: key)
-        }
-        if let mobile = _mobile, let key = DynamicCodingKeys(stringValue: "mobile") {
-            try container.encode(mobile, forKey: key)
+        for (key, value) in fields.sorted(by: { $0.key < $1.key }) {
+            guard let codingKey = DynamicCodingKeys(stringValue: key) else { continue }
+            try container.encode(value, forKey: codingKey)
         }
     }
 }

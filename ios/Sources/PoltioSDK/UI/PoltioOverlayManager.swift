@@ -76,6 +76,18 @@
                     return
                 }
 
+                guard !widget.overlayOptions.hideButton else {
+                    PoltioLogger.debug("Floating trigger suppressed for widget '\(widget.publicId)' (floating-hide-button).")
+                    hideTrigger()
+                    return
+                }
+
+                guard !PoltioTriggerDismissalStore.isDismissed(publicId: widget.publicId) else {
+                    PoltioLogger.debug("Floating trigger suppressed for widget '\(widget.publicId)' (still within its close-remember window).")
+                    hideTrigger()
+                    return
+                }
+
                 let targetTriggerType = widget.overlayOptions.triggerType ?? ""
 
                 if currentPublicId == widget.publicId,
@@ -129,7 +141,11 @@
                     window = PoltioPassthroughWindow(frame: UIScreen.main.bounds)
                 }
 
-                window.windowLevel = UIWindow.Level.alert - 1
+                // `floatingZindex` (default 100) nudges the overlay window's level around its base position
+                // instead of remapping it wholesale, so integrators can order it relative to other custom
+                // overlay windows without risking it jumping above system alerts.
+                let zIndexOffset = max(-0.5, min(0.5, CGFloat(widget.overlayOptions.floatingZindex - 100) * 0.01))
+                window.windowLevel = UIWindow.Level(rawValue: UIWindow.Level.alert.rawValue - 1 + zIndexOffset)
                 window.backgroundColor = .clear
                 window.isOpaque = false
 
@@ -137,23 +153,29 @@
                 window.rootViewController = rootVC
 
                 let onOpenWidget: () -> Void = { [weak self] in
-                    self?.presentWidgetWebView(publicId: widget.publicId, puid: puid)
+                    self?.presentWidgetWebView(publicId: widget.publicId, puid: puid, overlayOptions: widget.overlayOptions)
+                }
+                let onDismissForever: (Double) -> Void = { [weak self] hours in
+                    PoltioTriggerDismissalStore.recordDismissal(publicId: widget.publicId, hours: hours)
+                    self?.hideTrigger()
                 }
 
+                let vertical = widget.overlayOptions.verticalPosition
+                let horizontal = widget.overlayOptions.horizontalPosition
                 let triggerView: UIView & PoltioTriggerPresentable
 
                 if widget.overlayOptions.isPillTrigger {
                     let pillView = PoltioFloatingPillTriggerView(
                         widget: widget,
-                        onOpenWidget: onOpenWidget
+                        onOpenWidget: onOpenWidget,
+                        onDismissForever: onDismissForever
                     )
                     pillView.translatesAutoresizingMaskIntoConstraints = false
                     rootVC.view.addSubview(pillView)
-
-                    NSLayoutConstraint.activate([
-                        pillView.trailingAnchor.constraint(equalTo: rootVC.view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
-                        pillView.bottomAnchor.constraint(equalTo: rootVC.view.safeAreaLayoutGuide.bottomAnchor, constant: -70),
-                    ])
+                    pinTrigger(
+                        pillView, in: rootVC.view, vertical: vertical, horizontal: horizontal,
+                        horizontalInset: 16, verticalInset: 70, hugsRawEdgeHorizontally: false
+                    )
                     triggerView = pillView
                 } else if widget.overlayOptions.isCardTrigger {
                     let cardView = PoltioFloatingCardTriggerView(
@@ -162,24 +184,23 @@
                     )
                     cardView.translatesAutoresizingMaskIntoConstraints = false
                     rootVC.view.addSubview(cardView)
-
-                    NSLayoutConstraint.activate([
-                        cardView.trailingAnchor.constraint(equalTo: rootVC.view.trailingAnchor),
-                        cardView.bottomAnchor.constraint(equalTo: rootVC.view.safeAreaLayoutGuide.bottomAnchor, constant: -70),
-                    ])
+                    pinTrigger(
+                        cardView, in: rootVC.view, vertical: vertical, horizontal: horizontal,
+                        horizontalInset: 0, verticalInset: 70, hugsRawEdgeHorizontally: true
+                    )
                     triggerView = cardView
                 } else {
                     let boxView = PoltioFloatingBoxTriggerView(
                         widget: widget,
-                        onOpenWidget: onOpenWidget
+                        onOpenWidget: onOpenWidget,
+                        onDismissForever: onDismissForever
                     )
                     boxView.translatesAutoresizingMaskIntoConstraints = false
                     rootVC.view.addSubview(boxView)
-
-                    NSLayoutConstraint.activate([
-                        boxView.trailingAnchor.constraint(equalTo: rootVC.view.trailingAnchor),
-                        boxView.centerYAnchor.constraint(equalTo: rootVC.view.centerYAnchor, constant: -20),
-                    ])
+                    pinTrigger(
+                        boxView, in: rootVC.view, vertical: vertical, horizontal: horizontal,
+                        horizontalInset: 0, verticalInset: 24, hugsRawEdgeHorizontally: true
+                    )
                     triggerView = boxView
                 }
 
@@ -245,8 +266,43 @@
             overlayWindow = nil
         }
 
+        /// Pins `view` within `container` according to the parsed `floatingPosition` (`vertical`/`horizontal`),
+        /// generalizing what used to be three hardcoded per-trigger constraint blocks. `hugsRawEdgeHorizontally`
+        /// preserves each trigger's pre-existing horizontal-anchoring convention (card/box hug the raw view
+        /// edge so their collapsed tabs bleed off-screen; pill insets from the safe area).
+        private func pinTrigger(
+            _ view: UIView,
+            in container: UIView,
+            vertical: String,
+            horizontal: String,
+            horizontalInset: CGFloat,
+            verticalInset: CGFloat,
+            hugsRawEdgeHorizontally: Bool
+        ) {
+            var constraints: [NSLayoutConstraint] = []
+
+            if horizontal == "left" {
+                let anchor = hugsRawEdgeHorizontally ? container.leadingAnchor : container.safeAreaLayoutGuide.leadingAnchor
+                constraints.append(view.leadingAnchor.constraint(equalTo: anchor, constant: horizontalInset))
+            } else {
+                let anchor = hugsRawEdgeHorizontally ? container.trailingAnchor : container.safeAreaLayoutGuide.trailingAnchor
+                constraints.append(view.trailingAnchor.constraint(equalTo: anchor, constant: -horizontalInset))
+            }
+
+            switch vertical {
+            case "top":
+                constraints.append(view.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor, constant: verticalInset))
+            case "center":
+                constraints.append(view.centerYAnchor.constraint(equalTo: container.centerYAnchor, constant: -verticalInset))
+            default: // "bottom"
+                constraints.append(view.bottomAnchor.constraint(equalTo: container.safeAreaLayoutGuide.bottomAnchor, constant: -verticalInset))
+            }
+
+            NSLayoutConstraint.activate(constraints)
+        }
+
         /// Presents the interactive widget modal WebView on top of the active view controller.
-        public func presentWidgetWebView(publicId: String, puid: String?) {
+        public func presentWidgetWebView(publicId: String, puid: String?, overlayOptions: PoltioOverlayOptions? = nil) {
             DispatchQueue.main.async { [weak self] in
                 guard let self, let topVC = findTopmostHostViewController() else {
                     PoltioLogger.error("Unable to find topmost view controller to present widget.")
@@ -256,7 +312,7 @@
                 // Hide the floating trigger window while the webview is presented
                 overlayWindow?.isHidden = true
 
-                let webVC = PoltioWebViewController(publicId: publicId, puid: puid)
+                let webVC = PoltioWebViewController(publicId: publicId, puid: puid, overlayOptions: overlayOptions)
                 webVC.onWidgetEvent = { event, data in
                     PoltioSDK.onWidgetEvent?(event, data)
                 }

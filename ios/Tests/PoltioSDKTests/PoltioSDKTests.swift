@@ -69,6 +69,7 @@ final class PoltioSDKTests: XCTestCase {
     override func tearDown() {
         super.tearDown()
         PoltioSDK.shared.reset()
+        PoltioTriggerDismissalStore.reset()
         MockURLProtocol.requestHandler = nil
         for session in activeSessions {
             session.invalidateAndCancel()
@@ -526,6 +527,59 @@ final class PoltioSDKTests: XCTestCase {
         waitForExpectations(timeout: 2.0)
     }
 
+    func testTriggerDismissalStoreRecordAndExpire() {
+        XCTAssertFalse(PoltioTriggerDismissalStore.isDismissed(publicId: "widget_a"))
+
+        let now = Date()
+        PoltioTriggerDismissalStore.recordDismissal(publicId: "widget_a", hours: 48, now: now)
+        XCTAssertTrue(PoltioTriggerDismissalStore.isDismissed(publicId: "widget_a", now: now))
+        XCTAssertTrue(PoltioTriggerDismissalStore.isDismissed(publicId: "widget_a", now: now.addingTimeInterval(47 * 3600)))
+        XCTAssertFalse(PoltioTriggerDismissalStore.isDismissed(publicId: "widget_a", now: now.addingTimeInterval(49 * 3600)))
+
+        // A different widget is unaffected.
+        XCTAssertFalse(PoltioTriggerDismissalStore.isDismissed(publicId: "widget_b", now: now))
+
+        // A non-positive hours value is a no-op.
+        PoltioTriggerDismissalStore.recordDismissal(publicId: "widget_c", hours: 0, now: now)
+        XCTAssertFalse(PoltioTriggerDismissalStore.isDismissed(publicId: "widget_c", now: now))
+    }
+
+    func testPillTriggerResponseDecodingWithFullPayload() throws {
+        let json = """
+        {
+          "public_id": "pill-widget-001",
+          "overlay_options": {
+            "trigger-type": "pill",
+            "floating-text-first": "Try our",
+            "floating-text-second": "PRODUCT",
+            "floating-text-third": "FINDER",
+            "floating-text-color-first": "white",
+            "floating-text-color-second": "#CA9B6F",
+            "floating-text-color-third": "#CA9B6F",
+            "floating-pulsate-color": "white",
+            "floating-show-pulsate": "true",
+            "floating-pill-start-mode": "closed",
+            "floating-pill-show-close-button": "true",
+            "floating-pill-close-remember-duration": "24"
+          }
+        }
+        """
+        let decoded = try JSONDecoder().decode(PoltioWidgetResponse.self, from: Data(json.utf8))
+
+        XCTAssertTrue(decoded.overlayOptions.isPillTrigger)
+        XCTAssertEqual(decoded.overlayOptions.textFirst, "Try our")
+        XCTAssertEqual(decoded.overlayOptions.textSecond, "PRODUCT")
+        XCTAssertEqual(decoded.overlayOptions.textThird, "FINDER")
+        XCTAssertEqual(decoded.overlayOptions.textColorFirst, "white")
+        XCTAssertEqual(decoded.overlayOptions.textColorSecond, "#CA9B6F")
+        XCTAssertEqual(decoded.overlayOptions.textColorThird, "#CA9B6F")
+        XCTAssertEqual(decoded.overlayOptions.pulsateColor, "white")
+        XCTAssertTrue(decoded.overlayOptions.showPulsate)
+        XCTAssertEqual(decoded.overlayOptions.pillStartMode, "closed")
+        XCTAssertTrue(decoded.overlayOptions.pillShowCloseButton)
+        XCTAssertEqual(decoded.overlayOptions.pillCloseRememberDuration, 24)
+    }
+
     #if canImport(UIKit)
         func testBuildWidgetURLWithAndWithoutPUID() {
             let urlWithoutPuid = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", puid: nil)
@@ -536,6 +590,22 @@ final class PoltioSDKTests: XCTestCase {
 
             let urlWithPuid = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", puid: "usr_123")
             XCTAssertEqual(urlWithPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?puid=usr_123&disclaimer=off")
+        }
+
+        func testBuildWidgetURLWithPassThroughParams() {
+            let url = PoltioWebViewController.buildWidgetURL(
+                publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3",
+                puid: "usr_123",
+                disclaimer: "on",
+                content: "landing",
+                customId: "abc-123",
+                loc: "header",
+                resultfit: "fit"
+            )
+            XCTAssertEqual(
+                url?.absoluteString,
+                "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?puid=usr_123&content=landing&custom_id=abc-123&loc=header&resultfit=fit&disclaimer=on"
+            )
         }
 
         func testFloatingPillTriggerViewLifecycleAndStateTransitions() {
@@ -1091,6 +1161,31 @@ final class PoltioSDKTests: XCTestCase {
         XCTAssertEqual(decoded.overlayOptions.floatingPosition, "bottom-right")
         XCTAssertEqual(decoded.overlayOptions.floatingMobileTopBorderRadius, "1.75em")
         XCTAssertFalse(decoded.overlayOptions.isInitialActive)
+        XCTAssertEqual(decoded.overlayOptions.verticalPosition, "bottom")
+        XCTAssertEqual(decoded.overlayOptions.horizontalPosition, "right")
+        XCTAssertFalse(decoded.overlayOptions.hideButton)
+        XCTAssertEqual(decoded.overlayOptions.floatingZindex, 100)
+        XCTAssertEqual(decoded.overlayOptions.widgetBg, "white")
+        XCTAssertFalse(decoded.overlayOptions.productCardEnabled)
+        XCTAssertEqual(decoded.overlayOptions.textFirst, "Try our")
+        XCTAssertEqual(decoded.overlayOptions.textSecond, "PRODUCT")
+        XCTAssertEqual(decoded.overlayOptions.textThird, "FINDER")
+        XCTAssertEqual(decoded.overlayOptions.pulsateColor, "white")
+        XCTAssertTrue(decoded.overlayOptions.showPulsate)
+        XCTAssertEqual(decoded.overlayOptions.pillStartMode, "closed")
+        XCTAssertFalse(decoded.overlayOptions.pillShowCloseButton)
+        XCTAssertEqual(decoded.overlayOptions.pillCloseRememberDuration, 48)
+        XCTAssertEqual(decoded.overlayOptions.boxTextColorFirst, "black")
+        XCTAssertEqual(decoded.overlayOptions.boxBgColorFirst, "white")
+        XCTAssertEqual(decoded.overlayOptions.boxTextFirstFontSizeRaw, "1rem")
+        XCTAssertEqual(decoded.overlayOptions.boxTextFirstFontWeightRaw, "700")
+        XCTAssertEqual(decoded.overlayOptions.boxTextAlignFirstRaw, "flex-start")
+        XCTAssertEqual(decoded.overlayOptions.boxStartMode, "closed")
+        XCTAssertTrue(decoded.overlayOptions.boxOpenOnScroll)
+        XCTAssertFalse(decoded.overlayOptions.boxShowCloseButton)
+        XCTAssertEqual(decoded.overlayOptions.boxCloseRememberDuration, 48)
+        XCTAssertEqual(decoded.overlayOptions.boxResize, 1)
+        XCTAssertFalse(decoded.overlayOptions.boxFullImageMode)
 
         #if canImport(UIKit)
             let bgColor = decoded.overlayOptions.resolvedBgColor
@@ -1201,8 +1296,8 @@ final class PoltioSDKTests: XCTestCase {
 
             // Test initial active option
             let activeOptions = PoltioOverlayOptions(
-                floatingTitle: "Active Title",
                 floatingInitialPosition: "active",
+                floatingTitle: "Active Title",
                 floatingDesignType: "2025-01"
             )
             let activeWidget = PoltioWidgetResponse(publicId: "active_1", overlayOptions: activeOptions)

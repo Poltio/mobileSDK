@@ -21,6 +21,7 @@
     public final class PoltioWebViewController: UIViewController, WKNavigationDelegate, WKScriptMessageHandler, UIAdaptivePresentationControllerDelegate {
         private let publicId: String
         private let puid: String?
+        private let overlayOptions: PoltioOverlayOptions?
         private var webView: WKWebView!
         private var activityIndicator: UIActivityIndicatorView!
 
@@ -34,9 +35,10 @@
         public var onWidgetEvent: ((_ event: String, _ data: [String: Any]?) -> Void)?
         private var isDismissHandled = false
 
-        public init(publicId: String, puid: String? = nil, onDismiss: (() -> Void)? = nil) {
+        public init(publicId: String, puid: String? = nil, overlayOptions: PoltioOverlayOptions? = nil, onDismiss: (() -> Void)? = nil) {
             self.publicId = publicId
             self.puid = puid
+            self.overlayOptions = overlayOptions
             self.onDismiss = onDismiss
             super.init(nibName: nil, bundle: nil)
             modalPresentationStyle = .pageSheet
@@ -129,11 +131,17 @@
             ])
         }
 
-        /// Helper that constructs the widget WebView URL with query parameters.
+        /// Helper that constructs the widget WebView URL with query parameters. Pass-through params
+        /// (`content`, `custom_id`, `loc`, `resultfit`, `disclaimer`) reuse their `WidgetParams` key
+        /// names verbatim as query keys, matching the existing `puid`/`disclaimer` convention.
         public static func buildWidgetURL(
             publicId: String,
             puid: String?,
-            disclaimer: String = "off"
+            disclaimer: String = "off",
+            content: String? = nil,
+            customId: String? = nil,
+            loc: String? = nil,
+            resultfit: String? = nil
         ) -> URL? {
             var components = URLComponents()
             components.scheme = "https"
@@ -141,9 +149,17 @@
             components.path = "/widget/\(publicId)"
             var queryItems: [URLQueryItem] = []
 
-            if let puid = puid?.trimmingCharacters(in: .whitespacesAndNewlines), !puid.isEmpty {
-                queryItems.append(URLQueryItem(name: "puid", value: puid))
+            func appendIfPresent(_ name: String, _ value: String?) {
+                let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard let trimmed, !trimmed.isEmpty else { return }
+                queryItems.append(URLQueryItem(name: name, value: trimmed))
             }
+
+            appendIfPresent("puid", puid)
+            appendIfPresent("content", content)
+            appendIfPresent("custom_id", customId)
+            appendIfPresent("loc", loc)
+            appendIfPresent("resultfit", resultfit)
 
             queryItems.append(URLQueryItem(name: "disclaimer", value: disclaimer))
             components.queryItems = queryItems
@@ -151,7 +167,17 @@
         }
 
         private func loadWidgetURL() {
-            guard let url = PoltioWebViewController.buildWidgetURL(publicId: publicId, puid: puid) else {
+            let resolvedDisclaimer = overlayOptions?.disclaimer?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let url = PoltioWebViewController.buildWidgetURL(
+                publicId: publicId,
+                puid: puid,
+                disclaimer: (resolvedDisclaimer?.isEmpty == false ? resolvedDisclaimer : nil) ?? "off",
+                content: overlayOptions?.content,
+                customId: overlayOptions?.customId,
+                loc: overlayOptions?.loc,
+                resultfit: overlayOptions?.resultfit
+            )
+            guard let url else {
                 PoltioLogger.error("Invalid widget URL string for publicId '\(publicId)'")
                 return
             }
