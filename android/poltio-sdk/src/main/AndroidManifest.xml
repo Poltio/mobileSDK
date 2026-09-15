@@ -7,7 +7,7 @@
         <activity
             android:name=".ui.PoltioWebViewActivity"
             android:exported="false"
-            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
     </application>
 
 </manifest>

@@ -318,6 +318,10 @@ internal object PoltioOverlayManager {
 
             val intent = PoltioWebViewActivity.newIntent(activity, publicId, puid, overlayOptions)
             activity.startActivity(intent)
+            // PoltioWebViewActivity drives its own slide-up/scrim-fade entrance animation against
+            // its translucent theme; suppress the system's default activity-enter transition so
+            // the two don't stack.
+            activity.overridePendingTransition(0, 0)
         }
     }
 
