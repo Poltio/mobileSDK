@@ -112,14 +112,21 @@ fun TechStoreApp() {
                 )
             }
 
-            composable("category/{categoryName}") { backStackEntry ->
-                val categoryName = backStackEntry.arguments?.getString("categoryName") ?: "Phones"
-                PLPScreen(
-                    category = categoryName,
-                    onNavigateProduct = { productId ->
-                        navController.navigate("product/$productId")
-                    }
-                )
+            // Each category gets its own distinct destination (rather than one shared
+            // "category/{categoryName}" route) so `launchSingleTop` in the bottom nav above
+            // correctly treats Phones/TVs/Laptops as different destinations. A single shared
+            // parameterized route is matched by node id regardless of its argument value, so
+            // launchSingleTop would otherwise treat switching between tabs as already being on
+            // the current destination and never recompose with the new category.
+            for (category in listOf("Phones", "TVs", "Laptops")) {
+                composable("category/$category") {
+                    PLPScreen(
+                        category = category,
+                        onNavigateProduct = { productId ->
+                            navController.navigate("product/$productId")
+                        }
+                    )
+                }
             }
 
             composable(
