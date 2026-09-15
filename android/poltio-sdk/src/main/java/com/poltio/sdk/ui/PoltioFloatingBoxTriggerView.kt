@@ -35,6 +35,11 @@ internal class PoltioFloatingBoxTriggerView(
 
     enum class TriggerState { COLLAPSED, EXPANDED }
 
+    companion object {
+        /** How long the expanded box stays open before auto-collapsing if left untouched. */
+        private const val AUTO_COLLAPSE_DELAY_MS = 5000L
+    }
+
     /** Uniform scale factor applied to every dimension below, clamped to a sane range. */
     private val scale = widget.overlayOptions.boxResize.toFloat().coerceIn(0.5f, 2.0f)
 
@@ -60,6 +65,12 @@ internal class PoltioFloatingBoxTriggerView(
     private val autoOpenRunnable = Runnable {
         if (currentState == TriggerState.COLLAPSED) setState(TriggerState.EXPANDED, animated = true)
     }
+    private val autoCollapseRunnable = Runnable {
+        if (currentState == TriggerState.EXPANDED) setState(TriggerState.COLLAPSED, animated = true)
+    }
+    private val outsideInteractionListener: () -> Unit = {
+        if (currentState == TriggerState.EXPANDED) setState(TriggerState.COLLAPSED, animated = true)
+    }
 
     init {
         clipChildren = false
@@ -70,6 +81,7 @@ internal class PoltioFloatingBoxTriggerView(
         applyState(currentState, animated = false)
         loadBannerImage()
         scheduleAutoOpenIfNeeded()
+        PoltioHostInteractionBus.addListener(outsideInteractionListener)
     }
 
     override fun onDetachedFromWindow() {
@@ -77,6 +89,8 @@ internal class PoltioFloatingBoxTriggerView(
         sizeAnimator?.cancel()
         bannerDownload?.cancel(true)
         PoltioExecutors.main.removeCallbacks(autoOpenRunnable)
+        PoltioExecutors.main.removeCallbacks(autoCollapseRunnable)
+        PoltioHostInteractionBus.removeListener(outsideInteractionListener)
     }
 
     private fun setupCollapsedContainer() {
@@ -242,7 +256,10 @@ internal class PoltioFloatingBoxTriggerView(
             }
             true
         }
-        expandedContainer.setOnClickListener { onOpenWidget() }
+        expandedContainer.setOnClickListener {
+            PoltioExecutors.main.removeCallbacks(autoCollapseRunnable)
+            onOpenWidget()
+        }
     }
 
     private fun setupBannerFallbackView() {
@@ -324,6 +341,11 @@ internal class PoltioFloatingBoxTriggerView(
         val targetHeight = if (isExpanded) expandedHeightPx else collapsedHeightPx
 
         sizeAnimator?.cancel()
+
+        PoltioExecutors.main.removeCallbacks(autoCollapseRunnable)
+        if (isExpanded) {
+            PoltioExecutors.main.postDelayed(autoCollapseRunnable, AUTO_COLLAPSE_DELAY_MS)
+        }
 
         if (!animated) {
             setSizePx(targetWidth, targetHeight)
