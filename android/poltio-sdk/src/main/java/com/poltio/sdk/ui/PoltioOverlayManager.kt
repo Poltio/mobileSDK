@@ -277,31 +277,33 @@ internal object PoltioOverlayManager {
         val horizontalInsetPx = context.dp(horizontalInsetDp)
         val verticalInsetPx = context.dp(verticalInsetDp)
 
-        var systemLeft = 0
-        var systemRight = 0
-        var systemTop = 0
-        var systemBottom = 0
-        if (avoidSystemBars) {
-            val insets = androidx.core.view.ViewCompat.getRootWindowInsets(container)
-                ?.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-            if (insets != null) {
-                systemLeft = insets.left
-                systemRight = insets.right
-                systemTop = insets.top
-                systemBottom = insets.bottom
+        fun applyMargins(systemLeft: Int, systemRight: Int, systemTop: Int, systemBottom: Int) {
+            if (horizontal == "left") params.leftMargin = horizontalInsetPx + systemLeft else params.rightMargin = horizontalInsetPx + systemRight
+            when (vertical) {
+                "top" -> params.topMargin = verticalInsetPx + systemTop
+                "center" -> Unit
+                else -> params.bottomMargin = verticalInsetPx + systemBottom
             }
+            view.layoutParams = params
         }
 
-        if (horizontal == "left") params.leftMargin = horizontalInsetPx + systemLeft else params.rightMargin = horizontalInsetPx + systemRight
-        when (vertical) {
-            "top" -> params.topMargin = verticalInsetPx + systemTop
-            "center" -> Unit
-            else -> params.bottomMargin = verticalInsetPx + systemBottom
-        }
-
-        view.layoutParams = params
+        // Position with zero system-bar compensation up front so the trigger doesn't wait on a
+        // window-insets dispatch to appear at all.
+        applyMargins(systemLeft = 0, systemRight = 0, systemTop = 0, systemBottom = 0)
         container.addView(view, params)
         if (vertical == "center") view.translationY = -verticalInsetPx.toFloat()
+
+        if (avoidSystemBars) {
+            // `ViewCompat.getRootWindowInsets(container)` right after `addView` is unreliable —
+            // insets aren't dispatched until the next layout pass, so a synchronous read here can
+            // silently return null. `setOnApplyWindowInsetsListener` instead reacts whenever insets
+            // actually become available (and again on later changes, e.g. rotation).
+            androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(container) { _, insets ->
+                val systemBars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                applyMargins(systemBars.left, systemBars.right, systemBars.top, systemBars.bottom)
+                insets
+            }
+        }
     }
 
     /** Presents the interactive widget modal WebView on top of the resumed Activity. */
