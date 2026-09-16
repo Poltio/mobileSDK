@@ -3,7 +3,7 @@
 DEVELOPER_DIR ?= /Applications/Xcode.app/Contents/Developer
 export DEVELOPER_DIR
 
-.PHONY: all help check build build-ios build-android build-rn test test-ios test-android test-rn format format-ios lint lint-ios lint-android lint-pod lint-actions zizmor run-example-ios run-example-android run-example-rn version submit-version publish-cocoapods clean
+.PHONY: all help check build build-ios build-android build-rn test test-ios test-android test-rn format format-ios lint lint-ios lint-android lint-pod lint-actions zizmor run-example-ios run-example-android run-example-rn version submit-version publish-cocoapods publish-maven clean
 
 help:
 	@echo "Poltio Mobile SDK - Monorepo Makefile Commands:"
@@ -30,6 +30,7 @@ help:
 	@echo "  make version             - Bump version across all SDK manifests"
 	@echo "  make submit-version      - Tag release and trigger publishing"
 	@echo "  make publish-cocoapods   - Publish iOS SDK to CocoaPods Trunk"
+	@echo "  make publish-maven       - Publish Android SDK to Maven Central"
 	@echo "  make clean               - Clean build artifacts across all platforms"
 
 check:
@@ -237,6 +238,14 @@ publish-cocoapods:
 	else \
 		echo "Error: CocoaPods is not installed. Install via: brew install cocoapods or sudo gem install cocoapods"; \
 		exit 1; \
+	fi
+
+publish-maven:
+	@echo "==> Publishing PoltioSDK $(VERSION) to Maven Central..."
+	@if [ -d "android" ] && [ -f "android/gradlew" ]; then \
+		cd android && ./gradlew :poltio-sdk:publishAndReleaseToMavenCentral -PlibVersion=$(VERSION) --no-configuration-cache; \
+	else \
+		echo "Android SDK not initialized yet."; \
 	fi
 
 clean:
