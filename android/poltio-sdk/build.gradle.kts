@@ -1,7 +1,12 @@
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
+    id("com.vanniktech.maven.publish")
 }
+
+// Pinned to 0.34.0 — see android/build.gradle.kts for the AGP/Gradle compatibility note.
+
+version = "0.0.3"
 
 android {
     namespace = "com.poltio.sdk"
@@ -55,4 +60,40 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.11.1")
     testImplementation("androidx.test:core:1.5.0")
+}
+
+mavenPublishing {
+    publishToMavenCentral()
+    signAllPublications()
+
+    coordinates("com.poltio", "poltio-sdk", version.toString())
+
+    pom {
+        name.set("Poltio SDK")
+        description.set("Poltio Mobile SDK for Android")
+        inceptionYear.set("2025")
+        url.set("https://github.com/Poltio/mobileSDK")
+
+        licenses {
+            license {
+                name.set("MIT License")
+                url.set("https://github.com/Poltio/mobileSDK/blob/main/LICENSE")
+                distribution.set("repo")
+            }
+        }
+
+        developers {
+            developer {
+                id.set("poltio")
+                name.set("Poltio")
+                email.set("dev@poltio.com")
+            }
+        }
+
+        scm {
+            url.set("https://github.com/Poltio/mobileSDK")
+            connection.set("scm:git:git://github.com/Poltio/mobileSDK.git")
+            developerConnection.set("scm:git:ssh://git@github.com/Poltio/mobileSDK.git")
+        }
+    }
 }
