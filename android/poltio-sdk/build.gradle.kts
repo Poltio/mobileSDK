@@ -6,7 +6,10 @@ plugins {
 
 // Pinned to 0.34.0 — see android/build.gradle.kts for the AGP/Gradle compatibility note.
 
-version = "0.0.3"
+// The real version is injected at publish time via -PlibVersion=<release tag>
+// (see .github/workflows/publish-maven.yaml). This default only backs local
+// assembleRelease/lintDebug runs, which don't need a real Maven Central version.
+version = (findProperty("libVersion") as String?) ?: "0.0.1-SNAPSHOT"
 
 android {
     namespace = "com.poltio.sdk"

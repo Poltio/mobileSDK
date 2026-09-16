@@ -241,9 +241,9 @@ publish-cocoapods:
 	fi
 
 publish-maven:
-	@echo "==> Publishing PoltioSDK to Maven Central..."
+	@echo "==> Publishing PoltioSDK $(VERSION) to Maven Central..."
 	@if [ -d "android" ] && [ -f "android/gradlew" ]; then \
-		cd android && ./gradlew :poltio-sdk:publishAndReleaseToMavenCentral --no-configuration-cache; \
+		cd android && ./gradlew :poltio-sdk:publishAndReleaseToMavenCentral -PlibVersion=$(VERSION) --no-configuration-cache; \
 	else \
 		echo "Android SDK not initialized yet."; \
 	fi

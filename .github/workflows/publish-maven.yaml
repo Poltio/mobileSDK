@@ -5,6 +5,10 @@ on:
     types:
       - published
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g. 1.2.3). Required when dispatched manually — release runs use the release tag instead."
+        required: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -36,25 +40,28 @@ jobs:
         with:
           cache-disabled: true
 
-      - name: Sync Gradle Version
+      - name: Resolve release version
+        id: version
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          MANUAL_VERSION: ${{ github.event.inputs.version }}
         run: |
-          VERSION="${RELEASE_TAG#v}"
-          if [ -n "$VERSION" ] && [ "$VERSION" != "main" ] && [ "$VERSION" != "master" ]; then
-            echo "Syncing android/poltio-sdk/build.gradle.kts version to '${VERSION}' from tag '${RELEASE_TAG}'..."
-            chmod +x scripts/bump-version.sh
-            ./scripts/bump-version.sh "$VERSION"
-          else
-            echo "No release tag detected. Using existing manifest version."
+          VERSION="${MANUAL_VERSION:-${RELEASE_TAG#v}}"
+          if [ -z "$VERSION" ]; then
+            echo "No version resolved: pass 'version' when dispatching manually, or run this from a published release." >&2
+            exit 1
           fi
+          echo "Publishing version '${VERSION}'."
+          echo "value=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Publish to Maven Central
         env:
+          LIB_VERSION: ${{ steps.version.outputs.value }}
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.GPG_SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.GPG_SIGNING_KEY_ID }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.GPG_SIGNING_KEY_PASSWORD }}
         run: |
-          cd android && ./gradlew :poltio-sdk:publishAndReleaseToMavenCentral --no-configuration-cache
+          cd android && ./gradlew :poltio-sdk:publishAndReleaseToMavenCentral \
+            -PlibVersion="${LIB_VERSION}" --no-configuration-cache
