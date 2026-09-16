@@ -77,7 +77,7 @@ mavenPublishing {
         licenses {
             license {
                 name.set("MIT License")
-                url.set("https://github.com/Poltio/mobileSDK/blob/main/LICENSE")
+                url.set("https://opensource.org/license/mit")
                 distribution.set("repo")
             }
         }
