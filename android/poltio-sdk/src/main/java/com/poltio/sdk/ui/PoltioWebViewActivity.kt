@@ -379,7 +379,13 @@ class PoltioWebViewActivity : Activity() {
         }
         webView = null
         super.onDestroy()
-        notifyDismiss()
+        // A configuration change (e.g. rotation) destroys and recreates this Activity without
+        // ever calling `presentWidgetWebView` again — `notifyDismiss()` must not fire here, or it
+        // would tell the overlay manager to bring the floating trigger back while the sheet is
+        // about to reappear right on top of it.
+        if (!isChangingConfigurations) {
+            notifyDismiss()
+        }
     }
 
     private fun jsonObjectToMap(json: JSONObject): Map<String, Any?> {

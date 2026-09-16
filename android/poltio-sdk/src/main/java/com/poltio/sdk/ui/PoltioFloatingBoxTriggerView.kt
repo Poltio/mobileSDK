@@ -297,11 +297,13 @@ internal class PoltioFloatingBoxTriggerView(
             } catch (error: Exception) {
                 null
             } ?: return@submit
+            // No `isAttachedToWindow` gate here: `loadBannerImage()` runs from `init`, before this
+            // view is attached to the overlay, so a fast (e.g. cached) response could otherwise
+            // have its result silently dropped. Setting a bitmap on a not-yet-attached ImageView
+            // is safe — it renders correctly once the view is actually laid out.
             PoltioExecutors.runOnMain {
-                if (isAttachedToWindow) {
-                    bannerImageView.setImageBitmap(bitmap)
-                    bannerFallback.visibility = View.GONE
-                }
+                bannerImageView.setImageBitmap(bitmap)
+                bannerFallback.visibility = View.GONE
             }
         }
     }

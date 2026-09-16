@@ -59,16 +59,16 @@ internal class PoltioTriggerIconLoader(private val container: ViewGroup, private
             val text = runCatching { String(bytes, Charsets.UTF_8) }.getOrNull()
             val isSvgContent = isSvgFile || (text?.contains("<svg") == true)
 
+            // No `isAttachedToWindow` gate here: `load()` is called from the trigger views'
+            // constructors, before `anchor` is attached to the overlay — a fast response would
+            // otherwise have its result silently dropped. Rendering into an image/WebView that
+            // isn't attached yet is safe; it displays correctly once actually laid out.
             if (isSvgContent && text != null) {
-                PoltioExecutors.runOnMain {
-                    if (anchor.isAttachedToWindow) showSvg(text, anchor, onLoaded)
-                }
+                PoltioExecutors.runOnMain { showSvg(text, anchor, onLoaded) }
             } else {
                 val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                 if (bitmap != null) {
-                    PoltioExecutors.runOnMain {
-                        if (anchor.isAttachedToWindow) showImage(bitmap, anchor, onLoaded)
-                    }
+                    PoltioExecutors.runOnMain { showImage(bitmap, anchor, onLoaded) }
                 }
             }
         }
