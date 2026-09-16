@@ -215,6 +215,25 @@ class PoltioWebViewActivity : Activity() {
                     progressBar.visibility = View.GONE
                     PoltioLogger.error { "Webview navigation failed: ${error?.description}" }
                 }
+
+                // The JS bridge (`window.PoltioNativeBridge`) is exposed to whatever page is
+                // currently loaded — an untrusted external site reached via a redirect or a
+                // tapped link inside the widget would otherwise gain the same access. Keep
+                // navigation confined to Poltio's own domain and hand anything else to the
+                // system browser instead of letting the WebView follow it.
+                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                    val url = request?.url ?: return false
+                    val host = url.host
+                    if (host != null && (host == "poltio.com" || host.endsWith(".poltio.com"))) {
+                        return false
+                    }
+                    try {
+                        view?.context?.startActivity(Intent(Intent.ACTION_VIEW, url))
+                    } catch (error: Exception) {
+                        PoltioLogger.error { "Failed to open external URL: ${error.message}" }
+                    }
+                    return true
+                }
             }
         }
         this.webView = webView

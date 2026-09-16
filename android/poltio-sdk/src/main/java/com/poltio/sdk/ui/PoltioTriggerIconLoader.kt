@@ -26,7 +26,15 @@ internal class PoltioTriggerIconLoader(private val container: ViewGroup, private
 
     fun dispose() {
         inFlight?.cancel(true)
-        svgWebView?.let { webView -> PoltioExecutors.runOnMain { webView.stopLoading() } }
+        svgWebView?.let { webView ->
+            PoltioExecutors.runOnMain {
+                webView.stopLoading()
+                container.removeView(webView)
+                webView.destroy()
+            }
+        }
+        svgWebView = null
+        imageView = null
     }
 
     /**
@@ -52,11 +60,15 @@ internal class PoltioTriggerIconLoader(private val container: ViewGroup, private
             val isSvgContent = isSvgFile || (text?.contains("<svg") == true)
 
             if (isSvgContent && text != null) {
-                PoltioExecutors.runOnMain { showSvg(text, anchor, onLoaded) }
+                PoltioExecutors.runOnMain {
+                    if (anchor.isAttachedToWindow) showSvg(text, anchor, onLoaded)
+                }
             } else {
                 val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                 if (bitmap != null) {
-                    PoltioExecutors.runOnMain { showImage(bitmap, anchor, onLoaded) }
+                    PoltioExecutors.runOnMain {
+                        if (anchor.isAttachedToWindow) showImage(bitmap, anchor, onLoaded)
+                    }
                 }
             }
         }

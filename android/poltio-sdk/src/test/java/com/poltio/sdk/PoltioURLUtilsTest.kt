@@ -2,7 +2,11 @@ package com.poltio.sdk
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
+// `android.net.Uri`'s real implementation (not the "not mocked" stub) is only available under Robolectric.
+@RunWith(RobolectricTestRunner::class)
 class PoltioURLUtilsTest {
     @Test
     fun `blank input falls back to default URL`() {

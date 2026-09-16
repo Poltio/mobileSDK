@@ -1,7 +1,7 @@
 package com.poltio.sdk
 
+import android.net.Uri
 import java.net.URI
-import java.net.URLDecoder
 
 /**
  * Broader than a typical "query allowed" set: covers characters valid, unescaped, anywhere in a
@@ -39,12 +39,14 @@ internal fun sanitizeOrFormatURL(rawInput: String): String {
         // Normalize by decoding any existing percent-escapes back to raw characters first, then
         // re-encoding the whole thing from scratch. This handles literal unescaped characters
         // (spaces, etc.) and stray/invalid '%' signs (e.g. "50%off" -> "50%25off") consistently,
-        // without double-encoding already-valid sequences (e.g. "%20" staying "%20").
-        val decoded = try {
-            URLDecoder.decode(trimmed, "UTF-8")
-        } catch (error: Exception) {
-            trimmed
-        }
+        // without double-encoding already-valid sequences (e.g. "%20" staying "%20"). Uses
+        // `Uri.decode` rather than `URLDecoder` — the latter is meant for
+        // `application/x-www-form-urlencoded` query strings and would incorrectly turn a literal
+        // '+' anywhere in the URL into a space. Unlike `URLDecoder`, `Uri.decode` never throws on
+        // a malformed escape — it silently substitutes replacement bytes instead — so a malformed
+        // escape is detected up front and decoding is skipped entirely for the whole string
+        // (matching iOS's `removingPercentEncoding`, which returns nil the same way).
+        val decoded = if (hasOnlyWellFormedPercentEscapes(trimmed)) Uri.decode(trimmed) else trimmed
         val encoded = encodeAllowing(decoded, POLTIO_URL_ALLOWED_CHARS)
         return if (isWellFormedUrl(encoded)) encoded else trimmed
     }
@@ -54,6 +56,22 @@ internal fun sanitizeOrFormatURL(rawInput: String): String {
     val cleanPath = trimmed.trim('/')
     return "https://app.poltio.com/$cleanPath"
 }
+
+/** Whether every `%` in [s] is followed by exactly two hex digits — i.e. safe to percent-decode. */
+private fun hasOnlyWellFormedPercentEscapes(s: String): Boolean {
+    var i = 0
+    while (i < s.length) {
+        if (s[i] == '%') {
+            if (i + 2 >= s.length || !isHexDigit(s[i + 1]) || !isHexDigit(s[i + 2])) return false
+            i += 3
+        } else {
+            i++
+        }
+    }
+    return true
+}
+
+private fun isHexDigit(c: Char): Boolean = c in '0'..'9' || c in 'a'..'f' || c in 'A'..'F'
 
 private fun isWellFormedUrl(candidate: String): Boolean = try {
     val uri = URI(candidate)

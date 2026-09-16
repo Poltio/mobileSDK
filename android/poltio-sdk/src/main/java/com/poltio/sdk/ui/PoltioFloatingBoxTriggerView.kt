@@ -298,8 +298,10 @@ internal class PoltioFloatingBoxTriggerView(
                 null
             } ?: return@submit
             PoltioExecutors.runOnMain {
-                bannerImageView.setImageBitmap(bitmap)
-                bannerFallback.visibility = View.GONE
+                if (isAttachedToWindow) {
+                    bannerImageView.setImageBitmap(bitmap)
+                    bannerFallback.visibility = View.GONE
+                }
             }
         }
     }

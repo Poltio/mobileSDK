@@ -19,10 +19,14 @@ internal object PoltioTriggerDismissalStore {
         return nowMs < dismissedUntil
     }
 
-    /** Records that [publicId] was explicitly closed; it will be suppressed for [hours] from now. */
+    /**
+     * Records that [publicId] was explicitly closed; it will be suppressed for [hours] from now.
+     * Also prunes any already-expired entries, so this bag doesn't grow unbounded over the life
+     * of an install as new widgets get dismissed over time.
+     */
     fun recordDismissal(context: Context, publicId: String, hours: Double, nowMs: Long = System.currentTimeMillis()) {
         if (hours <= 0) return
-        val stored = load(context).toMutableMap()
+        val stored = load(context).filterValues { nowMs < it }.toMutableMap()
         stored[publicId] = nowMs + (hours * 3_600_000.0).toLong()
         save(context, stored)
     }
