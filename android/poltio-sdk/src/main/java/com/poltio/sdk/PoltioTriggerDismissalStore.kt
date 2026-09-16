@@ -14,6 +14,7 @@ internal object PoltioTriggerDismissalStore {
     private const val STORAGE_KEY = "trigger_dismissals"
 
     /** Returns whether [publicId] is currently within an active "remember" dismissal window. */
+    @Synchronized
     fun isDismissed(context: Context, publicId: String, nowMs: Long = System.currentTimeMillis()): Boolean {
         val dismissedUntil = load(context)[publicId] ?: return false
         return nowMs < dismissedUntil
@@ -22,8 +23,11 @@ internal object PoltioTriggerDismissalStore {
     /**
      * Records that [publicId] was explicitly closed; it will be suppressed for [hours] from now.
      * Also prunes any already-expired entries, so this bag doesn't grow unbounded over the life
-     * of an install as new widgets get dismissed over time.
+     * of an install as new widgets get dismissed over time. `@Synchronized` because this is a
+     * read-modify-write over `SharedPreferences` — concurrent dismissals from different trigger
+     * views could otherwise race and silently drop one another's update.
      */
+    @Synchronized
     fun recordDismissal(context: Context, publicId: String, hours: Double, nowMs: Long = System.currentTimeMillis()) {
         if (hours <= 0) return
         val stored = load(context).filterValues { nowMs < it }.toMutableMap()

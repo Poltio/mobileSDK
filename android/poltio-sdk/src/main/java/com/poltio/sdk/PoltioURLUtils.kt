@@ -17,6 +17,10 @@ private val POLTIO_URL_ALLOWED_CHARS: Set<Char> = buildSet {
     "-._~:/?#[]@!$&'()*+,;=".forEach { add(it) }
 }
 
+/** The non-alphanumeric subset of [POLTIO_URL_ALLOWED_CHARS], as the `allow` string `Uri.encode` expects. */
+private val POLTIO_URL_ALLOWED_SYMBOLS: String =
+    POLTIO_URL_ALLOWED_CHARS.filterNot { it.isLetterOrDigit() }.joinToString("")
+
 /**
  * Sanitizes or formats a raw URL string to guarantee it contains a scheme and host required by
  * the API.
@@ -47,7 +51,7 @@ internal fun sanitizeOrFormatURL(rawInput: String): String {
         // escape is detected up front and decoding is skipped entirely for the whole string
         // (matching iOS's `removingPercentEncoding`, which returns nil the same way).
         val decoded = if (hasOnlyWellFormedPercentEscapes(trimmed)) Uri.decode(trimmed) else trimmed
-        val encoded = encodeAllowing(decoded, POLTIO_URL_ALLOWED_CHARS)
+        val encoded = encodeAllowing(decoded)
         return if (isWellFormedUrl(encoded)) encoded else trimmed
     }
 
@@ -80,17 +84,11 @@ private fun isWellFormedUrl(candidate: String): Boolean = try {
     false
 }
 
-private fun encodeAllowing(input: String, allowed: Set<Char>): String {
-    val builder = StringBuilder()
-    for (ch in input) {
-        if (ch in allowed) {
-            builder.append(ch)
-        } else {
-            for (byte in ch.toString().toByteArray(Charsets.UTF_8)) {
-                builder.append('%')
-                builder.append(String.format("%02X", byte))
-            }
-        }
-    }
-    return builder.toString()
-}
+/**
+ * Percent-encodes everything in [input] outside [POLTIO_URL_ALLOWED_SYMBOLS] (plus the
+ * alphanumerics `Uri.encode` always treats as safe). Delegates to `Uri.encode` rather than a
+ * hand-rolled `Char`-by-`Char` loop — Kotlin `String`s iterate UTF-16 code *units*, so a manual
+ * loop splits surrogate pairs (e.g. emoji) and mangles them into `%EF%BF%BD` replacement bytes;
+ * `Uri.encode` operates on whole code points and encodes them correctly.
+ */
+private fun encodeAllowing(input: String): String = Uri.encode(input, POLTIO_URL_ALLOWED_SYMBOLS)

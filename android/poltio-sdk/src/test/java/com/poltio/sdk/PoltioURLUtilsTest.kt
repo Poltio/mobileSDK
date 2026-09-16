@@ -39,4 +39,11 @@ class PoltioURLUtilsTest {
     fun `stray percent signs are escaped`() {
         assertEquals("https://app.poltio.com/50%25off", sanitizeOrFormatURL("https://app.poltio.com/50%off"))
     }
+
+    @Test
+    fun `characters outside the BMP are encoded as whole code points, not split surrogates`() {
+        // U+1F600 GRINNING FACE is a surrogate pair in UTF-16; a naive Char-by-Char encoder
+        // mangles each half into a replacement byte (%EF%BF%BD) instead of the real UTF-8 bytes.
+        assertEquals("https://app.poltio.com/%F0%9F%98%80", sanitizeOrFormatURL("https://app.poltio.com/😀"))
+    }
 }

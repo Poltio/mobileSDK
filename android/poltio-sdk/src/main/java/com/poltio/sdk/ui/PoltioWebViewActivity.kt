@@ -12,6 +12,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.VelocityTracker
 import android.view.View
+import android.view.ViewGroup
 import android.view.ViewOutlineProvider
 import android.view.animation.AccelerateInterpolator
 import android.view.animation.DecelerateInterpolator
@@ -28,6 +29,7 @@ import com.poltio.sdk.PoltioExecutors
 import com.poltio.sdk.PoltioLogger
 import com.poltio.sdk.PoltioOverlayOptions
 import com.poltio.sdk.PoltioSDK
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -369,7 +371,12 @@ class PoltioWebViewActivity : Activity() {
 
     override fun onDestroy() {
         cleanupWebView()
-        webView?.destroy()
+        // Destroying a WebView while it's still attached to its parent can crash or leak on some
+        // Android/WebView versions — detach it from the view hierarchy first.
+        webView?.let { view ->
+            (view.parent as? ViewGroup)?.removeView(view)
+            view.destroy()
+        }
         webView = null
         super.onDestroy()
         notifyDismiss()
@@ -380,11 +387,19 @@ class PoltioWebViewActivity : Activity() {
         val keys = json.keys()
         while (keys.hasNext()) {
             val key = keys.next()
-            map[key] = when (val value = json.opt(key)) {
-                JSONObject.NULL -> null
-                else -> value
-            }
+            map[key] = convertJsonValue(json.opt(key))
         }
         return map
+    }
+
+    private fun jsonArrayToList(array: JSONArray): List<Any?> =
+        (0 until array.length()).map { convertJsonValue(array.opt(it)) }
+
+    /** Recursively converts nested `org.json` types so host apps only ever see plain `Map`/`List`. */
+    private fun convertJsonValue(value: Any?): Any? = when (value) {
+        JSONObject.NULL -> null
+        is JSONObject -> jsonObjectToMap(value)
+        is JSONArray -> jsonArrayToList(value)
+        else -> value
     }
 }

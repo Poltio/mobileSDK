@@ -26,6 +26,7 @@ internal class PoltioWidgetCache(
     var defaultTTL: Double = defaultTTLSeconds
 
     /** Maximum number of items retained in the cache before older items are evicted (default is 100). */
+    @Volatile
     var countLimit: Int = countLimit
         set(value) {
             field = value
