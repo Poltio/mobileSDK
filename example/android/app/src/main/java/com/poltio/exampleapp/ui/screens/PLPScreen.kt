@@ -42,7 +42,7 @@ fun PLPScreen(
     val products = SampleCatalog.getByCategory(category)
 
     LaunchedEffect(category) {
-        PoltioSDKPlaceholder.trackScreen("Category / $category")
+        PoltioSDKPlaceholder.trackScreen("Category / $category", url = "example://plp/${category.lowercase()}")
     }
 
     LazyColumn(

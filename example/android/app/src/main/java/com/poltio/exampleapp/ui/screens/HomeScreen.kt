@@ -45,7 +45,7 @@ fun HomeScreen(
     onNavigateProduct: (String) -> Unit
 ) {
     LaunchedEffect(Unit) {
-        PoltioSDKPlaceholder.trackScreen("Home / Landing")
+        PoltioSDKPlaceholder.trackScreen("Home / Landing", url = "example://home")
     }
 
     LazyColumn(

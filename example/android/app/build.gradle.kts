@@ -1,6 +1,18 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+}
+
+// `local.properties` is git-ignored (see .gitignore), exactly like the `sdk.dir` entry Android
+// Studio already writes there — the same pattern the iOS example app uses via its git-ignored
+// `*.xcscheme` (POLTIO_CLIENT_KEY environment variable). Add a line there to point the example
+// app at a real client key without ever committing it:
+//   POLTIO_CLIENT_KEY=poltio_pk_live_...
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use(::load)
 }
 
 android {
@@ -18,6 +30,14 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        // Precedence: CI/shell env var > local.properties > harmless placeholder (a fresh clone
+        // still builds and runs with no real client key configured — it just won't resolve any
+        // real widgets, matching how the SDK itself treats an unrecognized key).
+        val clientKey = System.getenv("POLTIO_CLIENT_KEY")
+            ?: localProperties.getProperty("POLTIO_CLIENT_KEY")
+            ?: "poltio_test_pk_12345"
+        buildConfigField("String", "POLTIO_CLIENT_KEY", "\"$clientKey\"")
     }
 
     buildTypes {
@@ -38,6 +58,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.8"
@@ -61,6 +82,6 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
-    // Local Android SDK dependency (when created)
-    // implementation(project(":poltio-sdk"))
+    // Local Android SDK dependency
+    implementation(project(":poltio-sdk"))
 }

@@ -20,12 +20,10 @@ if [ -f "ios/PoltioSDK.podspec" ]; then
     echo "  ✅ Updated ios/PoltioSDK.podspec -> ${NEW_VERSION}"
 fi
 
-# 2. Android Gradle manifest (if present)
-if [ -f "android/poltio-sdk/build.gradle.kts" ]; then
-    sed -i.bak -E "s/^([[:space:]]*)version[[:space:]]*=[[:space:]]*['\"][^'\"]+['\"]/\\1version = \"${NEW_VERSION}\"/" android/poltio-sdk/build.gradle.kts
-    rm -f android/poltio-sdk/build.gradle.kts.bak
-    echo "  ✅ Updated android/poltio-sdk/build.gradle.kts -> ${NEW_VERSION}"
-fi
+# 2. Android Gradle manifest — intentionally not touched here. The published
+# version is injected at publish time via -PlibVersion=<version> (see
+# .github/workflows/publish-maven.yaml), since Gradle takes CLI properties
+# natively and doesn't need a checked-in file mutated the way the podspec does.
 
 # 3. React Native package.json (if present)
 if [ -f "react-native/package.json" ]; then
