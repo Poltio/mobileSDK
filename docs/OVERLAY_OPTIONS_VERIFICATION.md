@@ -137,6 +137,48 @@ confirmed via pixel-sampling the screenshot (`docs/screenshots/ios/pill_icon_col
 the icon now renders the correct `rgb(74, 85, 101)` grey, matching Android and web exactly.
 Unit tests + swiftformat still pass.
 
+## Feature added — card now reveals on scroll (matching web, differently from box/pill)
+
+Continuing the same source-reading approach used for box and pill, read web's actual `core.ts`
+(card's generic engine, shared with the underlying first/second/third reveal machinery) before
+assuming the same box/pill fix would apply. It doesn't, cleanly — card's web mechanism is a
+**different, one-way** pattern:
+
+```js
+document.addEventListener('scroll', () => {
+  const scrollHeight = document.documentElement.scrollTop || document.body.scrollTop || 0;
+  if (scrollHeight > (scrollThreshold ?? 300)) {
+    if (clickElem.classList.contains('first')) {
+      clickElem.classList.remove('first');
+      clickElem.classList.add('second'); // reveals the expanded card
+      controller.abort(); // one-shot
+    }
+  }
+});
+```
+
+No `setTimeout` re-collapse anywhere near this — once scrolled past `scrollThreshold` (default
+`300`, read from `floating-scroll-threshold` — already modeled on both mobile platforms as
+`floatingScrollThreshold`, just never consumed), the card reveals itself and **stays revealed**
+until the user closes it or taps to open the full widget. This matches mobile's card, which already
+has no auto-collapse timer of its own (confirmed by grep — zero matches for
+`autoCollapse`/`scrollObserver` in either platform's card view, unlike box/pill).
+
+**Implemented** on both platforms by extending the shared `PoltioScrollObserver`/`.kt` with a new,
+separate one-shot API (`onScrollPast(threshold:callback:)` on iOS,
+`onScrollPast(activity, thresholdDp, callback)` on Android) that self-manages its own one-shot
+lifecycle — cleaner than box/pill's manual `hasAutoOpenedFromScroll` flag, and lets each trigger
+register its own threshold instead of the fixed 100pt/dp the box/pill's existing notification uses.
+The card trigger now calls this once at init with `floatingScrollThreshold`, expanding itself the
+first time it fires (guarded by `currentState == .collapsed`, in case the user already tapped it
+open manually) — no auto-collapse added, since card's web behavior doesn't have one either.
+
+**Verified live on both platforms**: set `floating-scroll-threshold: "50"` on widget 401 for a fast
+test, confirmed a swipe/scroll on the TVs screen reveals the card fully expanded on both iOS and
+Android — and, unlike box/pill, it **stays expanded** after 6+ seconds untouched, confirming no
+stray auto-collapse was accidentally introduced. Reverted the test threshold back to unset (default
+300) afterward.
+
 ## Fixed — box header background stripe was mapped to the wrong element
 
 While doing a full parameter-by-parameter box audit (per the user's request to get one trigger type
@@ -323,10 +365,8 @@ platform difference rather than something to remove for stricter web parity.
 
 ## Known, accepted gaps (not fixed — documented behavior, not bugs)
 
-- `floatingScrollThreshold` — only used by the web SDK's card two-stage reveal, a web-specific
-  mechanism with no native equivalent trigger design; decoded for parity only. (`boxOpenOnScroll`
-  moved out of this list — see "Feature added — native `floating-box-open-on-scroll`" below, it's
-  now implemented.)
+- (`floatingScrollThreshold` moved out of this list — see "Feature added — card now reveals on
+  scroll" below, it's now implemented, matching `boxOpenOnScroll` before it.)
 - `productCardEnabled` and all `product_card`-section fields — no native `product_card` trigger
   exists yet on either platform (out of scope for this pass).
 - `parentId` / `parentClassName` / `parentHeight` (`iframe` section) — DOM-embedding-only, no native
@@ -365,13 +405,14 @@ don't have a `Web` column yet — add one when a param in that table is next tes
 | `widget-bg-image` | ⬜ | ⬜ | not wired on either platform — decide if in scope |
 | `floating-title` | ✅ | ✅ | card round 1: "TV Finder Pro" rendered correctly on both |
 | `floating-desc` | ✅ | ✅ | card round 1: rendered correctly on both |
-| `floating-zindex` | ⬜ | 🧩 | Android elevation mapping just added, not yet visually confirmed (needs a competing overlay to be meaningful) |
 | `floating-font-family` | ✅ (fixed) | ✅ | card round 1, value `"serif"`. **Bug found and fixed this session** — iOS ignored the CSS generic keyword `"serif"` (only resolved real font names), so it silently fell back to system font. Now maps generic keywords to `UIFontDescriptor.SystemDesign` — see "Bug found and fixed" section above. Verified visibly serif'd on iOS after the fix, matching Android. |
 | `floating-mobile-top-border-radius` | ✅ | ✅ | card round 1, value `"0.5em"` → 8pt — visibly sharper corners than default on both (confirmed via pixel-zoomed crop on iOS, since the difference is subtle at this radius). **Design note, not a bug**: web's card sits flush against the screen's right edge and only rounds the two left-side corners (asymmetric `16px 0 0 16px`, and the pixel value itself doesn't cleanly map to `0.5em` either — likely a different base/context in web's CSS, not chased further); mobile's card floats with margin on all sides and rounds all four corners uniformly, which is the correct native equivalent of the same "give the panel a custom radius" intent — the shapes are just naturally different given the two different layout approaches. |
 | `floating-hide-button` | ✅ | ✅ | tested `"true"` on widget 401 — trigger fully disappears on web (`display:none`), iOS, and Android alike. Cleared afterward (reverted to unset). |
 | `floating-position` | ✅ | ✅ | tested `"top-left"` on widget 401 (card trigger) — iOS and Android both correctly reposition to the top-left corner, flush against the edges like web's default bottom-right anchoring. **Note**: the web SDK's card/slideover design (per its checked-out source, `core.ts`/`poltio_floating_body_third.ts`) doesn't appear to apply `floating-position` to the card design at all — it stayed bottom-right-anchored on web after the same `update_widget` call that moved it on both native platforms. Not chased further since it's a web-SDK-side behavior, not a mobile SDK gap; mobile is arguably more capable here, not less. Reverted to unset after testing. |
-| `floating-initial-position` | ⬜ | ⬜ | `active`/`expanded`/`collapsed` — box/pill already incidentally exercised via widgets' existing `active` default |
-| `floating-svg` | ⬜ | ⬜ | icon override, remote asset |
+| `floating-initial-position` | ✅ | ✅ | `"expanded"` tested explicitly on card (widget 401) — starts already expanded on load, no tap/scroll needed, confirmed on both platforms. `active`/`collapsed` already incidentally exercised via box/pill's own testing. |
+| `floating-svg` | ✅ | ✅ | tested on card (widget 401) — the custom phone-icon SVG renders correctly in place of the sparkle icon, on both platforms, using the same shared `PoltioTriggerIconLoader` already fixed for the pill icon-color bug earlier this session. |
+| `floating-scroll-threshold` | ✅ | ✅ | **Feature added this session** for the card trigger — see "Feature added — card now reveals on scroll" section below. Default 300pt/dp, matching web's `scrollThreshold ?? 300`; tested at `"50"` for a fast live confirmation. |
+| `floating-zindex` | ⬜ | 🧩 | Android elevation mapping added earlier this session, not yet visually confirmed (needs a competing overlay to be meaningful) — still low priority, not chased this round either. |
 | `floating-product-card-enabled` | ➖ | ➖ | no native product_card trigger |
 
 ### card (widget 401)
@@ -391,9 +432,13 @@ values), `floating-svg`, `floating-zindex` (needs a competing overlay to be mean
 good candidates for a fast next round.
 
 Widget 401's `overlay_options` currently sits at (as of this session, not reverted):
-`{"floating-title":"TV Finder Pro","floating-desc":"Let's find your dream TV, together!","floating-bgcolor":"rgb(174, 174, 209)","floating-buttontext":"Let's Go!","floating-textcolor":"#FFEE00","floating-icon-color":"#FF3B30","floating-font-family":"serif","floating-mobile-top-border-radius":"0.5em","widget-bgcolor":"#FFE9A8"}`
+`{"floating-svg":"widget/1787042301.079.svg","floating-title":"TV Finder Pro","floating-desc":"Let's find your dream TV, together!","floating-bgcolor":"rgb(174, 174, 209)","floating-buttontext":"Let's Go!","floating-textcolor":"#FFEE00","floating-icon-color":"#FF3B30","floating-font-family":"serif","floating-mobile-top-border-radius":"0.5em","widget-bgcolor":"#FFE9A8"}`
 — left as-is; revert to the original `{"floating-desc":"Let's find your perfect new TV together","floating-title":"TV Finder","floating-bgcolor":"rgb(174, 174, 209)"}` only if the user asks.
-(`floating-position` and `floating-hide-button` were also tested this round via two temporary `update_widget` calls each, then explicitly cleared back out again immediately after — not left in the current snapshot above.)
+(`floating-position` and `floating-hide-button` were tested via temporary `update_widget` calls,
+then cleared back out. `floating-scroll-threshold` was temporarily set to `"50"` to test the new
+scroll-reveal feature quickly, then reverted to unset (default 300). `floating-initial-position:
+"expanded"` was also used temporarily to test the icon/initial-position combo, then removed —
+default collapsed-then-scroll-reveal is now the more representative demo state, matching box/pill.)
 
 ### pill (widget 394)
 
@@ -571,11 +616,22 @@ found and fixed" section above the code-fixes list.
   platforms, finally superseding the earlier inconclusive "text overflows, can't see alignment"
   finding. Also doubles as visual confirmation of the header-background-stripe fix (navy header,
   orange body, distinct bands).
+- `docs/screenshots/ios/card_scroll_reveal.png`, `docs/screenshots/android/card_scroll_reveal.png`
+  — card trigger fully expanded from a single scroll/swipe on the TVs screen (`floating-scroll-
+  threshold: "50"` for a fast test), confirming the new native scroll-reveal on both platforms.
+  Screenshotted again 6+ seconds later on both — still expanded, confirming no auto-collapse was
+  accidentally added (unlike box/pill, card is meant to stay open, matching web).
+- `docs/screenshots/ios/card_svg_initialposition.png`,
+  `docs/screenshots/android/card_svg_initialposition.png` — card trigger with
+  `floating-initial-position: "expanded"` and `floating-svg` both set, confirming the card starts
+  already expanded (no interaction needed) and shows the custom phone-icon SVG in place of the
+  sparkle, on both platforms at once.
 
 ## Next steps (in order) — pick up here
 
-**Status: box done, pill done, card next** (per the user's stated priority order: box → pill →
-card, "make sure it's 100% supports all the options and acting same on web then move on").
+**Status: all three trigger types (box, pill, card) are now done**, per the user's stated priority
+order (box → pill → card, "make sure it's 100% supports all the options and acting same on web
+then move on"). Remaining items below are all low-priority cleanup, not new trigger-type work.
 
 1. ~~Debug the iOS "no trigger visible" issue~~ — done, see "RESOLVED" section above.
 2. ~~Box (393) full parity pass~~ — done. Every applicable param confirmed on iOS+Android; found
@@ -591,17 +647,21 @@ card, "make sure it's 100% supports all the options and acting same on web then 
    `PoltioTriggerDismissalStore`. Only `floating-pill-start-mode` remains as an explicit isolated
    test (currently only inferred via a related field) — very low priority given the shared code
    path is already exercised by `floating-initial-position` testing.
-4. **Card next.** Re-check every applicable `common` param the way box/pill just got, not just the
-   `card`-specific table rows: does card need the same auto-collapse-default / scroll-reveal
-   treatment? (Card's web equivalent is `core.ts`'s two-stage first/second/third reveal, driven by
-   `floatingScrollThreshold` — different mechanism from box/pill's `pill.ts`/`box.ts`, worth reading
-   closely before assuming the same fix applies.) Finish `floating-initial-position` (non-active
-   values), `floating-svg`, `floating-zindex` (needs a competing overlay to be meaningful), and the
-   `identity` passthrough params (code-confirmed only so far, no live network capture).
-5. Revert all three test widgets to something close to their original values when done (or leave a
+4. ~~Card (401) full parity pass~~ — done. Read web's `core.ts` first and correctly identified card's
+   scroll behavior as a *different* one-way pattern (reveal-and-stay-open) from box/pill's
+   (reveal-then-auto-collapse) — implemented accordingly via a cleaner self-managing one-shot API
+   added to the shared `PoltioScrollObserver`. Also confirmed `floating-initial-position: "expanded"`
+   and `floating-svg` explicitly (previously only inferred). Verified live on both platforms,
+   including that it correctly does *not* auto-collapse.
+5. Remaining low-priority cleanup across all three triggers: `floating-zindex` (needs a competing
+   overlay to be meaningful — hard to test quickly on any trigger), the `identity` passthrough
+   params (code-confirmed only, no live network capture), `floating-pill-start-mode` (explicit test),
+   `box`/`pill`-`open-on-time`/`close-remember-duration` behavior-only params already covered via
+   debug trace or unit tests.
+6. Revert all three test widgets to something close to their original values when done (or leave a
    note if the user wants the test values kept — widget 401 has NOT been reverted yet, see above).
-6. Add/extend unit tests for `showLogo` parsing (default true / explicit false) on both platforms,
-   since it can't be live-tested. Same for the box/pill auto-collapse timers and scroll-observer
+7. Add/extend unit tests for `showLogo` parsing (default true / explicit false) on both platforms,
+   since it can't be live-tested. Same for the box/pill/card auto-collapse timers and scroll-observer
    logic added this session — currently only manually/live verified, no automated test coverage yet.
 
 ## Session log
@@ -768,3 +828,21 @@ card, "make sure it's 100% supports all the options and acting same on web then 
   only `floating-pill-start-mode` remains as an explicit isolated test, very low priority. Tests
   pass on both platforms, swiftformat clean. Widget 394 left with no `floating-initial-position` as
   a live demonstration of the new default (starts collapsed, reveals on scroll). Next: card.
+- **2026-09-17 (card parity pass — last of the three trigger types)**: Read web's actual `core.ts`
+  before assuming box/pill's fix pattern applied to card too — it doesn't, cleanly. Card's web
+  scroll behavior is a *different*, one-way reveal (past `scrollThreshold`, default 300, already
+  modeled on mobile as `floatingScrollThreshold` but never consumed): it expands once and **stays**
+  expanded, with no auto-collapse timer at all — unlike box/pill's reveal-then-auto-hide pattern.
+  Confirmed mobile's card already has zero auto-collapse logic (matching web's own lack of one), so
+  the only missing piece was the scroll-triggered reveal itself. Refactored `PoltioScrollObserver`/
+  `.kt` to add a cleaner, self-managing one-shot API (`onScrollPast(threshold:callback:)`) alongside
+  the existing box/pill notification-based one, and wired it into the card trigger with
+  `floatingScrollThreshold` as the per-widget-configurable threshold. Verified live on both
+  platforms: a scroll on the TVs screen (`floating-scroll-threshold: "50"` for a fast test) reveals
+  the collapsed card, and it's still expanded 6+ seconds later, untouched — confirming no stray
+  auto-collapse was introduced. Also explicitly tested (previously only inferred)
+  `floating-initial-position: "expanded"` and `floating-svg` together on card — both confirmed on
+  both platforms in one round. Tests pass on both platforms, swiftformat clean. **All three trigger
+  types (box, pill, card) are now considered fully verified against web**, per the user's original
+  request. Widget 401 left with `floating-svg` set as a live demonstration; `floating-scroll-
+  threshold` reverted to unset (default 300).

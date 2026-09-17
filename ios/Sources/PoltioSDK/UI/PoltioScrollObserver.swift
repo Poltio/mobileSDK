@@ -21,6 +21,7 @@
 
         private static let lock = NSLock()
         private static var isInstalled = false
+        private static var pendingThresholds: [(threshold: CGFloat, callback: () -> Void)] = []
 
         /// Installs the swizzle exactly once per process. Safe to call repeatedly/concurrently.
         static func installIfNeeded() {
@@ -38,6 +39,26 @@
             }
             method_exchangeImplementations(originalMethod, swizzledMethod)
         }
+
+        /// Registers a one-shot callback that fires the first time total scroll distance exceeds
+        /// `threshold`, then automatically un-registers itself. Used by triggers with their own
+        /// configurable threshold (the card trigger's `floatingScrollThreshold`, default 300pt,
+        /// matching web), as an alternative to the fixed-`100`pt `didScrollPastThresholdNotification`
+        /// used by the box/pill triggers.
+        static func onScrollPast(_ threshold: CGFloat, callback: @escaping () -> Void) {
+            lock.lock()
+            pendingThresholds.append((threshold, callback))
+            lock.unlock()
+            installIfNeeded()
+        }
+
+        fileprivate static func handleScrolled(_ distance: CGFloat) {
+            lock.lock()
+            let toFire = pendingThresholds.filter { distance > $0.threshold }
+            pendingThresholds.removeAll { distance > $0.threshold }
+            lock.unlock()
+            toFire.forEach { $0.callback() }
+        }
     }
 
     fileprivate extension UIScrollView {
@@ -49,6 +70,7 @@
             if scrolled > PoltioScrollObserver.threshold {
                 NotificationCenter.default.post(name: PoltioScrollObserver.didScrollPastThresholdNotification, object: nil)
             }
+            PoltioScrollObserver.handleScrolled(scrolled)
         }
     }
 #endif

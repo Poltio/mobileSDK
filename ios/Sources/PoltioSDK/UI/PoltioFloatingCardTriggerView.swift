@@ -117,6 +117,7 @@
 
             setupView()
             applyState(currentState, animated: false)
+            setupScrollReveal()
         }
 
         @available(*, unavailable)
@@ -329,6 +330,20 @@
             expandedIconLoader = loader
             loader.load(from: widget.overlayOptions, centeredOn: expandedSparkleIcon) { [weak self] in
                 self?.expandedSparkleIcon.isHidden = true
+            }
+        }
+
+        /// Matches web's card (`core.ts`'s `first` → `second` transition): reveals the collapsed
+        /// card once the host content scrolls past `floatingScrollThreshold` (default 300pt,
+        /// matching web's own `scrollThreshold ?? 300`). One-shot, like web's own scroll listener
+        /// (`controller.abort()`), and — unlike the box/pill triggers — does **not** auto-collapse
+        /// afterward, since web's card doesn't either; it stays expanded until the user interacts.
+        private func setupScrollReveal() {
+            PoltioScrollObserver.onScrollPast(CGFloat(widget.overlayOptions.floatingScrollThreshold)) { [weak self] in
+                DispatchQueue.main.async {
+                    guard let self, self.currentState == .collapsed else { return }
+                    self.setState(.expanded, animated: true)
+                }
             }
         }
 

@@ -12,6 +12,7 @@ import android.view.animation.OvershootInterpolator
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.poltio.sdk.PoltioExecutors
 import com.poltio.sdk.PoltioWidgetResponse
 import kotlin.math.abs
 import kotlin.math.max
@@ -83,6 +84,22 @@ internal class PoltioFloatingCardTriggerView(
         expandedIconLoader.load(widget.overlayOptions, expandedSparkle) { expandedSparkle.visibility = View.GONE }
 
         applyState(currentState, animated = false)
+        setupScrollReveal()
+    }
+
+    /** Matches web's card (`core.ts`'s `first` -> `second` transition): reveals the collapsed card
+     * once the host content scrolls past `floatingScrollThreshold` (default 300dp, matching web's
+     * own `scrollThreshold ?? 300`). One-shot, and — unlike the box/pill triggers — does **not**
+     * auto-collapse afterward, since web's card doesn't either; it stays expanded until the user
+     * interacts. */
+    private fun setupScrollReveal() {
+        (context as? android.app.Activity)?.let { activity ->
+            PoltioScrollObserver.onScrollPast(activity, widget.overlayOptions.floatingScrollThreshold.toFloat()) {
+                PoltioExecutors.runOnMain {
+                    if (currentState == TriggerState.COLLAPSED) setState(TriggerState.EXPANDED, animated = true)
+                }
+            }
+        }
     }
 
     override fun onDetachedFromWindow() {

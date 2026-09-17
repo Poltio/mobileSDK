@@ -24,6 +24,7 @@ internal object PoltioScrollObserver {
 
     private val listeners = mutableSetOf<() -> Unit>()
     private var wrappedActivity: Activity? = null
+    private val pendingThresholds = mutableListOf<Pair<Float, () -> Unit>>()
 
     fun addListener(listener: () -> Unit) {
         synchronized(listeners) { listeners.add(listener) }
@@ -31,6 +32,16 @@ internal object PoltioScrollObserver {
 
     fun removeListener(listener: () -> Unit) {
         synchronized(listeners) { listeners.remove(listener) }
+    }
+
+    /** Registers a one-shot callback that fires the first time total scroll drag distance
+     * exceeds [thresholdDp], then automatically un-registers itself. Used by triggers with their
+     * own configurable threshold (the card trigger's `floatingScrollThreshold`, default 300dp,
+     * matching web), as an alternative to the fixed-100dp [addListener]/[removeListener] pair used
+     * by the box/pill triggers. */
+    fun onScrollPast(activity: Activity, thresholdDp: Float, callback: () -> Unit) {
+        synchronized(pendingThresholds) { pendingThresholds.add(thresholdDp to callback) }
+        installIfNeeded(activity)
     }
 
     /** Installs the wrapper on [activity]'s window if not already installed for it. */
@@ -51,6 +62,15 @@ internal object PoltioScrollObserver {
         snapshot.forEach { it.invoke() }
     }
 
+    private fun handleScrolled(activity: Activity, distancePx: Float) {
+        val toFire = synchronized(pendingThresholds) {
+            val crossed = pendingThresholds.filter { (thresholdDp, _) -> distancePx > activity.dp(thresholdDp) }
+            pendingThresholds.removeAll(crossed)
+            crossed
+        }
+        toFire.forEach { (_, callback) -> callback() }
+    }
+
     private class ScrollObservingCallback(
         private val activity: Activity,
         private val original: Window.Callback,
@@ -62,7 +82,9 @@ internal object PoltioScrollObserver {
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> downY = event.rawY
                 MotionEvent.ACTION_MOVE -> {
-                    if (abs(event.rawY - downY) > thresholdPx) notifyThresholdCrossed()
+                    val distance = abs(event.rawY - downY)
+                    if (distance > thresholdPx) notifyThresholdCrossed()
+                    handleScrolled(activity, distance)
                 }
             }
             return original.dispatchTouchEvent(event)
