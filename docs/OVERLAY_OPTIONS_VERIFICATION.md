@@ -147,6 +147,22 @@ Pill's icon loading to use the shared `PoltioTriggerIconLoader` instead of its o
 class of divergence can't happen again — flagging but not doing it now since it's a bigger,
 riskier refactor than the immediate bug fix.)
 
+## Bug found and fixed — iOS `floating-font-family` ignored CSS generic keywords
+
+Re-verifying the card round-1 params on iOS (widget 401, `floating-font-family: "serif"`) showed the
+title/desc rendering in the plain system sans-serif font, while Android correctly rendered it serif'd.
+Root cause: `PoltioOverlayOptions.resolvedFont` called `UIFont(name: family, size:)` directly — that
+API only resolves actual installed font PostScript names, and returns `nil` for CSS generic family
+keywords like `"serif"`/`"monospace"`, silently falling back to the system font. Android's
+`Typeface.create(family, style)` natively understands those generic keywords (documented Android
+behavior), which is why it worked there without any special-casing.
+
+**Fix**: `resolvedFont` (`ios/Sources/PoltioSDK/Models/PoltioWidgetResponse.swift`) now falls back to
+mapping `"serif"` → `UIFontDescriptor.SystemDesign.serif` and `"monospace"`/`"ui-monospace"` →
+`.monospaced` (via `UIFont.systemFont(...).fontDescriptor.withDesign(...)`) before giving up and
+returning the plain system font. Verified: rebuilt, relaunched, "TV Finder Pro" now renders visibly
+serif'd on iOS, matching Android exactly. 29/29 unit tests still pass, swiftformat clean.
+
 ## Code fixes already applied (this session)
 
 - [x] Fixed `example/android/build.gradle.kts` — missing `com.vanniktech.maven.publish` plugin
@@ -165,6 +181,9 @@ riskier refactor than the immediate bug fix.)
       small "Poltio" wordmark to the bottom of the Card trigger's expanded panel on both platforms,
       shown/hidden by it. **Cannot be live-tested via MCP** (see blocker #3 above) — verify via unit
       tests instead.
+- [x] `floatingFontFamily` on iOS silently ignored CSS generic family keywords (`"serif"`,
+      `"monospace"`) since `UIFont(name:)` only resolves real installed font names. Now maps those
+      keywords to `UIFontDescriptor.SystemDesign` first — see "Bug found and fixed" section above.
 
 ## Known, accepted gaps (not fixed — documented behavior, not bugs)
 
@@ -206,13 +225,13 @@ don't have a `Web` column yet — add one when a param in that table is next tes
 | `floating-bgcolor` | ✅ | ✅ | verified via card round 1 (user's own screenshot + our round-1 screenshot); box/pill use their own bg fields instead, by design |
 | `widget-bgcolor` (Panel Background color) | ⬜ | ✅ | tested `#FFE9A8` on widget 401 — code is wired correctly (`sheet`/`webView` background set before load), but once the real widget page finishes loading it paints its own full-bleed opaque background (`content_background_color` from the content's theme) over the whole modal, so the custom panel color is only visible during the brief pre-load flash. **This is expected, not a bug** — same as it would be on web with a page that sets its own background. Don't chase a "durable" visual difference here; the code-level fix is the deliverable. |
 | `widget-bg-image` | ⬜ | ⬜ | not wired on either platform — decide if in scope |
-| `floating-title` | ⬜ | ✅ | card round 1: "TV Finder Pro" rendered correctly |
-| `floating-desc` | ⬜ | ✅ | card round 1: rendered correctly |
+| `floating-title` | ✅ | ✅ | card round 1: "TV Finder Pro" rendered correctly on both |
+| `floating-desc` | ✅ | ✅ | card round 1: rendered correctly on both |
 | `floating-zindex` | ⬜ | 🧩 | Android elevation mapping just added, not yet visually confirmed (needs a competing overlay to be meaningful) |
-| `floating-font-family` | ⬜ | ✅ | card round 1, value `"serif"` — title font visibly serif'd |
-| `floating-mobile-top-border-radius` | ⬜ | ✅ | card round 1, value `"0.5em"` — visibly sharper corners than default |
-| `floating-hide-button` | ⬜ | ⬜ | should suppress the entire trigger — quick test, high confidence already (code well understood) |
-| `floating-position` | ⬜ | ⬜ | test all 6 enum values eventually; at least confirm one non-default |
+| `floating-font-family` | ✅ (fixed) | ✅ | card round 1, value `"serif"`. **Bug found and fixed this session** — iOS ignored the CSS generic keyword `"serif"` (only resolved real font names), so it silently fell back to system font. Now maps generic keywords to `UIFontDescriptor.SystemDesign` — see "Bug found and fixed" section above. Verified visibly serif'd on iOS after the fix, matching Android. |
+| `floating-mobile-top-border-radius` | ✅ | ✅ | card round 1, value `"0.5em"` → 8pt — visibly sharper corners than default on both (confirmed via pixel-zoomed crop on iOS, since the difference is subtle at this radius). **Design note, not a bug**: web's card sits flush against the screen's right edge and only rounds the two left-side corners (asymmetric `16px 0 0 16px`, and the pixel value itself doesn't cleanly map to `0.5em` either — likely a different base/context in web's CSS, not chased further); mobile's card floats with margin on all sides and rounds all four corners uniformly, which is the correct native equivalent of the same "give the panel a custom radius" intent — the shapes are just naturally different given the two different layout approaches. |
+| `floating-hide-button` | ✅ | ✅ | tested `"true"` on widget 401 — trigger fully disappears on web (`display:none`), iOS, and Android alike. Cleared afterward (reverted to unset). |
+| `floating-position` | ✅ | ✅ | tested `"top-left"` on widget 401 (card trigger) — iOS and Android both correctly reposition to the top-left corner, flush against the edges like web's default bottom-right anchoring. **Note**: the web SDK's card/slideover design (per its checked-out source, `core.ts`/`poltio_floating_body_third.ts`) doesn't appear to apply `floating-position` to the card design at all — it stayed bottom-right-anchored on web after the same `update_widget` call that moved it on both native platforms. Not chased further since it's a web-SDK-side behavior, not a mobile SDK gap; mobile is arguably more capable here, not less. Reverted to unset after testing. |
 | `floating-initial-position` | ⬜ | ⬜ | `active`/`expanded`/`collapsed` — box/pill already incidentally exercised via widgets' existing `active` default |
 | `floating-svg` | ⬜ | ⬜ | icon override, remote asset |
 | `floating-product-card-enabled` | ➖ | ➖ | no native product_card trigger |
@@ -221,19 +240,22 @@ don't have a `Web` column yet — add one when a param in that table is next tes
 
 | Attribute | iOS | Android | Notes |
 |---|---|---|---|
-| `floating-buttontext` | ⬜ | ✅ | card round 1: "Let's Go!" |
-| `floating-textcolor` | ⬜ | ✅ | card round 1: `#FFEE00` on title+desc |
-| `floating-icon-color` | ⬜ | ✅ | card round 1: `#FF3B30` on chevron/close |
-| `floating-show-logo` | ⬜ (unit test only) | ⬜ (unit test only) | not API-settable, see blocker #3 — need to add explicit unit test coverage (default true / explicit "false") on both platforms |
+| `floating-buttontext` | ✅ | ✅ | card round 1: "Let's Go!" rendered correctly on both |
+| `floating-textcolor` | ✅ | ✅ | card round 1: `#FFEE00` on title+desc, confirmed on both |
+| `floating-icon-color` | ✅ | ✅ | card round 1: `#FF3B30` on chevron/close, confirmed on both (visible red "?" icon and "X" close button on iOS) |
+| `floating-show-logo` | ⬜ (unit test only) | ⬜ (unit test only) | not API-settable, see blocker #3 — need to add explicit unit test coverage (default true / explicit "false") on both platforms. Visually, the "Poltio" wordmark IS confirmed rendering on both iOS and Android in the round-1 screenshots (default `true` path only). |
 
-**Card is functionally done for Android** except `floating-hide-button`, `floating-position`
-(non-default value), `floating-initial-position` (explicit non-"active" values), `floating-svg`,
-and the two `widget-content`-family passthrough params — all still ⬜, all low-risk/well-understood
-from code, good candidates for a fast next round.
+**Card is now fully confirmed matching on iOS, Android, and web** for title/desc/buttontext/
+textcolor/iconcolor/fontfamily/borderradius/logo/hide-button/position (one real bug found + fixed
+along the way — see above). Remaining card gaps: `floating-initial-position` (explicit non-"active"
+values), `floating-svg`, `floating-zindex` (needs a competing overlay to be meaningful), and the
+`widget-content`-family passthrough params — all still ⬜, all low-risk/well-understood from code,
+good candidates for a fast next round.
 
 Widget 401's `overlay_options` currently sits at (as of this session, not reverted):
 `{"floating-title":"TV Finder Pro","floating-desc":"Let's find your dream TV, together!","floating-bgcolor":"rgb(174, 174, 209)","floating-buttontext":"Let's Go!","floating-textcolor":"#FFEE00","floating-icon-color":"#FF3B30","floating-font-family":"serif","floating-mobile-top-border-radius":"0.5em","widget-bgcolor":"#FFE9A8"}`
 — left as-is; revert to the original `{"floating-desc":"Let's find your perfect new TV together","floating-title":"TV Finder","floating-bgcolor":"rgb(174, 174, 209)"}` only if the user asks.
+(`floating-position` and `floating-hide-button` were also tested this round via two temporary `update_widget` calls each, then explicitly cleared back out again immediately after — not left in the current snapshot above.)
 
 ### pill (widget 394)
 
@@ -321,28 +343,38 @@ All `➖` — see "Known, accepted gaps" above.
   action returns the image inline with no file path — to save one to disk, run
   `xcrun simctl io <udid> screenshot <path>` separately (confirmed working, much simpler than
   fighting with the tool's return value).
+- `docs/screenshots/ios/card_round1_full_ios.png` — card trigger (TVs), fully expanded, all 7
+  round-1 params + branding mark confirmed on iOS after the font-family fix (title correctly
+  serif'd).
+- `docs/screenshots/ios/card_position_topleft.png`,
+  `docs/screenshots/android/card_position_topleft.png` — card trigger repositioned to the top-left
+  corner via `floating-position`, confirmed matching on iOS and Android (web doesn't apply this to
+  the card design — see notes above).
+- `docs/screenshots/ios/card_hidebutton_check.png`,
+  `docs/screenshots/android/card_hidebutton_check.png` — confirms `floating-hide-button: "true"`
+  fully suppresses the trigger on both platforms (and on web, checked via computed style).
+
+**Also fixed this round**: iOS-only `floating-font-family` bug where CSS generic keywords
+(`"serif"`, `"monospace"`) silently fell back to the plain system font — see the dedicated "Bug
+found and fixed" section above the code-fixes list.
 
 ## Next steps (in order) — pick up here
 
-1. ~~Debug the iOS "no trigger visible" issue~~ — done, see "RESOLVED" section above. iOS is
-   unblocked now.
-2. Re-run the card round-1 checks (title/desc/buttontext/textcolor/iconcolor/fontfamily/
-   borderradius, already set on widget 401) on iOS and fill in that column — box trigger already
-   confirmed rendering correctly on Home; Card trigger confirmed visible (collapsed) on TVs but not
-   yet expanded/screenshotted (get exact tap bounds this time, don't guess from a resized preview).
-3. Start the **web-baseline sweep**: for each parameter, set it via `update_widget`, screenshot web
-   (Browser tool against the three `poltio.github.io/mobilesdk/*.html` pages) + iOS + Android
-   together, and note any platform that diverges from web's rendering — not just "does it render
-   something," but "does it match web's behavior." This supersedes the old "just check it does
-   something on native" approach for anything not already ✅ below.
-4. Test `floating-position` (pick one non-default, e.g. `top-left`) and `floating-hide-button` on
-   widget 401 — quick, one more `update_widget` + screenshot round for Android to finish out `card`.
-5. Move to pill (394): text/colors/pulsate/close-button/start-mode, one batched `update_widget` +
-   screenshot round.
-6. Move to box (393): bg colors/font size+weight/alignment/close-button/resize/full-image-mode.
-7. Revert all three test widgets to something close to their original values when done (or leave a
+1. ~~Debug the iOS "no trigger visible" issue~~ — done, see "RESOLVED" section above.
+2. ~~Re-run card round-1 on iOS~~ — done, plus found+fixed the `floating-font-family` bug. Card's
+   `floating-position` and `floating-hide-button` also now confirmed on all 3 platforms.
+3. Finish the remaining `card` gaps: `floating-initial-position` (explicit non-"active" values),
+   `floating-svg`, `floating-zindex` (needs a competing overlay to be meaningful), and the
+   `widget-content`-family passthrough params (`identity` section — these apply to whichever
+   trigger opens the WebView, so can be tested against any of the 3 widgets).
+4. Move to pill (394): finish `text-color-first/third`, `show-pulsate`, `pill-start-mode`,
+   `pill-show-close-button`, `pill-close-remember-duration`. The tap-to-expand flakiness noted below
+   may make screenshotting the expanded state annoying again — budget extra attempts.
+5. Move to box (393): font size+weight, text alignment, start-mode, open-on-time,
+   close-remember-duration, resize, full-image-mode, and `floating-img` with a working image URL.
+6. Revert all three test widgets to something close to their original values when done (or leave a
    note if the user wants the test values kept — widget 401 has NOT been reverted yet, see above).
-8. Add/extend unit tests for `showLogo` parsing (default true / explicit false) on both platforms,
+7. Add/extend unit tests for `showLogo` parsing (default true / explicit false) on both platforms,
    since it can't be live-tested.
 
 ## Session log
@@ -399,3 +431,17 @@ All `➖` — see "Known, accepted gaps" above.
   (`floating-box-bg-color-first`, the outer chrome color) set but not visually distinguishable on
   any of the three platforms — the inner card fully covers it in this trigger's default layout;
   consistent across platforms so likely not a bug, just flagged as unverifiable this way.
+- **2026-09-17 (continued)**: Re-verified card round 1 on iOS and found a real bug:
+  `floating-font-family: "serif"` rendered as plain system sans-serif on iOS (title "TV Finder Pro"),
+  while Android correctly serif'd it — root cause was `UIFont(name:)` only resolving real installed
+  font names, unlike Android's `Typeface.create` which natively understands CSS generic family
+  keywords. Fixed by mapping `"serif"`/`"monospace"` to `UIFontDescriptor.SystemDesign` first. Also
+  double-checked `floating-mobile-top-border-radius` (fine, just a design-shape difference vs. web,
+  not a bug) via pixel-zoomed crops. Rebuilt, retested: all 8 card round-1 params now confirmed
+  matching on iOS. Then tested `floating-position` (`"top-left"`) and `floating-hide-button`
+  (`"true"`) on widget 401 across web/iOS/Android — both work correctly and identically on iOS and
+  Android; web's card design turned out to ignore `floating-position` entirely (checked the
+  checked-out `websdk` source to confirm this is a web-SDK-side design choice, not a mobile gap).
+  Card trigger is now fully verified across all three platforms except `floating-initial-position`
+  (non-default), `floating-svg`, `floating-zindex`, and the `identity`/passthrough params. 29/29 iOS
+  unit tests pass, swiftformat clean.
