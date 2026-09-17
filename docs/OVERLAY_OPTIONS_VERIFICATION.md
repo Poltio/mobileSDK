@@ -251,12 +251,12 @@ don't have a `Web` column yet — add one when a param in that table is next tes
 
 | Attribute | iOS | Android | Notes |
 |---|---|---|---|
-| `widget-content` | ⬜ | ⬜ | passthrough query param |
-| `widget-custom_id` | ⬜ | ⬜ | passthrough query param |
-| `widget-loc` | ⬜ | ⬜ | passthrough query param |
-| `widget-resultfit` | ⬜ | ⬜ | passthrough query param, enum |
-| `widget-disclaimer` | ⬜ | ⬜ | passthrough query param, enum |
-| `trigger-page-langs` | ⬜ | ⬜ | page-only concept (matches `<html lang>`) — likely N/A natively, confirm |
+| `widget-content` | 🧩 | 🧩 | code-confirmed: `PoltioWebViewController.buildWidgetURL`/`PoltioWebViewActivity.buildWidgetUrl` both read `overlayOptions.content` (from `widget-content`) and append it as the `content` query param verbatim, on both platforms. Not live-network-captured (simple string passthrough, no rendering logic to verify beyond this). |
+| `widget-custom_id` | 🧩 | 🧩 | same code path as above, `custom_id` query param — confirmed wired identically on both. |
+| `widget-loc` | 🧩 | 🧩 | same code path, `loc` query param — confirmed wired identically on both. |
+| `widget-resultfit` | 🧩 | 🧩 | same code path, `resultfit` query param — confirmed wired identically on both. |
+| `widget-disclaimer` | 🧩 | 🧩 | same code path, `disclaimer` query param, defaults to `"off"` on both platforms when unset — confirmed wired identically. |
+| `trigger-page-langs` | ➖ | ➖ | page-only concept (matches `<html lang>`) — no native equivalent, confirmed not referenced anywhere in either SDK's source. Reclassified from ⬜ to ➖ (N/A, not a gap). |
 
 ### common (shared across card/pill/box)
 
@@ -427,10 +427,12 @@ found and fixed" section above the code-fixes list.
 1. ~~Debug the iOS "no trigger visible" issue~~ — done, see "RESOLVED" section above.
 2. ~~Re-run card round-1 on iOS~~ — done, plus found+fixed the `floating-font-family` bug. Card's
    `floating-position` and `floating-hide-button` also now confirmed on all 3 platforms.
-3. Finish the remaining `card` gaps: `floating-initial-position` (explicit non-"active" values),
-   `floating-svg`, `floating-zindex` (needs a competing overlay to be meaningful), and the
-   `widget-content`-family passthrough params (`identity` section — these apply to whichever
-   trigger opens the WebView, so can be tested against any of the 3 widgets).
+3. `identity` section (`widget-content`/`custom_id`/`loc`/`resultfit`/`disclaimer`) is now
+   code-confirmed wired on both platforms (simple query-param passthrough, no live network capture
+   done — low priority to revisit). `trigger-page-langs` confirmed N/A (no native equivalent,
+   unreferenced in either SDK). Remaining `card`-specific gaps: `floating-initial-position`
+   (explicit non-"active" values), `floating-svg`, `floating-zindex` (needs a competing overlay to
+   be meaningful).
 4. Pill (394) is essentially done — only `floating-pill-start-mode` (as its own param, currently
    only inferred via a related field) and `floating-pill-close-remember-duration` (behavior-only,
    hard to visually verify quickly) remain. **If retesting the pill's expanded state, use the
