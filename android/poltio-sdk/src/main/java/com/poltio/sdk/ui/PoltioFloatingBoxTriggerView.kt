@@ -386,10 +386,17 @@ internal class PoltioFloatingBoxTriggerView(
         val openOnTime = widget.overlayOptions.boxOpenOnTime
         if ((openOnTime != null && openOnTime > 0) || !widget.overlayOptions.boxOpenOnScroll) return
         scrollListener = {
-            if (!hasAutoOpenedFromScroll && currentState == TriggerState.COLLAPSED) {
+            // Unregisters on the very first scroll-past-threshold notification regardless of
+            // current state — previously, if the box happened to already be expanded (e.g. a
+            // manual tap) at that moment, the combined guard below skipped entirely, leaving this
+            // listener registered (and re-checked on every subsequent scroll) for the rest of the
+            // view's lifetime instead of behaving as the one-shot it's meant to be.
+            if (!hasAutoOpenedFromScroll) {
                 hasAutoOpenedFromScroll = true
                 PoltioScrollObserver.removeListener(scrollListener)
-                PoltioExecutors.runOnMain { setState(TriggerState.EXPANDED, animated = true) }
+                if (currentState == TriggerState.COLLAPSED) {
+                    PoltioExecutors.runOnMain { setState(TriggerState.EXPANDED, animated = true) }
+                }
             }
         }
         context.findActivity()?.let { PoltioScrollObserver.installIfNeeded(it) }

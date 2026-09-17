@@ -82,6 +82,11 @@
         }
 
         fileprivate static func handleScrolled(_ distance: CGFloat) {
+            // Called on every contentOffset update while scrolling — the common case (no card
+            // trigger currently observing a custom threshold) has nothing to do here, so skip the
+            // lock and list work entirely rather than paying for it on every scroll event. A stale
+            // read outside the lock is fine: worst case is one extra check on the next update.
+            guard !pendingThresholds.isEmpty else { return }
             lock.lock()
             let toFire = pendingThresholds.filter { distance > $0.threshold }
             pendingThresholds.removeAll { distance > $0.threshold }

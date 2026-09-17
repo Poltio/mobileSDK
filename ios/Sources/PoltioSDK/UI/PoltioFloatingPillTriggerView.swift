@@ -559,10 +559,14 @@
         }
 
         @objc private func handleScrollOpenDetected() {
-            guard !hasAutoOpenedFromScroll, currentState == .collapsed else { return }
+            // Unregisters on the very first scroll-past-threshold notification regardless of
+            // current state — see the identical note in the box trigger's equivalent handler.
+            guard !hasAutoOpenedFromScroll else { return }
             hasAutoOpenedFromScroll = true
             NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didScrollPastThresholdNotification, object: nil)
-            setState(.expanded, animated: true)
+            if currentState == .collapsed {
+                setState(.expanded, animated: true)
+            }
         }
 
         /// Auto-collapses an expanded pill while the host page is actively being scrolled, smoothly

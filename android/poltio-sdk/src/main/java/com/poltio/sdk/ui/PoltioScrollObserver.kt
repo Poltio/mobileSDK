@@ -113,6 +113,11 @@ internal object PoltioScrollObserver {
     }
 
     private fun handleScrolled(activity: Activity, distancePx: Float) {
+        // Called on every ACTION_MOVE while a gesture is in progress — the common case (no card
+        // trigger currently observing a custom threshold) has nothing to do here, so skip the lock
+        // and list work entirely rather than paying for it on every touch move. A stale read of
+        // `isEmpty()` outside the lock is fine: worst case is one extra check on the next event.
+        if (pendingThresholds.isEmpty()) return
         val toFire = synchronized(pendingThresholds) {
             val crossed = pendingThresholds.filter { (thresholdDp, _) -> distancePx > activity.dp(thresholdDp) }
             pendingThresholds.removeAll(crossed)

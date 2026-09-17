@@ -187,10 +187,14 @@ internal class PoltioFloatingPillTriggerView(
         // `controller.abort()`.
         var hasAutoOpenedFromScroll = false
         scrollOpenListener = {
-            if (!hasAutoOpenedFromScroll && currentState == TriggerState.COLLAPSED) {
+            // Unregisters on the very first scroll-past-threshold notification regardless of
+            // current state — see the identical note in the box trigger's equivalent listener.
+            if (!hasAutoOpenedFromScroll) {
                 hasAutoOpenedFromScroll = true
                 PoltioScrollObserver.removeListener(scrollOpenListener)
-                PoltioExecutors.runOnMain { setState(TriggerState.EXPANDED, animated = true) }
+                if (currentState == TriggerState.COLLAPSED) {
+                    PoltioExecutors.runOnMain { setState(TriggerState.EXPANDED, animated = true) }
+                }
             }
         }
         context.findActivity()?.let { PoltioScrollObserver.installIfNeeded(it) }

@@ -460,10 +460,17 @@
         }
 
         @objc private func handleScrollDetected() {
-            guard !hasAutoOpenedFromScroll, currentState == .collapsed else { return }
+            // Unregisters on the very first scroll-past-threshold notification regardless of
+            // current state — previously, if the box happened to already be expanded (e.g. a
+            // manual tap) at that moment, the combined guard skipped entirely, leaving this
+            // observer registered (and re-checked on every subsequent scroll) for the rest of the
+            // view's lifetime instead of behaving as the one-shot it's meant to be.
+            guard !hasAutoOpenedFromScroll else { return }
             hasAutoOpenedFromScroll = true
             NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didScrollPastThresholdNotification, object: nil)
-            setState(.expanded, animated: true)
+            if currentState == .collapsed {
+                setState(.expanded, animated: true)
+            }
         }
 
         /// Auto-collapses an expanded box while the host page is actively being scrolled, smoothly

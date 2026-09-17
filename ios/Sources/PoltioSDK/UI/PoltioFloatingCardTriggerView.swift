@@ -402,6 +402,14 @@
             let isExpanded = (state == .expanded)
             if isExpanded {
                 expandedAt = Date()
+                // The scroll-reveal registration (if still pending) has nothing left to do once
+                // already expanded — its own callback checks `currentState == .collapsed` before
+                // acting — so free it now instead of leaving it to be checked against every
+                // further scroll update until it happens to cross the threshold on its own.
+                if let token = scrollRevealToken {
+                    PoltioScrollObserver.cancelScrollPast(token)
+                    scrollRevealToken = nil
+                }
             }
             let targetWidth = isExpanded ? Constants.expandedTotalWidth : Constants.collapsedWidth
 
