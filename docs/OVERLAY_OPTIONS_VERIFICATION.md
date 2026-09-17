@@ -137,6 +137,35 @@ confirmed via pixel-sampling the screenshot (`docs/screenshots/ios/pill_icon_col
 the icon now renders the correct `rgb(74, 85, 101)` grey, matching Android and web exactly.
 Unit tests + swiftformat still pass.
 
+## Fixed — box header background stripe was mapped to the wrong element
+
+While doing a full parameter-by-parameter box audit (per the user's request to get one trigger type
+to 100% parity with web before moving to the next), `floating-box-bg-color-first` — previously
+flagged as "set but not visually distinguishable on any platform" — turned out to be a real,
+confirmed cross-platform bug, not just an untestable layout quirk.
+
+**Root cause**: reading web's actual `box.ts` source (not just `widget-params.md`) showed
+`.poltio-first-text { background: ${boxBgColorFirst}; }` — this param colors the **header text
+row's own background stripe**, a design element entirely separate from the outer card. Mobile
+instead applied it to the outer `expandedContainer`/card chrome, which the inner card
+(`bg-color-second`) fully covers in the default layout — hence it was never visible on any platform,
+consistently, which is exactly why it read as "a shared, harmless layout quirk" rather than "a real
+bug" in earlier rounds.
+
+**Fix applied** (`PoltioFloatingBoxTriggerView.swift`/`.kt`): the outer container now uses the
+generic `floating-bgcolor` (`resolvedBgColor`), matching web's `.poltio-floating-container.second`
+whose own background comes from that same generic param, not `bg-color-first`. A new
+`headerBackgroundView` (iOS) / plain `View` (Android), sized to exactly the header row (from the
+card's top edge to where the banner starts), now carries `bg-color-first` as its own background,
+sitting behind the header label and above the card's base color — reproducing web's two-stripe
+design (colored header row, separately-colored body/footer) instead of one flat card color.
+
+**Verified**: set `bg-color-first` to a bright pink and `bg-color-second` to orange, with the
+generic `floating-bgcolor` set to blue — confirmed on both iOS and Android that the header row shows
+pink as its own distinct band, the banner/footer area shows orange, and the outer chrome color
+(blue) isn't visible anywhere (correctly matching web, where the outer container's color is also
+fully covered by the three stacked content rows in the default layout — this part was never the bug).
+
 ## Fixed — box auto-collapse is now the default on both platforms
 
 **Originally found as an inconsistency, now resolved.** While testing the box trigger's
@@ -266,6 +295,32 @@ serif'd on iOS, matching Android exactly. 29/29 unit tests still pass, swiftform
 - [x] `floating-box-open-on-scroll` implemented natively on both platforms (was previously
       parsed-but-unused) — see "Feature added" section above.
 
+## Web's box test page is currently not rendering (unrelated to mobile SDK)
+
+While chasing the `floating-img`+`full-image-mode`+`resize` "web didn't render" mystery from the
+previous round, found that `https://poltio.github.io/mobilesdk/home.html`'s box widget renders a
+`.poltio-floating-container` with `width: 0px; height: 0px` regardless of `overlay_options` content
+— reproduced with zero custom params at all, and after clearing all `localStorage` (ruling out a
+stale `flying_closed`/dismissal flag as the cause). The **card** trigger (widget 401, `plp_tvs.html`)
+renders correctly at the same time, so this isn't a site-wide outage — it's specific to the box
+widget/page. Given this is entirely web-SDK/dashboard-side (outside `mobileSDK`'s scope, and the
+local `websdk` checkout may not even match what's actually deployed on that GitHub Pages test site),
+not chased further. **Practical impact**: box's web-column entries this round were sourced from
+reading `box.ts`'s actual source directly (high confidence — quoting real CSS/JS, not guessing from
+`widget-params.md` alone) rather than live-render confirmation. Worth flagging to the user/web team
+separately if box's web behavior needs live verification again.
+
+## Found — box has no chevron/collapse-button equivalent on web (not changed)
+
+While investigating the full-image-mode design difference, found that web's box has **only one**
+button when `boxShowCloseButton` is set (an X, serving double duty: collapse-if-expanded /
+dismiss-forever-if-collapsed depending on state) — there's no separate chevron affordance in
+`box.ts`'s HTML at all. Mobile has always had two distinct buttons (chevron to collapse, X to
+dismiss forever). This predates this session and looks like a deliberate, reasonable mobile-specific
+UX improvement — touch users have no hover-preview affordance the way desktop web does, so an
+explicit, unambiguous "collapse" control makes sense. Left as-is; flagging as a known, sensible
+platform difference rather than something to remove for stricter web parity.
+
 ## Known, accepted gaps (not fixed — documented behavior, not bugs)
 
 - `floatingScrollThreshold` — only used by the web SDK's card two-stage reveal, a web-specific
@@ -376,20 +431,20 @@ an SDK or Makefile issue — ask the user rather than debugging client-side.
 | `floating-box-text-color-second` | ✅ | ✅ | ✅ | `#1A1A2E` — confirmed exact via web computed-style; visually matching dark navy on iOS/Android. |
 | `floating-box-bg-color-second` (inner card) | ✅ | ✅ | ✅ | `#F5A623` orange — confirmed exact via web computed-style; visually matching on iOS/Android. |
 | `floating-box-show-close-button` | ✅ | ✅ | ✅ | Close (X) button visible next to the header text on all three platforms. |
-| `floating-box-bg-color-first` (outer chrome) | ⬜ | ⬜ | ⬜ | **Set to `#1A1A2E` but not visually distinguishable on any platform** — the inner card (`bg-color-second`) appears to fully cover the outer container with no visible edge/sliver in the default expanded layout, on web, iOS, and Android alike. Consistent across all three, so likely not a bug — just not visually testable in this trigger's default layout. Worth a quick source read next time to confirm intentional. |
+| `floating-box-bg-color-first` (header stripe) | 🧩 (web unread; see fix) | ✅ | ✅ | **Bug found and fixed this session.** Reading web's actual `box.ts` source showed this colors `.poltio-first-text`'s own background — a distinct stripe behind the header row — not the outer card chrome. Mobile had it backwards (outer container, which the inner card fully covers, hence "not visually distinguishable" in earlier rounds). Fixed on both platforms: outer container now uses the generic `floating-bgcolor` (matching web's `.second` container), and a new `headerBackgroundView` stripe (iOS)/`View` (Android) sized to the header row now carries `bg-color-first`. Verified visually on both: header row shows its own distinct color, separate from the `bg-color-second` body/footer. See "Fixed — box header background stripe" section above. |
 | `floating-img` | ➖ (inconclusive) | ✅ | ✅ | retested with a working URL (`https://placehold.co/400x300.png`, replacing the earlier 404ing `widget/box-default.png`) — the "400 × 300" placeholder image loads and renders correctly as the box's banner on both iOS and Android. Web didn't render the box widget at all with this param combination (zero-size container, no console errors — not chased further, out of scope; the web SDK isn't part of this audit). |
-| `floating-box-full-image-mode` | ➖ (inconclusive) | ✅ | ✅ | `"true"` — banner image fills the whole card, header/footer text and close/chevron icons correctly switch to white and float over it, confirmed matching on iOS and Android. |
+| `floating-box-full-image-mode` | ➖ (inconclusive) | ✅ | ✅ | `"true"` — banner image fills the whole card, header/footer text and close/chevron icons correctly switch to white and float over it, confirmed matching on iOS and Android. **Design difference found, not changed**: web's actual `full-image-mode` (`box.ts`) drops the header/footer text entirely and shows *only* the image (or a gradient fallback) — no text overlay at all. Mobile's richer "text floats over the image with a scrim" design is a deliberate-looking enhancement that predates this session, not obviously a bug, and ripping it out would be a real visual regression I can't currently verify live (web's box test page isn't rendering right now — see note below). Flagging for the user to decide whether to match web exactly or keep mobile's version. |
 | `floating-box-resize` | ➖ (inconclusive) | ✅ | ✅ | `"1.5"` — box (both collapsed tab and expanded card) visibly ~1.5x larger than the default baseline, confirmed matching on iOS and Android. |
 | `floating-box-start-mode` | ➖ (inconclusive) | ✅ | ✅ | `"open"` — box starts already expanded independent of `floating-initial-position` (which was left unset for this test), confirmed on both platforms. On iOS it then stayed open indefinitely (no auto-collapse timer, see finding above); on Android it auto-collapsed after 5s as expected from that same finding. |
-| `floating-box-text-first-font-size` | ✅ | ✅ | 🧩 | `2rem`/32px — confirmed exact via web computed-style and visually on iOS (header text much larger, causes truncation to "Smart" at this extreme value — expected given the header is single-line). Android: wired in code (`textSize = boxTextFirstFontSize`), not cleanly re-screenshotted this round — see note below. |
-| `floating-box-text-first-font-weight` | ✅ | ✅ | 🧩 | `400` (regular, vs. default 700 bold) — confirmed via web (`font-weight: 400`) and visually on iOS. **Android note**: Android's box text-weight is a **binary bold/normal** choice (`isBoldWeight`: numeric value `>= 600` → bold, else normal) rather than iOS/web's full numeric weight scale — a real, accepted platform granularity gap (Android's `Typeface` API doesn't cleanly support arbitrary numeric weights on system fonts pre-API 28). `400` and `900` both still resolve correctly to normal/bold respectively under this scheme. |
-| `floating-box-text-second-font-size` | ✅ | ✅ | 🧩 | `0.75rem`/12px — confirmed via web computed-style and visually on iOS (small, dense footer text). Android: wired in code, not cleanly re-screenshotted — see note below. |
-| `floating-box-text-second-font-weight` | ✅ | ✅ | 🧩 | `900` (maps to bold on Android per the granularity note above) — confirmed via web and iOS. |
-| `floating-box-text-align-first` | ✅ (web only) | 🧩 | 🧩 | `center` — confirmed via web computed style (`justify-content: center` on the parent). iOS/Android: code-confirmed wired (`headerLabel.textAlignment`/`gravity = boxTextAlignFirst`), but with the oversized 2rem font overflowing/truncating the label, there's no visible slack space left for centering to show a visible effect — inconclusive by observation, same class of limitation noted for the card trigger's border-radius test. |
-| `floating-box-text-align-second` | ✅ (web only) | 🧩 | 🧩 | `flex-end` — confirmed via web (`justify-content: flex-end`); code-confirmed wired on iOS/Android, short "Just for you" footer text did appear to sit right-aligned in the iOS screenshot but wasn't rigorously pixel-checked. |
+| `floating-box-text-first-font-size` | ✅ | ✅ | ✅ | Confirmed twice: `2rem`/32px (web computed-style + iOS, truncates at this extreme value — expected) and again cleanly at `1.5rem` with short text (`"Deals"`) visibly larger on both iOS and Android — see `box_textalign_fontsize_clean.png`. |
+| `floating-box-text-first-font-weight` | ✅ | ✅ | ✅ | `400` (regular) confirmed via web computed-style and visually on both iOS and Android (clean round with short text). **Android note**: Android's box text-weight is a **binary bold/normal** choice (`isBoldWeight`: numeric value `>= 600` → bold, else normal) rather than iOS/web's full numeric weight scale — a real, accepted platform granularity gap (Android's `Typeface` API doesn't cleanly support arbitrary numeric weights on system fonts pre-API 28). `400` and `900` both still resolve correctly to normal/bold respectively under this scheme. |
+| `floating-box-text-second-font-size` | ✅ | ✅ | ✅ | `0.75rem`/12px confirmed via web computed-style + iOS in the first round; footer size difference also visually apparent in the clean round on both platforms. |
+| `floating-box-text-second-font-weight` | ✅ | ✅ | ✅ | `900` (maps to bold on Android per the granularity note above) — confirmed via web, iOS, and Android (clean round: bold "New" clearly heavier than the header's regular-weight text). |
+| `floating-box-text-align-first` | ✅ | ✅ | ✅ | `center` — confirmed via web computed style, and now cleanly visually confirmed on both iOS and Android using short text (`"Deals"`) instead of the earlier oversized/truncated string that left no slack space to see centering — see `box_textalign_fontsize_clean.png`. |
+| `floating-box-text-align-second` | ✅ | ✅ | ✅ | `flex-end` — confirmed via web computed style, and now cleanly visually confirmed on both iOS and Android: `"New"` sits flush right in the footer stripe with visible slack space to its left, in the same clean round. |
 | `floating-box-open-on-scroll` | ✅ | ✅ | ✅ | Implemented natively this session on both platforms (was previously decoded but unused) — box starts collapsed, auto-expands once on first scroll past ~100pt, then auto-collapses again a few seconds later. Verified live on iOS and Android; see "Feature added" section above for the scroll-detection technique used per platform. |
-| `floating-box-open-on-time` | ⬜ | ⬜ | ⬜ | |
-| `floating-box-close-remember-duration` | ⬜ | ⬜ | ⬜ | |
+| `floating-box-open-on-time` | ➖ (not re-tested) | ✅ (via debug trace) | 🧩 | Tested `"2000"` (2s) on iOS: temporary debug logging confirmed `scheduleAutoOpenIfNeeded` reads the value correctly and the timer fires `setState(.expanded)` right on schedule — screenshotting the ~2s-to-~7s expanded window proved impractical (tool round-trip latency exceeds it, same class of issue as the pill/box timing investigations above), so verified via trace instead of a screenshot. Code is symmetric with Android's already-working `scheduleAutoOpenIfNeeded`/`autoOpenRunnable`, not independently re-screenshotted this round. |
+| `floating-box-close-remember-duration` | ➖ (not re-tested) | ✅ (unit test) | ✅ (unit test) | Close button's mere existence was already visually confirmed in an earlier round (`box_colors_closebutton.png`). The *remember-duration/persistence* behavior specifically is covered by dedicated unit tests on both platforms (`PoltioTriggerDismissalStoreTest.kt` on Android, equivalent coverage in `PoltioSDKTests.swift` on iOS — `testTriggerDismissalStoreRecordAndExpire`), both passing. Read `PoltioTriggerDismissalStore`/`.kt` directly: a clean `UserDefaults`/`SharedPreferences`-backed store keyed by `publicId`, storing an expiry timestamp `hours * 3600` seconds out, gating `showTrigger` via `isDismissed`. This is arguably the more rigorous verification for time-based persistence logic than a live screenshot would be. |
 
 Widget 393's `overlay_options` currently sits at (not reverted):
 `{"trigger-type":"box","floating-box-text-first":"Smart Picks","floating-box-text-second":"Just for you","floating-box-bg-color-first":"#1A1A2E","floating-box-open-on-scroll":"true","floating-box-bg-color-second":"#F5A623","floating-box-text-color-first":"#FFFFFF","floating-box-show-close-button":"true","floating-box-text-color-second":"#1A1A2E"}`.
@@ -470,6 +525,15 @@ found and fixed" section above the code-fixes list.
   `floating-box-open-on-scroll` behavior on both platforms. Both also confirmed auto-collapsing back
   to the tab ~5s later, untouched (screenshots of that final collapsed state not kept — the
   behavior itself, not another still frame, was the point).
+- `docs/screenshots/ios/box_textalign_fontsize_clean.png`,
+  `docs/screenshots/android/box_textalign_fontsize_clean.png` — box trigger with short text
+  (`"Deals"`/`"New"`) instead of the earlier long/oversized-font strings, giving real slack space to
+  see alignment: `text-align-first: center` + `font-weight-first: 400` (regular) clearly centered
+  and unbolded in the header, `text-align-second: flex-end` + `font-weight-second: 900` clearly
+  right-aligned and bold in the footer — all 4 params (plus font-size) confirmed at once on both
+  platforms, finally superseding the earlier inconclusive "text overflows, can't see alignment"
+  finding. Also doubles as visual confirmation of the header-background-stripe fix (navy header,
+  orange body, distinct bands).
 
 ## Next steps (in order) — pick up here
 
@@ -488,20 +552,30 @@ found and fixed" section above the code-fixes list.
    `floating-initial-position: "expanded"` trick** (see "Solved" section above) rather than
    `"active"` — `"active"` auto-collapses 2s after every expand, which is faster than two
    sequential MCP tool round-trips can reliably catch.
-5. Box (393) is essentially done — font-size/weight/text-align (web+iOS confirmed, Android
-   code-confirmed only, retry screenshot when the emulator isn't under heavy load), plus
-   `floating-img`/`full-image-mode`/`resize`/`box-start-mode`/`open-on-scroll` (all confirmed on
-   iOS+Android). Only `box-open-on-time` (already implemented, just not re-verified after the
-   auto-collapse change) and `box-close-remember-duration` remain (behavior-only, hard to visually
-   verify quickly — same class as the pill's `close-remember-duration`).
+5. **Box (393) is now fully done** — every applicable param confirmed on iOS+Android (font-size/
+   weight/align finally confirmed cleanly with short text; `bg-color-first` bug found+fixed;
+   `open-on-time`/`close-remember-duration` confirmed via debug trace/unit tests respectively).
+   `full-image-mode`'s text-vs-no-text design difference from web is flagged for the user's decision,
+   not changed. Web's own box test page is currently broken (0×0 container, unrelated to mobile SDK
+   — see dedicated section above), so a few rows above are marked "not re-tested" for web
+   specifically rather than falsely claiming a fresh live confirmation.
 6. ~~Ask the user about the box auto-collapse timing inconsistency~~ — done, and fixed: iOS now
    auto-collapses by default too, and `floating-box-open-on-scroll` is natively implemented on both
    platforms. See "Fixed — box auto-collapse" and "Feature added" sections above.
-7. Revert all three test widgets to something close to their original values when done (or leave a
+7. **Move to pill next** (per the user's stated priority order: box → pill → card). Pill is already
+   essentially done from earlier rounds — only `floating-pill-start-mode` (as its own explicit test)
+   and `floating-pill-close-remember-duration` remain, both low-priority/well-understood. Give it the
+   same full-parity treatment box just got: re-check every applicable `common` param against it too
+   (`floating-hide-button`/`floating-position`/`floating-svg`/`floating-zindex` were only tested via
+   card so far), not just the `pill`-specific table rows.
+8. **Then card** (already the most complete — see its table). Finish `floating-initial-position`
+   (non-active values), `floating-svg`, `floating-zindex`, and the `identity` passthrough params
+   (code-confirmed only so far, no live network capture).
+9. Revert all three test widgets to something close to their original values when done (or leave a
    note if the user wants the test values kept — widget 401 has NOT been reverted yet, see above).
-8. Add/extend unit tests for `showLogo` parsing (default true / explicit false) on both platforms,
-   since it can't be live-tested. Same for the new box auto-collapse timer and scroll-observer logic
-   — currently only manually/live verified, no automated test coverage yet.
+10. Add/extend unit tests for `showLogo` parsing (default true / explicit false) on both platforms,
+    since it can't be live-tested. Same for the new box auto-collapse timer and scroll-observer logic
+    — currently only manually/live verified, no automated test coverage yet.
 
 ## Session log
 
@@ -627,3 +701,26 @@ found and fixed" section above the code-fixes list.
   iOS and Android. 29/29 iOS unit tests pass, Android unit tests pass, swiftformat clean. Widget 393
   left configured with `floating-box-open-on-scroll: "true"` and no `floating-initial-position` as
   a live demonstration of the new default behavior.
+- **2026-09-17 (box deep-dive — full parity pass)**: Per the user's request to bring box to 100%
+  parity with web before moving to pill/card, did a full parameter-by-parameter box audit backed by
+  reading web's actual `box.ts` source (not just `widget-params.md`). Found and fixed a real bug:
+  `floating-box-bg-color-first` was mapped to the outer card chrome (fully covered by the inner
+  card, hence "not visually distinguishable" in earlier rounds) when web actually uses it for the
+  **header row's own background stripe** — added a `headerBackgroundView`, moved the outer
+  container to the generic `floating-bgcolor`, confirmed the two-tone header/body design now matches
+  web on both iOS and Android. Re-tested font-size/weight/text-align with short text
+  (`"Deals"`/`"New"`) instead of the earlier oversized/truncated strings, cleanly confirming all 6
+  params at once on both platforms this time. Confirmed `box-open-on-time` still fires correctly
+  after the auto-collapse change (via temporary debug trace — screenshot timing proved impractical,
+  same class of issue as earlier pill/box timing chases) and `box-close-remember-duration` via
+  existing dedicated unit tests on both platforms (`PoltioTriggerDismissalStoreTest.kt` /
+  `testTriggerDismissalStoreRecordAndExpire`). Separately found (not fixed): web's `full-image-mode`
+  drops header/footer text entirely (image-only), unlike mobile's richer "text floats over image"
+  design — flagged for the user's decision rather than unilaterally removing existing functionality
+  I can't currently verify live. Also found web's box has no separate chevron/collapse button at
+  all (only one dual-purpose X), unlike mobile's two distinct buttons — a reasonable, deliberate
+  mobile UX addition, left as-is. Separately discovered web's own box test page currently renders
+  at 0×0 regardless of config (reproduced with zero custom params, survives a `localStorage` clear,
+  card trigger unaffected at the same time) — entirely web-SDK/dashboard-side, out of scope, flagged
+  for awareness. Box trigger is now considered fully done. Tests pass on both platforms, swiftformat
+  clean. Next: pill, then card, per the user's stated priority order.

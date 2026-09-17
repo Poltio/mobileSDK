@@ -144,15 +144,20 @@ internal class PoltioFloatingBoxTriggerView(
     }
 
     private fun setupExpandedContainer() {
-        val outerBg = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxBgColorFirst, Color.WHITE)
+        // Matches web's `.poltio-first-text` background — a distinct stripe behind the header
+        // row, not the outer card chrome (see the "Fixed" note on `floating-box-bg-color-first`
+        // in docs/OVERLAY_OPTIONS_VERIFICATION.md).
+        val headerBg = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxBgColorFirst, Color.WHITE)
         val innerBg = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxBgColorSecond, Color.WHITE)
         val headerColor = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxTextColorFirst, Color.BLACK)
         val footerColor = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxTextColorSecond, Color.BLACK)
         val fullImageMode = widget.overlayOptions.boxFullImageMode
         val expandedCornerRadiusPx = context.dp(PoltioOverlayOptions.cssLength(widget.overlayOptions.floatingMobileTopBorderRadius, 18f)).toFloat()
 
+        // Matches web's `.poltio-floating-container.second`, whose own background comes from the
+        // generic `floating-bgcolor`, not `floating-box-bg-color-first` (see `headerBg` above).
         expandedContainer.background = GradientDrawable().apply {
-            setColor(outerBg)
+            setColor(widget.overlayOptions.resolvedBgColor)
             cornerRadius = expandedCornerRadiusPx
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -232,6 +237,8 @@ internal class PoltioFloatingBoxTriggerView(
                 })
             }
         } else {
+            val headerBackgroundView = View(context).apply { setBackgroundColor(headerBg) }
+            innerCard.addView(headerBackgroundView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, context.dp(14f + 32f), Gravity.TOP))
             innerCard.addView(headerLabel, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP).apply {
                 topMargin = context.dp(14f); leftMargin = context.dp(16f); rightMargin = context.dp(34f)
             })

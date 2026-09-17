@@ -30,6 +30,10 @@
         private let collapsedLabel = UILabel()
 
         // Subviews for expanded state
+        /// Colored with `boxBgColorFirst`, matching web's `.poltio-first-text` background — a
+        /// distinct stripe behind the header row, not the outer card chrome (see the "Fixed" note
+        /// on `floating-box-bg-color-first` in `docs/OVERLAY_OPTIONS_VERIFICATION.md`).
+        private let headerBackgroundView = UIView()
         private let headerLabel = UILabel()
         private let collapseButton = UIButton(type: .system)
         private let closeButton = UIButton(type: .custom)
@@ -178,7 +182,7 @@
         // MARK: - Expanded View Setup
 
         private func setupExpandedContainer() {
-            let outerBg = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxBgColorFirst, fallback: .white)
+            let headerBg = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxBgColorFirst, fallback: .white)
             let innerBg = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxBgColorSecond, fallback: .white)
             let headerColor = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxTextColorFirst, fallback: .black)
             let footerColor = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxTextColorSecond, fallback: .black)
@@ -186,7 +190,9 @@
             let expandedCornerRadius = PoltioOverlayOptions.cssLength(widget.overlayOptions.floatingMobileTopBorderRadius, default: 18)
 
             expandedContainer.translatesAutoresizingMaskIntoConstraints = false
-            expandedContainer.backgroundColor = outerBg
+            // Matches web's `.poltio-floating-container.second`, whose own background comes from
+            // the generic `floating-bgcolor`, not `floating-box-bg-color-first` (see `headerBg` below).
+            expandedContainer.backgroundColor = widget.overlayOptions.resolvedBgColor
             expandedContainer.layer.cornerRadius = expandedCornerRadius
             expandedContainer.layer.shadowColor = UIColor.black.cgColor
             expandedContainer.layer.shadowOpacity = 0.20
@@ -201,6 +207,13 @@
             innerCard.layer.maskedCorners = [.layerMinXMinYCorner, .layerMinXMaxYCorner]
             innerCard.clipsToBounds = true
             expandedContainer.addSubview(innerCard)
+
+            // 1. Header background stripe (standard layout only — full-image mode has no header row)
+            if !fullImageMode {
+                headerBackgroundView.translatesAutoresizingMaskIntoConstraints = false
+                headerBackgroundView.backgroundColor = headerBg
+                innerCard.addSubview(headerBackgroundView)
+            }
 
             // 1. Top Header Label
             headerLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -292,6 +305,11 @@
         /// Default layout: header text, a fixed-height banner strip, footer text.
         private func setupStandardBannerLayout() {
             NSLayoutConstraint.activate([
+                headerBackgroundView.topAnchor.constraint(equalTo: innerCard.topAnchor),
+                headerBackgroundView.leadingAnchor.constraint(equalTo: innerCard.leadingAnchor),
+                headerBackgroundView.trailingAnchor.constraint(equalTo: innerCard.trailingAnchor),
+                headerBackgroundView.bottomAnchor.constraint(equalTo: bannerImageView.topAnchor),
+
                 headerLabel.topAnchor.constraint(equalTo: innerCard.topAnchor, constant: 14),
                 headerLabel.leadingAnchor.constraint(equalTo: innerCard.leadingAnchor, constant: 16),
                 headerLabel.trailingAnchor.constraint(equalTo: collapseButton.leadingAnchor, constant: -4),
