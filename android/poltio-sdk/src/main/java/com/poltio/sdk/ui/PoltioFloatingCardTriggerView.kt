@@ -1,5 +1,6 @@
 package com.poltio.sdk.ui
 
+import android.app.Activity
 import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
@@ -76,16 +77,20 @@ internal class PoltioFloatingCardTriggerView(
      * (manual tap or the scroll-reveal below). Requires a brief grace period after expanding so
      * the very same scroll gesture that revealed the card doesn't immediately collapse it again.
      * This is a deliberate mobile-specific divergence from web, which leaves the card expanded
-     * indefinitely once revealed. */
-    private val scrollCollapseListener: () -> Unit = {
+     * indefinitely once revealed. Ignores scroll events from any Activity other than this view's
+     * own host — see the identical note on the box trigger's equivalent listener. */
+    private val scrollCollapseListener: (Activity) -> Unit = { scrolledActivity ->
         val sinceExpanded = android.os.SystemClock.elapsedRealtime() - expandedAtMs
-        if (currentState == TriggerState.EXPANDED && sinceExpanded > SCROLL_COLLAPSE_GRACE_PERIOD_MS) {
+        if (context.findActivity() == scrolledActivity &&
+            currentState == TriggerState.EXPANDED &&
+            sinceExpanded > SCROLL_COLLAPSE_GRACE_PERIOD_MS
+        ) {
             PoltioExecutors.runOnMain { setState(TriggerState.COLLAPSED, animated = true) }
         }
     }
     /** Kept so `onDetachedFromWindow` can cancel this exact still-pending registration if the
      * threshold was never crossed — see `PoltioScrollObserver.cancelScrollPast`. */
-    private var scrollRevealListener: (() -> Unit)? = null
+    private var scrollRevealListener: ((Activity) -> Unit)? = null
 
     init {
         clipChildren = false
@@ -127,10 +132,12 @@ internal class PoltioFloatingCardTriggerView(
             // normally instead — and `onDetachedFromWindow` below proactively cancels the
             // registration too, so it doesn't just sit dormant in that list forever either.
             val viewRef = java.lang.ref.WeakReference(this)
-            val listener: () -> Unit = {
+            val listener: (Activity) -> Unit = { scrolledActivity ->
                 PoltioExecutors.runOnMain {
                     val view = viewRef.get() ?: return@runOnMain
-                    if (view.currentState == TriggerState.COLLAPSED) view.setState(TriggerState.EXPANDED, animated = true)
+                    if (view.context.findActivity() == scrolledActivity && view.currentState == TriggerState.COLLAPSED) {
+                        view.setState(TriggerState.EXPANDED, animated = true)
+                    }
                 }
             }
             scrollRevealListener = listener

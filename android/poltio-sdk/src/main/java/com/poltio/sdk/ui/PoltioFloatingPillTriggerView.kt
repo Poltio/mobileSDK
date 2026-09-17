@@ -4,6 +4,7 @@ import android.animation.Keyframe
 import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
 import android.animation.ValueAnimator
+import android.app.Activity
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
@@ -66,7 +67,7 @@ internal class PoltioFloatingPillTriggerView(
     /** Guards the unconditional scroll-triggered auto-expand so it only ever fires once per
      * trigger instance, matching web's one-shot scroll listener. Assigned in `init` (not as a
      * property initializer) so it can safely reference itself for self-removal on first fire. */
-    private lateinit var scrollOpenListener: () -> Unit
+    private lateinit var scrollOpenListener: (Activity) -> Unit
     /** Must be a class member, not a local inside `onAttachedToWindow` — that function can re-run
      * across a detach/reattach cycle, and a local would silently reset to `false` on every
      * reattach, breaking the "only ever fires once per trigger instance" guarantee above. */
@@ -76,10 +77,15 @@ internal class PoltioFloatingPillTriggerView(
     /** Auto-collapses an expanded pill while the host page is actively being scrolled, smoothly
      * following the existing expand/collapse animation — regardless of what caused the expand
      * (manual tap or the scroll-reveal below). Requires a brief grace period after expanding so
-     * the very same scroll gesture that revealed the pill doesn't immediately collapse it again. */
-    private val scrollCollapseListener: () -> Unit = {
+     * the very same scroll gesture that revealed the pill doesn't immediately collapse it again.
+     * Ignores scroll events from any Activity other than this view's own host — see the identical
+     * note on the box trigger's equivalent listener. */
+    private val scrollCollapseListener: (Activity) -> Unit = { scrolledActivity ->
         val sinceExpanded = android.os.SystemClock.elapsedRealtime() - expandedAtMs
-        if (currentState == TriggerState.EXPANDED && sinceExpanded > SCROLL_COLLAPSE_GRACE_PERIOD_MS) {
+        if (context.findActivity() == scrolledActivity &&
+            currentState == TriggerState.EXPANDED &&
+            sinceExpanded > SCROLL_COLLAPSE_GRACE_PERIOD_MS
+        ) {
             PoltioExecutors.runOnMain { setState(TriggerState.COLLAPSED, animated = true) }
         }
     }
@@ -192,10 +198,12 @@ internal class PoltioFloatingPillTriggerView(
         // brand new listener that (its own guard already true) would never unregister itself —
         // see the identical note in the box trigger's `setupScrollOpenIfNeeded`.
         if (!hasAutoOpenedFromScroll) {
-            scrollOpenListener = {
-                // Unregisters on the very first scroll-past-threshold notification regardless of
-                // current state — see the identical note in the box trigger's equivalent listener.
-                if (!hasAutoOpenedFromScroll) {
+            scrollOpenListener = { scrolledActivity ->
+                // Ignores scroll events from any Activity other than this view's own host, and
+                // separately unregisters on the very first scroll-past-threshold notification
+                // FROM ITS OWN ACTIVITY regardless of current state — see the identical notes on
+                // the box trigger's equivalent listener.
+                if (context.findActivity() == scrolledActivity && !hasAutoOpenedFromScroll) {
                     hasAutoOpenedFromScroll = true
                     PoltioScrollObserver.removeListener(scrollOpenListener)
                     if (currentState == TriggerState.COLLAPSED) {

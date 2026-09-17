@@ -459,12 +459,15 @@
             )
         }
 
-        @objc private func handleScrollDetected() {
-            // Unregisters on the very first scroll-past-threshold notification regardless of
-            // current state — previously, if the box happened to already be expanded (e.g. a
-            // manual tap) at that moment, the combined guard skipped entirely, leaving this
-            // observer registered (and re-checked on every subsequent scroll) for the rest of the
-            // view's lifetime instead of behaving as the one-shot it's meant to be.
+        @objc private func handleScrollDetected(_ notification: Notification) {
+            // Ignores scroll events from any window scene other than this view's own — see the
+            // type-level doc comment on PoltioScrollObserver — and, separately, unregisters on the
+            // very first scroll-past-threshold notification FROM ITS OWN SCENE regardless of
+            // current state: previously, if the box happened to already be expanded (e.g. a manual
+            // tap) at that moment, the combined guard skipped entirely, leaving this observer
+            // registered (and re-checked on every subsequent scroll) for the rest of the view's
+            // lifetime instead of behaving as the one-shot it's meant to be.
+            guard let scrollView = notification.object as? UIScrollView, scrollView.window?.windowScene == window?.windowScene else { return }
             guard !hasAutoOpenedFromScroll else { return }
             hasAutoOpenedFromScroll = true
             NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didScrollPastThresholdNotification, object: nil)
@@ -486,7 +489,10 @@
             )
         }
 
-        @objc private func handleScrollMovementDetected() {
+        @objc private func handleScrollMovementDetected(_ notification: Notification) {
+            // Ignores scroll events from any window scene other than this view's own — see the
+            // type-level doc comment on PoltioScrollObserver.
+            guard let scrollView = notification.object as? UIScrollView, scrollView.window?.windowScene == window?.windowScene else { return }
             guard currentState == .expanded,
                   let expandedAt, Date().timeIntervalSince(expandedAt) > Self.scrollCollapseGracePeriod
             else { return }

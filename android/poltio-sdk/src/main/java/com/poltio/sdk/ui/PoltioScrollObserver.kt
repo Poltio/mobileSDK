@@ -26,20 +26,29 @@ internal object PoltioScrollObserver {
     /** Minimum per-gesture drag distance treated as real scroll activity rather than a tap. */
     private const val MOVEMENT_THRESHOLD_DP = 8f
 
-    private val listeners = mutableSetOf<() -> Unit>()
-    private val movementListeners = mutableSetOf<() -> Unit>()
-    private val pendingThresholds = mutableListOf<Pair<Float, () -> Unit>>()
+    // Every listener/callback below is invoked with the specific Activity whose window actually
+    // scrolled — this object is a process-wide singleton (one set of listeners shared by every
+    // trigger view, across every Activity), so without this, a trigger left attached to a
+    // backgrounded/backstacked Activity (e.g. the host app navigated to a new Activity without
+    // ever calling PoltioSDK.track for it, so PoltioOverlayManager never tore the old trigger
+    // down) would still receive — and could act on — scroll events from a completely different,
+    // now-foreground Activity. Callers are expected to compare the passed Activity against their
+    // own host Activity before acting; see each trigger view's scrollCollapseListener for the
+    // pattern.
+    private val listeners = mutableSetOf<(Activity) -> Unit>()
+    private val movementListeners = mutableSetOf<(Activity) -> Unit>()
+    private val pendingThresholds = mutableListOf<Pair<Float, (Activity) -> Unit>>()
     /** Weakly held so the singleton never keeps an `Activity` (via the callback's own reference to
      * it) alive past its real lifetime — only used to reset scroll tracking for freshly registered
      * listeners, see [resetCumulativeScrollForNewObservation]. */
     private var activeCallbackRef: WeakReference<ScrollObservingCallback>? = null
 
-    fun addListener(listener: () -> Unit) {
+    fun addListener(listener: (Activity) -> Unit) {
         resetCumulativeScrollForNewObservation()
         synchronized(listeners) { listeners.add(listener) }
     }
 
-    fun removeListener(listener: () -> Unit) {
+    fun removeListener(listener: (Activity) -> Unit) {
         synchronized(listeners) { listeners.remove(listener) }
     }
 
@@ -47,17 +56,17 @@ internal object PoltioScrollObserver {
      * exceeds [MOVEMENT_THRESHOLD_DP] — a genuine "the user is actively scrolling right now"
      * signal, independent of the fixed 100dp reveal threshold above. Used to auto-collapse an
      * expanded trigger while the host scrolls. */
-    fun addMovementListener(listener: () -> Unit) {
+    fun addMovementListener(listener: (Activity) -> Unit) {
         synchronized(movementListeners) { movementListeners.add(listener) }
     }
 
-    fun removeMovementListener(listener: () -> Unit) {
+    fun removeMovementListener(listener: (Activity) -> Unit) {
         synchronized(movementListeners) { movementListeners.remove(listener) }
     }
 
-    private fun notifyMovementDetected() {
+    private fun notifyMovementDetected(activity: Activity) {
         val snapshot = synchronized(movementListeners) { movementListeners.toList() }
-        snapshot.forEach { it.invoke() }
+        snapshot.forEach { it.invoke(activity) }
     }
 
     /** Registers a one-shot callback that fires the first time total scroll drag distance
@@ -65,7 +74,7 @@ internal object PoltioScrollObserver {
      * own configurable threshold (the card trigger's `floatingScrollThreshold`, default 300dp,
      * matching web), as an alternative to the fixed-100dp [addListener]/[removeListener] pair used
      * by the box/pill triggers. */
-    fun onScrollPast(activity: Activity, thresholdDp: Float, callback: () -> Unit) {
+    fun onScrollPast(activity: Activity, thresholdDp: Float, callback: (Activity) -> Unit) {
         // installIfNeeded first: it's what points activeCallbackRef at the correct (current)
         // wrapper for `activity`. Resetting before this could reset a stale wrapper from a
         // different activity, or nothing at all, instead of the one this registration actually
@@ -79,7 +88,7 @@ internal object PoltioScrollObserver {
      * registered with — e.g. when its view is detached before the threshold was ever crossed.
      * Without this, that callback (and anything it captures) would sit in [pendingThresholds] for
      * the life of the process, since nothing else ever removes an entry that never fires. */
-    fun cancelScrollPast(callback: () -> Unit) {
+    fun cancelScrollPast(callback: (Activity) -> Unit) {
         synchronized(pendingThresholds) { pendingThresholds.removeAll { it.second === callback } }
     }
 
@@ -107,9 +116,9 @@ internal object PoltioScrollObserver {
         activeCallbackRef?.get()?.resetCumulativeScroll()
     }
 
-    private fun notifyThresholdCrossed() {
+    private fun notifyThresholdCrossed(activity: Activity) {
         val snapshot = synchronized(listeners) { listeners.toList() }
-        snapshot.forEach { it.invoke() }
+        snapshot.forEach { it.invoke(activity) }
     }
 
     private fun handleScrolled(activity: Activity, distancePx: Float) {
@@ -123,7 +132,7 @@ internal object PoltioScrollObserver {
             pendingThresholds.removeAll(crossed)
             crossed
         }
-        toFire.forEach { (_, callback) -> callback() }
+        toFire.forEach { (_, callback) -> callback(activity) }
     }
 
     private class ScrollObservingCallback(
@@ -162,12 +171,12 @@ internal object PoltioScrollObserver {
                     val deltaY = lastY - event.rawY
                     cumulativeScrollPx = (cumulativeScrollPx + deltaY).coerceAtLeast(0f)
                     lastY = event.rawY
-                    if (cumulativeScrollPx > thresholdPx) notifyThresholdCrossed()
+                    if (cumulativeScrollPx > thresholdPx) notifyThresholdCrossed(activity)
                     // Per-gesture (not cumulative) distance: this only needs to tell a real drag
                     // apart from a stray tap, not track absolute scroll position.
                     if (!hasNotifiedMovementThisGesture && abs(event.rawY - downY) > movementThresholdPx) {
                         hasNotifiedMovementThisGesture = true
-                        notifyMovementDetected()
+                        notifyMovementDetected(activity)
                     }
                     handleScrolled(activity, cumulativeScrollPx)
                 }

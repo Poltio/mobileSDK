@@ -358,7 +358,7 @@
         /// revealed), mobile also auto-collapses it while the host keeps scrolling — see
         /// `setupScrollCollapseObserver()` — a deliberate mobile-specific UX choice.
         private func setupScrollReveal() {
-            scrollRevealToken = PoltioScrollObserver.onScrollPast(CGFloat(widget.overlayOptions.floatingScrollThreshold)) { [weak self] in
+            scrollRevealToken = PoltioScrollObserver.onScrollPast(for: self, threshold: CGFloat(widget.overlayOptions.floatingScrollThreshold)) { [weak self] in
                 DispatchQueue.main.async {
                     guard let self, self.currentState == .collapsed else { return }
                     self.setState(.expanded, animated: true)
@@ -379,7 +379,10 @@
             )
         }
 
-        @objc private func handleScrollMovementDetected() {
+        @objc private func handleScrollMovementDetected(_ notification: Notification) {
+            // Ignores scroll events from any window scene other than this view's own — see the
+            // type-level doc comment on PoltioScrollObserver.
+            guard let scrollView = notification.object as? UIScrollView, scrollView.window?.windowScene == window?.windowScene else { return }
             guard currentState == .expanded,
                   let expandedAt, Date().timeIntervalSince(expandedAt) > Self.scrollCollapseGracePeriod
             else { return }

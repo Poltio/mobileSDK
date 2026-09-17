@@ -558,9 +558,12 @@
             )
         }
 
-        @objc private func handleScrollOpenDetected() {
-            // Unregisters on the very first scroll-past-threshold notification regardless of
-            // current state — see the identical note in the box trigger's equivalent handler.
+        @objc private func handleScrollOpenDetected(_ notification: Notification) {
+            // Ignores scroll events from any window scene other than this view's own, and
+            // unregisters on the very first scroll-past-threshold notification from its own scene
+            // regardless of current state — see the identical notes on the box trigger's
+            // equivalent handler.
+            guard let scrollView = notification.object as? UIScrollView, scrollView.window?.windowScene == window?.windowScene else { return }
             guard !hasAutoOpenedFromScroll else { return }
             hasAutoOpenedFromScroll = true
             NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didScrollPastThresholdNotification, object: nil)
@@ -582,7 +585,10 @@
             )
         }
 
-        @objc private func handleScrollMovementDetected() {
+        @objc private func handleScrollMovementDetected(_ notification: Notification) {
+            // Ignores scroll events from any window scene other than this view's own — see the
+            // type-level doc comment on PoltioScrollObserver.
+            guard let scrollView = notification.object as? UIScrollView, scrollView.window?.windowScene == window?.windowScene else { return }
             guard currentState == .expanded,
                   let expandedAt, Date().timeIntervalSince(expandedAt) > Self.scrollCollapseGracePeriod
             else { return }

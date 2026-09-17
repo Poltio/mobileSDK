@@ -12,6 +12,18 @@
     /// host scrolling behavior is completely unaffected. This is a standard, widely-used technique
     /// (the same one many analytics SDKs use for scroll-depth tracking) rather than anything that
     /// touches gesture recognizers or view controllers.
+    ///
+    /// Both notifications below post the scrolling `UIScrollView` itself as their `object` (not
+    /// `nil`) — the swizzle is process-wide, not scoped to any one window/scene, so a trigger whose
+    /// own overlay window belongs to a scene that's since gone to the background (e.g. iPad
+    /// multi-window/Stage Manager, or a scene the host app simply isn't showing anymore) would
+    /// otherwise react to scrolling happening in a completely different, now-active scene.
+    /// Observers are expected to compare `(notification.object as? UIScrollView)?.window?.windowScene`
+    /// against their own trigger's `window?.windowScene` before acting — see each trigger view's
+    /// scroll handlers for the pattern. (The trigger itself lives in its own dedicated overlay
+    /// `UIWindow`, never the same `UIWindow` as host content, so comparing `.window` directly would
+    /// never match; `.windowScene` is the right granularity, analogous to comparing Activities on
+    /// Android.)
     enum PoltioScrollObserver {
         static let didScrollPastThresholdNotification = Notification.Name("PoltioSDK.scrollObserverDidScrollPastThreshold")
 
@@ -35,9 +47,19 @@
             fileprivate let id = UUID()
         }
 
+        /// Tuple elements can't be `weak` directly, so this small box holds the weak reference to
+        /// the observing view instead — used purely to compare `windowScene` when deciding whether
+        /// a scroll event is relevant to this particular pending registration.
+        private final class WeakViewBox {
+            weak var view: UIView?
+            init(_ view: UIView) {
+                self.view = view
+            }
+        }
+
         private static let lock = NSLock()
         private static var isInstalled = false
-        private static var pendingThresholds: [(token: ScrollPastToken, threshold: CGFloat, callback: () -> Void)] = []
+        private static var pendingThresholds: [(token: ScrollPastToken, threshold: CGFloat, view: WeakViewBox, callback: () -> Void)] = []
 
         /// Installs the swizzle exactly once per process. Safe to call repeatedly/concurrently.
         static func installIfNeeded() {
@@ -57,17 +79,21 @@
         }
 
         /// Registers a one-shot callback that fires the first time total scroll distance exceeds
-        /// `threshold`, then automatically un-registers itself. Used by triggers with their own
-        /// configurable threshold (the card trigger's `floatingScrollThreshold`, default 300pt,
-        /// matching web), as an alternative to the fixed-`100`pt `didScrollPastThresholdNotification`
-        /// used by the box/pill triggers. Returns a token that `cancelScrollPast` can later use to
-        /// remove this registration if the threshold is never crossed (e.g. the view is torn down
-        /// first) — otherwise the closure would sit in `pendingThresholds` for the app's lifetime.
+        /// `threshold` **in the same window scene as `view`**, then automatically un-registers
+        /// itself. Used by triggers with their own configurable threshold (the card trigger's
+        /// `floatingScrollThreshold`, default 300pt, matching web), as an alternative to the
+        /// fixed-`100`pt `didScrollPastThresholdNotification` used by the box/pill triggers.
+        /// `view` is held weakly purely to compare `windowScene` against the scrolling scroll
+        /// view's — see the type-level doc comment above for why that comparison (not `view.window`
+        /// itself, since the trigger lives in its own dedicated overlay window) is what's needed.
+        /// Returns a token that `cancelScrollPast` can later use to remove this registration if the
+        /// threshold is never crossed (e.g. the view is torn down first) — otherwise the closure
+        /// would sit in `pendingThresholds` for the app's lifetime.
         @discardableResult
-        static func onScrollPast(_ threshold: CGFloat, callback: @escaping () -> Void) -> ScrollPastToken {
+        static func onScrollPast(for view: UIView, threshold: CGFloat, callback: @escaping () -> Void) -> ScrollPastToken {
             let token = ScrollPastToken()
             lock.lock()
-            pendingThresholds.append((token, threshold, callback))
+            pendingThresholds.append((token, threshold, WeakViewBox(view), callback))
             lock.unlock()
             installIfNeeded()
             return token
@@ -81,15 +107,20 @@
             lock.unlock()
         }
 
-        fileprivate static func handleScrolled(_ distance: CGFloat) {
+        fileprivate static func handleScrolled(_ distance: CGFloat, scrollView: UIScrollView) {
             // Called on every contentOffset update while scrolling — the common case (no card
             // trigger currently observing a custom threshold) has nothing to do here, so skip the
             // lock and list work entirely rather than paying for it on every scroll event. A stale
             // read outside the lock is fine: worst case is one extra check on the next update.
             guard !pendingThresholds.isEmpty else { return }
+            let scrolledScene = scrollView.window?.windowScene
             lock.lock()
-            let toFire = pendingThresholds.filter { distance > $0.threshold }
-            pendingThresholds.removeAll { distance > $0.threshold }
+            // Only entries in the same window scene as the scrolling view are even eligible to
+            // fire — a registration whose view has already been deallocated (nil weak ref) can
+            // never match and is pruned here too, same as if it had explicitly cancelled.
+            let eligible = pendingThresholds.filter { $0.view.view != nil && $0.view.view?.window?.windowScene == scrolledScene }
+            let toFire = eligible.filter { distance > $0.threshold }
+            pendingThresholds.removeAll { entry in entry.view.view == nil || toFire.contains { $0.token == entry.token } }
             lock.unlock()
             toFire.forEach { $0.callback() }
         }
@@ -131,13 +162,13 @@
 
             let scrolled = contentOffset.y + adjustedContentInset.top
             if scrolled > PoltioScrollObserver.threshold {
-                NotificationCenter.default.post(name: PoltioScrollObserver.didScrollPastThresholdNotification, object: nil)
+                NotificationCenter.default.post(name: PoltioScrollObserver.didScrollPastThresholdNotification, object: self)
             }
             if let lastScrolled = poltio_lastScrolled, abs(scrolled - lastScrolled) > PoltioScrollObserver.movementEpsilon {
-                NotificationCenter.default.post(name: PoltioScrollObserver.didDetectScrollMovementNotification, object: nil)
+                NotificationCenter.default.post(name: PoltioScrollObserver.didDetectScrollMovementNotification, object: self)
             }
             poltio_lastScrolled = scrolled
-            PoltioScrollObserver.handleScrolled(scrolled)
+            PoltioScrollObserver.handleScrolled(scrolled, scrollView: self)
         }
     }
 #endif

@@ -1,5 +1,6 @@
 package com.poltio.sdk.ui
 
+import android.app.Activity
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -85,13 +86,19 @@ internal class PoltioFloatingBoxTriggerView(
     }
     /** Assigned in `init` (not as a property initializer) so it can safely reference itself for
      * self-removal on first fire — see `setupScrollOpenIfNeeded`. */
-    private lateinit var scrollListener: () -> Unit
+    private lateinit var scrollListener: (Activity) -> Unit
     /** Auto-collapses an expanded box while the host page is actively being scrolled, smoothly
      * following the existing expand/collapse animation — regardless of what caused the expand
-     * (manual tap, `boxOpenOnTime`, or `boxOpenOnScroll`). */
-    private val scrollCollapseListener: () -> Unit = {
+     * (manual tap, `boxOpenOnTime`, or `boxOpenOnScroll`). Ignores scroll events from any Activity
+     * other than this view's own host — PoltioScrollObserver's listener sets are process-wide, so
+     * without this check, a trigger left attached to a backgrounded/backstacked Activity would
+     * react to scrolling happening in a completely different, now-foreground Activity. */
+    private val scrollCollapseListener: (Activity) -> Unit = { scrolledActivity ->
         val sinceExpanded = android.os.SystemClock.elapsedRealtime() - expandedAtMs
-        if (currentState == TriggerState.EXPANDED && sinceExpanded > SCROLL_COLLAPSE_GRACE_PERIOD_MS) {
+        if (context.findActivity() == scrolledActivity &&
+            currentState == TriggerState.EXPANDED &&
+            sinceExpanded > SCROLL_COLLAPSE_GRACE_PERIOD_MS
+        ) {
             PoltioExecutors.runOnMain { setState(TriggerState.COLLAPSED, animated = true) }
         }
     }
@@ -391,13 +398,15 @@ internal class PoltioFloatingBoxTriggerView(
         if (hasAutoOpenedFromScroll) return
         val openOnTime = widget.overlayOptions.boxOpenOnTime
         if ((openOnTime != null && openOnTime > 0) || !widget.overlayOptions.boxOpenOnScroll) return
-        scrollListener = {
-            // Unregisters on the very first scroll-past-threshold notification regardless of
-            // current state — previously, if the box happened to already be expanded (e.g. a
-            // manual tap) at that moment, the combined guard below skipped entirely, leaving this
-            // listener registered (and re-checked on every subsequent scroll) for the rest of the
-            // view's lifetime instead of behaving as the one-shot it's meant to be.
-            if (!hasAutoOpenedFromScroll) {
+        scrollListener = { scrolledActivity ->
+            // Ignores scroll events from any Activity other than this view's own host — see the
+            // note on `scrollCollapseListener` above — and, separately, unregisters on the very
+            // first scroll-past-threshold notification FROM ITS OWN ACTIVITY regardless of current
+            // state: previously, if the box happened to already be expanded (e.g. a manual tap) at
+            // that moment, the combined guard skipped entirely, leaving this listener registered
+            // (and re-checked on every subsequent scroll) for the rest of the view's lifetime
+            // instead of behaving as the one-shot it's meant to be.
+            if (context.findActivity() == scrolledActivity && !hasAutoOpenedFromScroll) {
                 hasAutoOpenedFromScroll = true
                 PoltioScrollObserver.removeListener(scrollListener)
                 if (currentState == TriggerState.COLLAPSED) {
