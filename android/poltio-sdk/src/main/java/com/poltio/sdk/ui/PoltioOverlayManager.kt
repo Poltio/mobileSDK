@@ -163,7 +163,7 @@ internal object PoltioOverlayManager {
         // Clamped to Material's practical elevation range so an arbitrary large value doesn't
         // produce a runaway shadow.
         val zIndexElevationDp = (options.floatingZindex / 100.0 * 8.0).coerceIn(0.0, 24.0)
-        container.elevation = activity.dp(zIndexElevationDp.toFloat()).toFloat()
+        androidx.core.view.ViewCompat.setElevation(container, activity.dp(zIndexElevationDp.toFloat()).toFloat())
 
         val onOpenWidget: () -> Unit = { presentWidgetWebView(widget.publicId, puid, widget.overlayOptions) }
         val onDismissForever: (Double) -> Unit = { hours ->

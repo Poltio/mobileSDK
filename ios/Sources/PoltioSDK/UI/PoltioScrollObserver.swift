@@ -99,8 +99,12 @@
         /// `poltio_setContentOffset`. Previously a single value shared across every `UIScrollView`
         /// in the app, which made two scroll views scrolling independently look like one erratic
         /// one — associating it with `self` instead scopes it correctly per scroll view.
-        var poltio_lastScrolled: CGFloat {
-            get { objc_getAssociatedObject(self, &poltio_lastScrolledKey) as? CGFloat ?? 0 }
+        ///
+        /// Nullable (rather than defaulting to 0) so a scroll view first observed while already
+        /// scrolled — e.g. restored to a mid-scroll position — doesn't compute a huge bogus delta
+        /// against an assumed starting position of zero on its very first update.
+        var poltio_lastScrolled: CGFloat? {
+            get { objc_getAssociatedObject(self, &poltio_lastScrolledKey) as? CGFloat }
             set { objc_setAssociatedObject(self, &poltio_lastScrolledKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
         }
 
@@ -118,7 +122,7 @@
             if scrolled > PoltioScrollObserver.threshold {
                 NotificationCenter.default.post(name: PoltioScrollObserver.didScrollPastThresholdNotification, object: nil)
             }
-            if abs(scrolled - poltio_lastScrolled) > PoltioScrollObserver.movementEpsilon {
+            if let lastScrolled = poltio_lastScrolled, abs(scrolled - lastScrolled) > PoltioScrollObserver.movementEpsilon {
                 NotificationCenter.default.post(name: PoltioScrollObserver.didDetectScrollMovementNotification, object: nil)
             }
             poltio_lastScrolled = scrolled

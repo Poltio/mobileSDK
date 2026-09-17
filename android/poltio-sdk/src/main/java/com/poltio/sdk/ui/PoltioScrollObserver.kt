@@ -66,9 +66,13 @@ internal object PoltioScrollObserver {
      * matching web), as an alternative to the fixed-100dp [addListener]/[removeListener] pair used
      * by the box/pill triggers. */
     fun onScrollPast(activity: Activity, thresholdDp: Float, callback: () -> Unit) {
+        // installIfNeeded first: it's what points activeCallbackRef at the correct (current)
+        // wrapper for `activity`. Resetting before this could reset a stale wrapper from a
+        // different activity, or nothing at all, instead of the one this registration actually
+        // observes.
+        installIfNeeded(activity)
         resetCumulativeScrollForNewObservation()
         synchronized(pendingThresholds) { pendingThresholds.add(thresholdDp to callback) }
-        installIfNeeded(activity)
     }
 
     /** Cancels a still-pending [onScrollPast] registration by the exact callback reference it was
@@ -125,11 +129,13 @@ internal object PoltioScrollObserver {
         private val movementThresholdPx = activity.dp(MOVEMENT_THRESHOLD_DP)
         private var downY = 0f
         private var lastY = 0f
-        /** Total vertical drag distance accumulated across every gesture since this wrapper was
-         * installed — an absolute-position proxy, not a per-gesture one. Without this, a page
-         * scrolled via several smaller swipes would never cross [thresholdPx] or a card's
-         * configurable threshold, since each gesture's distance used to reset to zero on its own
-         * `ACTION_DOWN`, matching iOS/web's continuous scroll-offset tracking instead. */
+        /** Net downward scroll accumulated across every gesture since this wrapper was installed
+         * (or last reset) — an absolute-position proxy, not a per-gesture one, and floored at zero
+         * so scrolling back up (or finger jiggling) can't inflate it, matching how a real
+         * `scrollTop`-style offset behaves on iOS/web. Without accumulating across gestures at
+         * all, a page scrolled via several smaller swipes would never cross [thresholdPx] or a
+         * card's configurable threshold, since each gesture's distance used to reset to zero on
+         * its own `ACTION_DOWN`. */
         private var cumulativeScrollPx = 0f
         private var hasNotifiedMovementThisGesture = false
 
@@ -145,7 +151,11 @@ internal object PoltioScrollObserver {
                     hasNotifiedMovementThisGesture = false
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    cumulativeScrollPx += abs(event.rawY - lastY)
+                    // Finger moving up (rawY decreasing) means the content scrolls down, so that's
+                    // what grows cumulativeScrollPx; scrolling back up shrinks it, floored at 0 —
+                    // net position, not total distance traveled.
+                    val deltaY = lastY - event.rawY
+                    cumulativeScrollPx = (cumulativeScrollPx + deltaY).coerceAtLeast(0f)
                     lastY = event.rawY
                     if (cumulativeScrollPx > thresholdPx) notifyThresholdCrossed()
                     // Per-gesture (not cumulative) distance: this only needs to tell a real drag

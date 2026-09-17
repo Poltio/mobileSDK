@@ -21,6 +21,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Future
 import kotlin.math.abs
+import kotlin.math.max
 
 /**
  * Native floating box trigger view supporting collapsed and expanded states matching Poltio
@@ -179,6 +180,12 @@ internal class PoltioFloatingBoxTriggerView(
         val footerColor = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxTextColorSecond, Color.BLACK)
         val fullImageMode = widget.overlayOptions.boxFullImageMode
         val expandedCornerRadiusPx = context.dp(PoltioOverlayOptions.cssLength(widget.overlayOptions.floatingMobileTopBorderRadius, 18f)).toFloat()
+        // Header block height: 14dp top padding + a single line of `boxTextFirstFontSize` text
+        // (headerLabel is always `maxLines = 1`). Floors at the original fixed 32dp text-height
+        // assumption so default-size headers are unchanged; scales up for larger custom sizes so
+        // the background stripe/banner/footer layout don't overlap a taller header.
+        val headerTextHeightDp = max(32f, widget.overlayOptions.boxTextFirstFontSize * 1.3f)
+        val headerBlockHeightDp = 14f + headerTextHeightDp
 
         // Matches web's `.poltio-floating-container.second`, whose own background comes from the
         // generic `floating-bgcolor`, not `floating-box-bg-color-first` (see `headerBg` above).
@@ -264,7 +271,7 @@ internal class PoltioFloatingBoxTriggerView(
             }
         } else {
             val headerBackgroundView = View(context).apply { setBackgroundColor(headerBg) }
-            innerCard.addView(headerBackgroundView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, context.dp(14f + 32f), Gravity.TOP))
+            innerCard.addView(headerBackgroundView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, context.dp(headerBlockHeightDp), Gravity.TOP))
             innerCard.addView(headerLabel, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP).apply {
                 topMargin = context.dp(14f); leftMargin = context.dp(16f); rightMargin = context.dp(34f)
             })
@@ -272,10 +279,10 @@ internal class PoltioFloatingBoxTriggerView(
                 topMargin = context.dp(14f); rightMargin = context.dp(10f)
             })
             innerCard.addView(bannerContainer, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, context.dp(95f * scale), Gravity.TOP).apply {
-                topMargin = context.dp(14f + 32f)
+                topMargin = context.dp(headerBlockHeightDp)
             })
             innerCard.addView(footerLabel, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP).apply {
-                topMargin = context.dp(14f + 32f + 95f * scale + 14f); leftMargin = context.dp(16f); rightMargin = context.dp(16f)
+                topMargin = context.dp(headerBlockHeightDp + 95f * scale + 14f); leftMargin = context.dp(16f); rightMargin = context.dp(16f)
             })
             closeButton?.let {
                 innerCard.addView(it, FrameLayout.LayoutParams(context.dp(24f), context.dp(24f), Gravity.TOP or Gravity.END).apply {
