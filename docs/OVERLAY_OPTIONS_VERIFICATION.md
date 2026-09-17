@@ -137,6 +137,29 @@ confirmed via pixel-sampling the screenshot (`docs/screenshots/ios/pill_icon_col
 the icon now renders the correct `rgb(74, 85, 101)` grey, matching Android and web exactly.
 Unit tests + swiftformat still pass.
 
+## Found — box auto-collapse timing is inconsistent between iOS and Android
+
+While testing the box trigger's font-size/weight/align params, Android's emulator this session was
+under heavy system load (host load average 11–14, one real ANR logged — `Input dispatching timed
+out` — plus DNS resolution briefly failing for `sdk-stage.poltio.com`; all environmental, not an SDK
+bug), which made screenshotting the box mid-expanded-state very difficult — every attempt landed on
+an already-collapsed frame. Digging into why led to a real, confirmed platform inconsistency:
+
+- **Android's `PoltioFloatingBoxTriggerView.applyState`** unconditionally schedules a 5-second
+  auto-collapse (`AUTO_COLLAPSE_DELAY_MS = 5000L`) any time the box becomes expanded — regardless of
+  `floating-initial-position`'s value (even explicit `"expanded"`, which sounds like it should stay
+  open).
+- **iOS's `PoltioFloatingBoxTriggerView`** has **no auto-collapse timer at all** — grepped for
+  `scheduleAutoCollapse`/`autoCollapseTimer`/`isInitialActive` in the iOS box file and found zero
+  matches. Once expanded on iOS, the box stays open until the user (or `resetToCollapsed`) closes it.
+
+This isn't a rendering bug, but it is a genuine behavior difference a widget author could hit:
+the same widget config produces "opens and stays open" on iOS vs. "opens then auto-hides after 5s"
+on Android. Not fixed this session (no product decision on which behavior is "correct" — flagging
+for the user to decide whether to add the iOS timer, remove the Android one, or leave as
+intentional). Also worth checking what web does here for a three-way comparison, not done this
+round.
+
 ## Solved — pill "tap-to-expand not working reliably" (from an earlier session)
 
 Not a bug. Root-caused this session with temporary debug instrumentation (timestamped logging in
@@ -312,12 +335,12 @@ an SDK or Makefile issue — ask the user rather than debugging client-side.
 | `floating-box-show-close-button` | ✅ | ✅ | ✅ | Close (X) button visible next to the header text on all three platforms. |
 | `floating-box-bg-color-first` (outer chrome) | ⬜ | ⬜ | ⬜ | **Set to `#1A1A2E` but not visually distinguishable on any platform** — the inner card (`bg-color-second`) appears to fully cover the outer container with no visible edge/sliver in the default expanded layout, on web, iOS, and Android alike. Consistent across all three, so likely not a bug — just not visually testable in this trigger's default layout. Worth a quick source read next time to confirm intentional. |
 | `floating-img` | ⬜ | 🧩 | 🧩 | baseline showed fallback (image URL 404s on both iOS/Android) — need a working image URL to test properly |
-| `floating-box-text-first-font-size` | ⬜ | ⬜ | ⬜ | |
-| `floating-box-text-first-font-weight` | ⬜ | ⬜ | ⬜ | |
-| `floating-box-text-second-font-size` | ⬜ | ⬜ | ⬜ | |
-| `floating-box-text-second-font-weight` | ⬜ | ⬜ | ⬜ | |
-| `floating-box-text-align-first` | ⬜ | ⬜ | ⬜ | |
-| `floating-box-text-align-second` | ⬜ | ⬜ | ⬜ | |
+| `floating-box-text-first-font-size` | ✅ | ✅ | 🧩 | `2rem`/32px — confirmed exact via web computed-style and visually on iOS (header text much larger, causes truncation to "Smart" at this extreme value — expected given the header is single-line). Android: wired in code (`textSize = boxTextFirstFontSize`), not cleanly re-screenshotted this round — see note below. |
+| `floating-box-text-first-font-weight` | ✅ | ✅ | 🧩 | `400` (regular, vs. default 700 bold) — confirmed via web (`font-weight: 400`) and visually on iOS. **Android note**: Android's box text-weight is a **binary bold/normal** choice (`isBoldWeight`: numeric value `>= 600` → bold, else normal) rather than iOS/web's full numeric weight scale — a real, accepted platform granularity gap (Android's `Typeface` API doesn't cleanly support arbitrary numeric weights on system fonts pre-API 28). `400` and `900` both still resolve correctly to normal/bold respectively under this scheme. |
+| `floating-box-text-second-font-size` | ✅ | ✅ | 🧩 | `0.75rem`/12px — confirmed via web computed-style and visually on iOS (small, dense footer text). Android: wired in code, not cleanly re-screenshotted — see note below. |
+| `floating-box-text-second-font-weight` | ✅ | ✅ | 🧩 | `900` (maps to bold on Android per the granularity note above) — confirmed via web and iOS. |
+| `floating-box-text-align-first` | ✅ (web only) | 🧩 | 🧩 | `center` — confirmed via web computed style (`justify-content: center` on the parent). iOS/Android: code-confirmed wired (`headerLabel.textAlignment`/`gravity = boxTextAlignFirst`), but with the oversized 2rem font overflowing/truncating the label, there's no visible slack space left for centering to show a visible effect — inconclusive by observation, same class of limitation noted for the card trigger's border-radius test. |
+| `floating-box-text-align-second` | ✅ (web only) | 🧩 | 🧩 | `flex-end` — confirmed via web (`justify-content: flex-end`); code-confirmed wired on iOS/Android, short "Just for you" footer text did appear to sit right-aligned in the iOS screenshot but wasn't rigorously pixel-checked. |
 | `floating-box-start-mode` | ⬜ | ⬜ | ⬜ | |
 | `floating-box-open-on-scroll` | ➖ | ➖ | ➖ | no native scroll hook |
 | `floating-box-open-on-time` | ⬜ | ⬜ | ⬜ | |
@@ -326,7 +349,9 @@ an SDK or Makefile issue — ask the user rather than debugging client-side.
 | `floating-box-full-image-mode` | ⬜ | ⬜ | ⬜ | |
 
 Widget 393's `overlay_options` currently sits at (not reverted):
-`{"floating-img":"widget/box-default.png","trigger-type":"box","floating-box-text-first":"Smart Picks","floating-box-text-second":"Just for you","floating-initial-position":"active","floating-box-bg-color-first":"#1A1A2E","floating-box-bg-color-second":"#F5A623","floating-box-text-color-first":"#FFFFFF","floating-box-show-close-button":"true","floating-box-text-color-second":"#1A1A2E"}`.
+`{"floating-img":"widget/box-default.png","trigger-type":"box","floating-box-text-first":"Smart Picks","floating-box-text-second":"Just for you","floating-initial-position":"active","floating-box-bg-color-first":"#1A1A2E","floating-box-bg-color-second":"#F5A623","floating-box-text-align-first":"center","floating-box-text-color-first":"#FFFFFF","floating-box-show-close-button":"true","floating-box-text-align-second":"flex-end","floating-box-text-color-second":"#1A1A2E","floating-box-text-first-font-size":"2rem","floating-box-text-second-font-size":"0.75rem","floating-box-text-first-font-weight":"400","floating-box-text-second-font-weight":"900"}`.
+(`floating-initial-position` briefly went to `"expanded"` mid-round for screenshot stability, same
+trick as the pill round, then was explicitly reverted back to `"active"`.)
 
 ### product_card — out of scope (no native trigger)
 
@@ -385,6 +410,10 @@ found and fixed" section above the code-fixes list.
   `docs/screenshots/android/pill_pulsate_disabled.png` — collapsed pill with
   `floating-show-pulsate: "false"`, confirming the pulsate ring is correctly absent on both
   platforms.
+- `docs/screenshots/ios/box_fontsize_weight_align.png` — box trigger expanded with
+  `text-first-font-size/weight`, `text-second-font-size/weight`, and both `text-align` params set
+  to distinctive non-default values, confirming all 6 render correctly on iOS (no equivalent Android
+  screenshot this round — see "Found — box auto-collapse timing" section above for why).
 
 ## Next steps (in order) — pick up here
 
@@ -401,11 +430,16 @@ found and fixed" section above the code-fixes list.
    `floating-initial-position: "expanded"` trick** (see "Solved" section above) rather than
    `"active"` — `"active"` auto-collapses 2s after every expand, which is faster than two
    sequential MCP tool round-trips can reliably catch.
-5. Move to box (393): font size+weight, text alignment, start-mode, open-on-time,
-   close-remember-duration, resize, full-image-mode, and `floating-img` with a working image URL.
-6. Revert all three test widgets to something close to their original values when done (or leave a
+5. Box (393): font-size/weight/text-align done (web+iOS confirmed, Android code-confirmed only —
+   retry the Android screenshot when the emulator/host isn't under heavy load, see note above).
+   Remaining: `box-start-mode`, `box-open-on-time`, `box-close-remember-duration`, `box-resize`,
+   `box-full-image-mode`, and `floating-img` with a working (non-404ing) image URL.
+6. Ask the user about the box auto-collapse timing inconsistency found this round (Android
+   auto-hides 5s after any expand, iOS never does) — decide whether it's a bug to fix or intentional
+   per-platform behavior, and check what web does for a three-way comparison.
+7. Revert all three test widgets to something close to their original values when done (or leave a
    note if the user wants the test values kept — widget 401 has NOT been reverted yet, see above).
-7. Add/extend unit tests for `showLogo` parsing (default true / explicit false) on both platforms,
+8. Add/extend unit tests for `showLogo` parsing (default true / explicit false) on both platforms,
    since it can't be live-tested.
 
 ## Session log
@@ -490,3 +524,15 @@ found and fixed" section above the code-fixes list.
   separately (pulsate ring correctly absent on both platforms). Reverted `floating-initial-position`
   back to `"active"` afterward. Pill trigger is now essentially fully verified; only
   `pill-start-mode` (as its own explicit test) and `pill-close-remember-duration` remain.
+- **2026-09-17 (continued, box round)**: Tested box (393) `text-first/second-font-size`,
+  `-font-weight`, and both `text-align-first/second` in one batch. Confirmed exact via web
+  computed-style and visually on iOS. Android was under heavy host system load this round (load avg
+  11–14, one real ANR from `Input dispatching timed out`, plus a transient DNS failure resolving
+  `sdk-stage.poltio.com`) which made it impractical to catch a clean expanded-state screenshot —
+  code-level wiring confirmed via grep instead (all 6 params correctly referenced). That
+  investigation surfaced a real, confirmed platform inconsistency: Android's box unconditionally
+  re-arms a 5-second auto-collapse on every expand (regardless of `floating-initial-position`, even
+  `"expanded"`), while iOS's box has no auto-collapse logic at all — see "Found — box auto-collapse
+  timing" section above. Also confirmed Android's box font-weight is a binary bold/normal
+  (`>= 600` threshold) vs. iOS/web's full numeric weight scale — an accepted, documented platform
+  capability gap, not a bug. Reverted `floating-initial-position` back to `"active"` afterward.
