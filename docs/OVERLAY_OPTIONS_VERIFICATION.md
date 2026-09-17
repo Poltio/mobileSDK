@@ -137,28 +137,65 @@ confirmed via pixel-sampling the screenshot (`docs/screenshots/ios/pill_icon_col
 the icon now renders the correct `rgb(74, 85, 101)` grey, matching Android and web exactly.
 Unit tests + swiftformat still pass.
 
-## Found — box auto-collapse timing is inconsistent between iOS and Android
+## Fixed — box auto-collapse is now the default on both platforms
 
-While testing the box trigger's font-size/weight/align params, Android's emulator this session was
-under heavy system load (host load average 11–14, one real ANR logged — `Input dispatching timed
-out` — plus DNS resolution briefly failing for `sdk-stage.poltio.com`; all environmental, not an SDK
-bug), which made screenshotting the box mid-expanded-state very difficult — every attempt landed on
-an already-collapsed frame. Digging into why led to a real, confirmed platform inconsistency:
+**Originally found as an inconsistency, now resolved.** While testing the box trigger's
+font-size/weight/align params, Android's emulator was under heavy system load (host load average
+11–14, one real ANR logged — `Input dispatching timed out` — plus a transient DNS failure; all
+environmental, not an SDK bug), which made screenshotting the box mid-expanded-state very difficult
+— every attempt landed on an already-collapsed frame. Digging into why surfaced a real platform
+inconsistency: Android's `PoltioFloatingBoxTriggerView.applyState` unconditionally scheduled a
+5-second auto-collapse any time the box became expanded, while iOS's box had **no auto-collapse
+timer at all** — once expanded on iOS, it stayed open until the user (or `resetToCollapsed`) closed
+it.
 
-- **Android's `PoltioFloatingBoxTriggerView.applyState`** unconditionally schedules a 5-second
-  auto-collapse (`AUTO_COLLAPSE_DELAY_MS = 5000L`) any time the box becomes expanded — regardless of
-  `floating-initial-position`'s value (even explicit `"expanded"`, which sounds like it should stay
-  open).
-- **iOS's `PoltioFloatingBoxTriggerView`** has **no auto-collapse timer at all** — grepped for
-  `scheduleAutoCollapse`/`autoCollapseTimer`/`isInitialActive` in the iOS box file and found zero
-  matches. Once expanded on iOS, the box stays open until the user (or `resetToCollapsed`) closes it.
+The user confirmed Android's behavior (auto-collapse after expanding) is the one they want as the
+**default on both platforms**, and specifically asked for it to also mimic web's
+`floating-box-open-on-scroll` pattern: box starts collapsed, opens once the user scrolls past a
+threshold, then auto-collapses again — "which is good" on web and worth native parity.
 
-This isn't a rendering bug, but it is a genuine behavior difference a widget author could hit:
-the same widget config produces "opens and stays open" on iOS vs. "opens then auto-hides after 5s"
-on Android. Not fixed this session (no product decision on which behavior is "correct" — flagging
-for the user to decide whether to add the iOS timer, remove the Android one, or leave as
-intentional). Also worth checking what web does here for a three-way comparison, not done this
-round.
+**Fixed**: `ios/Sources/PoltioSDK/UI/PoltioFloatingBoxTriggerView.swift` now re-arms a 5-second
+auto-collapse timer every time it enters the expanded state (mirroring Android's existing,
+already-shipped `AUTO_COLLAPSE_DELAY_MS = 5000L` behavior exactly — same unconditional trigger,
+same duration), invalidated on manual close/open-widget so it can't fire after the trigger's gone.
+
+## Feature added — native `floating-box-open-on-scroll`
+
+Both platforms already parsed `boxOpenOnScroll: Bool` (default `true`) into the model, but neither
+consumed it anywhere — it was fully inert. Implemented it natively on both platforms, mirroring web
+SDK's `box.ts`: on load, if `floating-box-open-on-time` isn't also set (matching web's
+`else if` precedence — the two are alternative ways to specify the same "auto-reveal once" moment),
+install a scroll observer; the first time the host content scrolls past a ~100pt/dp threshold, the
+collapsed box auto-expands once (one-shot, like web's `controller.abort()`), and the new default
+auto-collapse timer above closes it again a few seconds later — the exact "starts collapsed → opens
+on scroll → collapses again" loop the user asked to mimic.
+
+Mobile has no single generic "did the page scroll" signal the way a browser's `document.scroll`
+does, so each platform uses its own best native technique, chosen specifically so it also works with
+apps built on modern UI toolkits, not just classic scroll views:
+
+- **iOS** (`ios/Sources/PoltioSDK/UI/PoltioScrollObserver.swift`, new file): swizzles
+  `UIScrollView`'s `contentOffset` setter once per process — the same standard, non-invasive
+  technique various analytics SDKs use for scroll-depth tracking. Always calls through to the
+  original implementation first, so host scrolling is completely unaffected; this works for both
+  UIKit scroll views and SwiftUI's `ScrollView`/`List` (both backed by `UIScrollView` under the
+  hood).
+- **Android** (`android/poltio-sdk/src/main/java/com/poltio/sdk/ui/PoltioScrollObserver.kt`, new
+  file): wraps the current `Activity`'s `Window.Callback.dispatchTouchEvent` and tracks cumulative
+  vertical touch displacement per gesture. This was a deliberate choice over the more "obvious"
+  `ViewTreeObserver.OnScrollChangedListener` — that only fires for classic `View.scrollTo`/`scrollBy`
+  calls, which **Jetpack Compose's `LazyColumn`/`ScrollView` never issues** (Compose manages scroll
+  purely internally). Wrapping `Window.Callback` sees every touch for the whole Activity before
+  either UI toolkit does, so it works for Compose apps too — confirmed live against the (Compose-based)
+  example app itself. Always delegates to the original callback unmodified and never consumes the
+  event, so host touch/gesture handling is unaffected — the same non-interference guarantee
+  `PoltioHostInteractionBus` already relies on.
+
+**Verified working end-to-end on both platforms**: relaunched the example app with widget 393 set to
+`floating-box-open-on-scroll: "true"` and no `floating-initial-position` (so it starts collapsed by
+default); a single scroll/swipe on the Home screen's product list auto-expanded the box on both iOS
+and Android, and it auto-collapsed back to the tab ~5s later on both, untouched. 29/29 iOS unit
+tests still pass, Android unit tests still pass, swiftformat clean.
 
 ## Solved — pill "tap-to-expand not working reliably" (from an earlier session)
 
@@ -224,11 +261,17 @@ serif'd on iOS, matching Android exactly. 29/29 unit tests still pass, swiftform
 - [x] `floatingFontFamily` on iOS silently ignored CSS generic family keywords (`"serif"`,
       `"monospace"`) since `UIFont(name:)` only resolves real installed font names. Now maps those
       keywords to `UIFontDescriptor.SystemDesign` first — see "Bug found and fixed" section above.
+- [x] Box auto-collapse is now the default on iOS too (previously Android-only) — see "Fixed — box
+      auto-collapse" section above.
+- [x] `floating-box-open-on-scroll` implemented natively on both platforms (was previously
+      parsed-but-unused) — see "Feature added" section above.
 
 ## Known, accepted gaps (not fixed — documented behavior, not bugs)
 
-- `floatingScrollThreshold`, `boxOpenOnScroll` — no generic "host page scroll" concept exists in a
-  native app; decoded for parity only, matches existing code comments.
+- `floatingScrollThreshold` — only used by the web SDK's card two-stage reveal, a web-specific
+  mechanism with no native equivalent trigger design; decoded for parity only. (`boxOpenOnScroll`
+  moved out of this list — see "Feature added — native `floating-box-open-on-scroll`" below, it's
+  now implemented.)
 - `productCardEnabled` and all `product_card`-section fields — no native `product_card` trigger
   exists yet on either platform (out of scope for this pass).
 - `parentId` / `parentClassName` / `parentHeight` (`iframe` section) — DOM-embedding-only, no native
@@ -344,16 +387,16 @@ an SDK or Makefile issue — ask the user rather than debugging client-side.
 | `floating-box-text-second-font-weight` | ✅ | ✅ | 🧩 | `900` (maps to bold on Android per the granularity note above) — confirmed via web and iOS. |
 | `floating-box-text-align-first` | ✅ (web only) | 🧩 | 🧩 | `center` — confirmed via web computed style (`justify-content: center` on the parent). iOS/Android: code-confirmed wired (`headerLabel.textAlignment`/`gravity = boxTextAlignFirst`), but with the oversized 2rem font overflowing/truncating the label, there's no visible slack space left for centering to show a visible effect — inconclusive by observation, same class of limitation noted for the card trigger's border-radius test. |
 | `floating-box-text-align-second` | ✅ (web only) | 🧩 | 🧩 | `flex-end` — confirmed via web (`justify-content: flex-end`); code-confirmed wired on iOS/Android, short "Just for you" footer text did appear to sit right-aligned in the iOS screenshot but wasn't rigorously pixel-checked. |
-| `floating-box-open-on-scroll` | ➖ | ➖ | ➖ | no native scroll hook |
+| `floating-box-open-on-scroll` | ✅ | ✅ | ✅ | Implemented natively this session on both platforms (was previously decoded but unused) — box starts collapsed, auto-expands once on first scroll past ~100pt, then auto-collapses again a few seconds later. Verified live on iOS and Android; see "Feature added" section above for the scroll-detection technique used per platform. |
 | `floating-box-open-on-time` | ⬜ | ⬜ | ⬜ | |
 | `floating-box-close-remember-duration` | ⬜ | ⬜ | ⬜ | |
 
 Widget 393's `overlay_options` currently sits at (not reverted):
-`{"floating-img":"https://placehold.co/400x300.png","trigger-type":"box","floating-box-resize":"1.5","floating-box-text-first":"Smart Picks","floating-box-text-second":"Just for you","floating-initial-position":"active","floating-box-bg-color-first":"#1A1A2E","floating-box-bg-color-second":"#F5A623","floating-box-full-image-mode":"true","floating-box-text-color-first":"#FFFFFF","floating-box-show-close-button":"true","floating-box-text-color-second":"#1A1A2E"}`.
-(The font-size/weight/align test values from the previous round were superseded by this round's
-`floating-img`/`full-image-mode`/`resize` test and are no longer set. `floating-initial-position`
-and `floating-box-start-mode` were both used as temporary "start expanded" testing tricks at
-different points and both ended up unset/reverted back to `"active"`.)
+`{"trigger-type":"box","floating-box-text-first":"Smart Picks","floating-box-text-second":"Just for you","floating-box-bg-color-first":"#1A1A2E","floating-box-open-on-scroll":"true","floating-box-bg-color-second":"#F5A623","floating-box-text-color-first":"#FFFFFF","floating-box-show-close-button":"true","floating-box-text-color-second":"#1A1A2E"}`.
+(Left deliberately in this state — no `floating-initial-position` set, `floating-box-open-on-scroll`
+enabled — since it's now the live demonstration of the new default box behavior: starts collapsed,
+opens on scroll, auto-collapses again. The earlier `floating-img`/`full-image-mode`/`resize` test
+values are no longer set, but both were independently confirmed working in the previous round.)
 
 ### product_card — out of scope (no native trigger)
 
@@ -415,12 +458,18 @@ found and fixed" section above the code-fixes list.
 - `docs/screenshots/ios/box_fontsize_weight_align.png` — box trigger expanded with
   `text-first-font-size/weight`, `text-second-font-size/weight`, and both `text-align` params set
   to distinctive non-default values, confirming all 6 render correctly on iOS (no equivalent Android
-  screenshot this round — see "Found — box auto-collapse timing" section above for why).
+  screenshot this round — see "Fixed — box auto-collapse" section above for why).
 - `docs/screenshots/ios/box_image_fullmode_resize.png`,
   `docs/screenshots/android/box_image_fullmode_resize.png` — box trigger with a working
   `floating-img`, `full-image-mode: "true"`, `resize: "1.5"`, and `box-start-mode: "open"` all set
   together, confirming all 4 render identically on iOS and Android (bigger card, banner image
   filling the whole card, white text/icons floating over it).
+- `docs/screenshots/ios/box_open_on_scroll.png`,
+  `docs/screenshots/android/box_open_on_scroll.png` — box trigger auto-expanding mid-scroll (a
+  single swipe on the Home screen's product list), confirming the newly-implemented native
+  `floating-box-open-on-scroll` behavior on both platforms. Both also confirmed auto-collapsing back
+  to the tab ~5s later, untouched (screenshots of that final collapsed state not kept — the
+  behavior itself, not another still frame, was the point).
 
 ## Next steps (in order) — pick up here
 
@@ -441,16 +490,18 @@ found and fixed" section above the code-fixes list.
    sequential MCP tool round-trips can reliably catch.
 5. Box (393) is essentially done — font-size/weight/text-align (web+iOS confirmed, Android
    code-confirmed only, retry screenshot when the emulator isn't under heavy load), plus
-   `floating-img`/`full-image-mode`/`resize`/`box-start-mode` (all 4 confirmed on iOS+Android this
-   round). Only `box-open-on-time` and `box-close-remember-duration` remain (both behavior-only,
-   hard to visually verify quickly — same class as the pill's `close-remember-duration`).
-6. Ask the user about the box auto-collapse timing inconsistency found this round (Android
-   auto-hides 5s after any expand, iOS never does) — decide whether it's a bug to fix or intentional
-   per-platform behavior, and check what web does for a three-way comparison.
+   `floating-img`/`full-image-mode`/`resize`/`box-start-mode`/`open-on-scroll` (all confirmed on
+   iOS+Android). Only `box-open-on-time` (already implemented, just not re-verified after the
+   auto-collapse change) and `box-close-remember-duration` remain (behavior-only, hard to visually
+   verify quickly — same class as the pill's `close-remember-duration`).
+6. ~~Ask the user about the box auto-collapse timing inconsistency~~ — done, and fixed: iOS now
+   auto-collapses by default too, and `floating-box-open-on-scroll` is natively implemented on both
+   platforms. See "Fixed — box auto-collapse" and "Feature added" sections above.
 7. Revert all three test widgets to something close to their original values when done (or leave a
    note if the user wants the test values kept — widget 401 has NOT been reverted yet, see above).
 8. Add/extend unit tests for `showLogo` parsing (default true / explicit false) on both platforms,
-   since it can't be live-tested.
+   since it can't be live-tested. Same for the new box auto-collapse timer and scroll-observer logic
+   — currently only manually/live verified, no automated test coverage yet.
 
 ## Session log
 
@@ -559,3 +610,20 @@ found and fixed" section above the code-fixes list.
   after 5s, both exactly as expected from the earlier finding. Box trigger is now essentially fully
   verified; only `box-open-on-time` and `box-close-remember-duration` remain (behavior-only, low
   priority). Reverted `floating-box-start-mode` back to unset afterward.
+- **2026-09-17 (feature round)**: User asked to fix the box auto-collapse inconsistency and mimic
+  web's "starts collapsed → opens on scroll → auto-collapses" pattern natively. Read web's actual
+  `box.ts` implementation to understand the exact semantics (one-shot scroll listener past a 100px
+  threshold, `else if` against `boxOpenOnTime`, auto-recollapse after ~3s). Implemented: (1) iOS box
+  now re-arms a 5s auto-collapse timer on every expand, matching Android's already-shipped behavior
+  exactly, making it the consistent default on both platforms; (2) native
+  `floating-box-open-on-scroll` support on both platforms (previously parsed but completely unused)
+  via new `PoltioScrollObserver` files — a `UIScrollView.contentOffset` swizzle on iOS, a
+  `Window.Callback.dispatchTouchEvent` wrapper on Android (chosen specifically because
+  `ViewTreeObserver.OnScrollChangedListener` doesn't fire for Jetpack Compose's internally-managed
+  scrolling, and the example app itself is Compose-based). Both are purely observational — always
+  delegate through to the original implementation/callback, never consume or alter touch/scroll
+  behavior. Verified live end-to-end on both platforms: a single scroll on the Home screen's product
+  list auto-expands the collapsed box, which then auto-collapses again ~5s later, untouched, on both
+  iOS and Android. 29/29 iOS unit tests pass, Android unit tests pass, swiftformat clean. Widget 393
+  left configured with `floating-box-open-on-scroll: "true"` and no `floating-initial-position` as
+  a live demonstration of the new default behavior.

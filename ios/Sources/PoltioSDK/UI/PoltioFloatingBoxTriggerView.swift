@@ -43,6 +43,12 @@
         private var imageDownloadTask: URLSessionDataTask?
         /// One-shot timer for `boxOpenOnTime` auto-expand.
         private var autoOpenTimer: Timer?
+        /// Re-armed every time the box expands, for any reason — collapses it back down if left
+        /// untouched, matching Android's existing (already-shipped) behavior.
+        private var autoCollapseTimer: Timer?
+        /// Guards `floating-box-open-on-scroll` so it only ever fires once per trigger instance,
+        /// matching the web SDK's one-shot scroll listener (`controller.abort()` in `box.ts`).
+        private var hasAutoOpenedFromScroll = false
 
         // Self Dimensions
         private var widthConstraint: NSLayoutConstraint!
@@ -82,6 +88,7 @@
             applyState(currentState, animated: false)
             loadBannerImage()
             scheduleAutoOpenIfNeeded()
+            setupScrollOpenIfNeeded()
         }
 
         @available(*, unavailable)
@@ -91,9 +98,12 @@
 
         deinit {
             imageDownloadTask?.cancel()
-            let timer = autoOpenTimer
+            NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didScrollPastThresholdNotification, object: nil)
+            let autoOpen = autoOpenTimer
+            let autoCollapse = autoCollapseTimer
             DispatchQueue.main.async {
-                timer?.invalidate()
+                autoOpen?.invalidate()
+                autoCollapse?.invalidate()
             }
         }
 
@@ -395,7 +405,7 @@
             imageDownloadTask?.resume()
         }
 
-        // MARK: - Auto Open (`boxOpenOnTime`)
+        // MARK: - Auto Open (`boxOpenOnTime` / `boxOpenOnScroll`)
 
         private func scheduleAutoOpenIfNeeded() {
             guard let delayMs = widget.overlayOptions.boxOpenOnTime, delayMs > 0 else { return }
@@ -406,6 +416,27 @@
                     self.setState(.expanded, animated: true)
                 }
             }
+        }
+
+        /// Mirrors the web SDK's `else if (params.boxOpenOnScroll === 'true')` precedence in
+        /// `box.ts` — `boxOpenOnTime` wins if both are configured, since the two are alternative
+        /// ways of specifying the same "auto-reveal once" moment.
+        private func setupScrollOpenIfNeeded() {
+            guard widget.overlayOptions.boxOpenOnTime == nil, widget.overlayOptions.boxOpenOnScroll else { return }
+            PoltioScrollObserver.installIfNeeded()
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleScrollDetected),
+                name: PoltioScrollObserver.didScrollPastThresholdNotification,
+                object: nil
+            )
+        }
+
+        @objc private func handleScrollDetected() {
+            guard !hasAutoOpenedFromScroll, currentState == .collapsed else { return }
+            hasAutoOpenedFromScroll = true
+            NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didScrollPastThresholdNotification, object: nil)
+            setState(.expanded, animated: true)
         }
 
         // MARK: - State Handling & Actions
@@ -422,6 +453,21 @@
 
         private func applyState(_ state: TriggerState, animated: Bool) {
             let isExpanded = (state == .expanded)
+
+            // Re-armed on every expand, for any reason (manual tap, `boxOpenOnTime`,
+            // `boxOpenOnScroll`) — auto-collapsing an untouched expanded box back down is the
+            // default behavior here, matching Android (which has always done this) rather than
+            // something gated behind a specific trigger.
+            autoCollapseTimer?.invalidate()
+            autoCollapseTimer = nil
+            if isExpanded {
+                autoCollapseTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { [weak self] _ in
+                    DispatchQueue.main.async {
+                        guard let self, self.currentState == .expanded else { return }
+                        self.setState(.collapsed, animated: true)
+                    }
+                }
+            }
 
             widthConstraint.constant = isExpanded ? expandedWidth : collapsedWidth
             heightConstraint.constant = isExpanded ? expandedHeight : collapsedHeight
@@ -467,6 +513,8 @@
         }
 
         @objc private func handleExpandedTap() {
+            autoCollapseTimer?.invalidate()
+            autoCollapseTimer = nil
             onOpenWidget()
         }
 

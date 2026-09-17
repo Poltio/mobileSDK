@@ -62,6 +62,10 @@ internal class PoltioFloatingBoxTriggerView(
     private val bannerFallback = FrameLayout(context)
     private var sizeAnimator: android.animation.ValueAnimator? = null
     private var bannerDownload: Future<*>? = null
+    /** Guards `floating-box-open-on-scroll` so it only ever fires once per trigger instance,
+     * matching the web SDK's one-shot scroll listener (`controller.abort()` in `box.ts`). */
+    private var hasAutoOpenedFromScroll = false
+
     private val autoOpenRunnable = Runnable {
         if (currentState == TriggerState.COLLAPSED) setState(TriggerState.EXPANDED, animated = true)
     }
@@ -71,6 +75,9 @@ internal class PoltioFloatingBoxTriggerView(
     private val outsideInteractionListener: () -> Unit = {
         if (currentState == TriggerState.EXPANDED) setState(TriggerState.COLLAPSED, animated = true)
     }
+    /** Assigned in `init` (not as a property initializer) so it can safely reference itself for
+     * self-removal on first fire — see `setupScrollOpenIfNeeded`. */
+    private lateinit var scrollListener: () -> Unit
 
     init {
         clipChildren = false
@@ -81,6 +88,7 @@ internal class PoltioFloatingBoxTriggerView(
         applyState(currentState, animated = false)
         loadBannerImage()
         scheduleAutoOpenIfNeeded()
+        setupScrollOpenIfNeeded()
         PoltioHostInteractionBus.addListener(outsideInteractionListener)
     }
 
@@ -91,6 +99,7 @@ internal class PoltioFloatingBoxTriggerView(
         PoltioExecutors.main.removeCallbacks(autoOpenRunnable)
         PoltioExecutors.main.removeCallbacks(autoCollapseRunnable)
         PoltioHostInteractionBus.removeListener(outsideInteractionListener)
+        if (::scrollListener.isInitialized) PoltioScrollObserver.removeListener(scrollListener)
     }
 
     private fun setupCollapsedContainer() {
@@ -328,6 +337,23 @@ internal class PoltioFloatingBoxTriggerView(
         if (delayMs <= 0) return
         PoltioExecutors.main.removeCallbacks(autoOpenRunnable)
         PoltioExecutors.main.postDelayed(autoOpenRunnable, delayMs.toLong())
+    }
+
+    /** Mirrors the web SDK's `else if (params.boxOpenOnScroll === 'true')` precedence in
+     * `box.ts` — `boxOpenOnTime` wins if both are configured, since the two are alternative ways
+     * of specifying the same "auto-reveal once" moment. */
+    private fun setupScrollOpenIfNeeded() {
+        val openOnTime = widget.overlayOptions.boxOpenOnTime
+        if ((openOnTime != null && openOnTime > 0) || !widget.overlayOptions.boxOpenOnScroll) return
+        scrollListener = {
+            if (!hasAutoOpenedFromScroll && currentState == TriggerState.COLLAPSED) {
+                hasAutoOpenedFromScroll = true
+                PoltioScrollObserver.removeListener(scrollListener)
+                PoltioExecutors.runOnMain { setState(TriggerState.EXPANDED, animated = true) }
+            }
+        }
+        (context as? android.app.Activity)?.let { PoltioScrollObserver.installIfNeeded(it) }
+        PoltioScrollObserver.addListener(scrollListener)
     }
 
     // MARK: - State handling
