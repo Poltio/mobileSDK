@@ -467,7 +467,12 @@
             // tap) at that moment, the combined guard skipped entirely, leaving this observer
             // registered (and re-checked on every subsequent scroll) for the rest of the view's
             // lifetime instead of behaving as the one-shot it's meant to be.
-            guard let scrollView = notification.object as? UIScrollView, scrollView.window?.windowScene == window?.windowScene else { return }
+            // A `nil` scene on either side must never count as a match — see the identical note
+            // on PoltioScrollObserver.handleScrolled.
+            guard let scrollView = notification.object as? UIScrollView,
+                  let scrolledScene = scrollView.window?.windowScene,
+                  scrolledScene == window?.windowScene
+            else { return }
             guard !hasAutoOpenedFromScroll else { return }
             hasAutoOpenedFromScroll = true
             NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didScrollPastThresholdNotification, object: nil)
@@ -492,7 +497,12 @@
         @objc private func handleScrollMovementDetected(_ notification: Notification) {
             // Ignores scroll events from any window scene other than this view's own — see the
             // type-level doc comment on PoltioScrollObserver.
-            guard let scrollView = notification.object as? UIScrollView, scrollView.window?.windowScene == window?.windowScene else { return }
+            // A `nil` scene on either side must never count as a match — see the identical note
+            // on PoltioScrollObserver.handleScrolled.
+            guard let scrollView = notification.object as? UIScrollView,
+                  let scrolledScene = scrollView.window?.windowScene,
+                  scrolledScene == window?.windowScene
+            else { return }
             guard currentState == .expanded,
                   let expandedAt, Date().timeIntervalSince(expandedAt) > Self.scrollCollapseGracePeriod
             else { return }

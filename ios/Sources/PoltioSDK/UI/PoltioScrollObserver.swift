@@ -113,7 +113,11 @@
             // lock and list work entirely rather than paying for it on every scroll event. A stale
             // read outside the lock is fine: worst case is one extra check on the next update.
             guard !pendingThresholds.isEmpty else { return }
-            let scrolledScene = scrollView.window?.windowScene
+            // A `nil` scene here (scrollView not yet attached to any window) must never match a
+            // pending entry whose own view also happens to have a `nil` scene for the same reason
+            // — comparing two Optionals directly makes `nil == nil` true, which would be a false
+            // "same scene" match between two views that aren't really in any scene together.
+            guard let scrolledScene = scrollView.window?.windowScene else { return }
             lock.lock()
             // Only entries in the same window scene as the scrolling view are even eligible to
             // fire — a registration whose view has already been deallocated (nil weak ref) can
