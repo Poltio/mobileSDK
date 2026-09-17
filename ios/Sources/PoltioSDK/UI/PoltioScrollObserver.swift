@@ -31,7 +31,6 @@
         private static let lock = NSLock()
         private static var isInstalled = false
         private static var pendingThresholds: [(threshold: CGFloat, callback: () -> Void)] = []
-        fileprivate static var lastScrolled: CGFloat = 0
 
         /// Installs the swizzle exactly once per process. Safe to call repeatedly/concurrently.
         static func installIfNeeded() {
@@ -71,7 +70,20 @@
         }
     }
 
+    /// Association key for `UIScrollView.poltio_lastScrolled` below. The address of this variable
+    /// (not its value) is what `objc_get/setAssociatedObject` key on.
+    private var poltio_lastScrolledKey: UInt8 = 0
+
     fileprivate extension UIScrollView {
+        /// Per-instance last-seen scroll position, used to detect real movement in
+        /// `poltio_setContentOffset`. Previously a single value shared across every `UIScrollView`
+        /// in the app, which made two scroll views scrolling independently look like one erratic
+        /// one — associating it with `self` instead scopes it correctly per scroll view.
+        var poltio_lastScrolled: CGFloat {
+            get { objc_getAssociatedObject(self, &poltio_lastScrolledKey) as? CGFloat ?? 0 }
+            set { objc_setAssociatedObject(self, &poltio_lastScrolledKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
+        }
+
         @objc func poltio_setContentOffset(_ contentOffset: CGPoint) {
             // Calls through to the original implementation — this method IS the original after the
             // swizzle exchange above, despite the name.
@@ -80,10 +92,10 @@
             if scrolled > PoltioScrollObserver.threshold {
                 NotificationCenter.default.post(name: PoltioScrollObserver.didScrollPastThresholdNotification, object: nil)
             }
-            if abs(scrolled - PoltioScrollObserver.lastScrolled) > PoltioScrollObserver.movementEpsilon {
+            if abs(scrolled - poltio_lastScrolled) > PoltioScrollObserver.movementEpsilon {
                 NotificationCenter.default.post(name: PoltioScrollObserver.didDetectScrollMovementNotification, object: nil)
             }
-            PoltioScrollObserver.lastScrolled = scrolled
+            poltio_lastScrolled = scrolled
             PoltioScrollObserver.handleScrolled(scrolled)
         }
     }

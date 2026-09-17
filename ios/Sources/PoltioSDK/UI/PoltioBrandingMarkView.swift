@@ -50,5 +50,11 @@
                 label.bottomAnchor.constraint(equalTo: bottomAnchor),
             ])
         }
+
+        /// Applies the widget's custom font family, if any, so the branding mark matches the rest
+        /// of the card trigger instead of always using the system font.
+        func configure(with options: PoltioOverlayOptions) {
+            label.font = options.resolvedFont(size: Constants.fontSize, weight: .semibold)
+        }
     }
 #endif

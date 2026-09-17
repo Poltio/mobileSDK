@@ -27,7 +27,6 @@ internal object PoltioScrollObserver {
 
     private val listeners = mutableSetOf<() -> Unit>()
     private val movementListeners = mutableSetOf<() -> Unit>()
-    private var wrappedActivity: Activity? = null
     private val pendingThresholds = mutableListOf<Pair<Float, () -> Unit>>()
 
     fun addListener(listener: () -> Unit) {
@@ -65,17 +64,14 @@ internal object PoltioScrollObserver {
         installIfNeeded(activity)
     }
 
-    /** Installs the wrapper on [activity]'s window if not already installed for it. */
+    /** Installs the wrapper on [activity]'s window if not already installed for it. Checks the
+     * window's current callback directly rather than caching the [Activity] reference itself,
+     * which would otherwise leak that activity for the lifetime of the app process (this object
+     * is a singleton and never releases what it holds). */
     fun installIfNeeded(activity: Activity) {
-        if (wrappedActivity === activity) return
-        val original = activity.window.callback
-        if (original is ScrollObservingCallback) {
-            wrappedActivity = activity
-            return
-        }
-        if (original == null) return
+        val original = activity.window.callback ?: return
+        if (original is ScrollObservingCallback) return
         activity.window.callback = ScrollObservingCallback(activity, original)
-        wrappedActivity = activity
     }
 
     private fun notifyThresholdCrossed() {
@@ -99,22 +95,33 @@ internal object PoltioScrollObserver {
         private val thresholdPx = activity.dp(THRESHOLD_DP)
         private val movementThresholdPx = activity.dp(MOVEMENT_THRESHOLD_DP)
         private var downY = 0f
+        private var lastY = 0f
+        /** Total vertical drag distance accumulated across every gesture since this wrapper was
+         * installed — an absolute-position proxy, not a per-gesture one. Without this, a page
+         * scrolled via several smaller swipes would never cross [thresholdPx] or a card's
+         * configurable threshold, since each gesture's distance used to reset to zero on its own
+         * `ACTION_DOWN`, matching iOS/web's continuous scroll-offset tracking instead. */
+        private var cumulativeScrollPx = 0f
         private var hasNotifiedMovementThisGesture = false
 
         override fun dispatchTouchEvent(event: MotionEvent): Boolean {
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     downY = event.rawY
+                    lastY = event.rawY
                     hasNotifiedMovementThisGesture = false
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    val distance = abs(event.rawY - downY)
-                    if (distance > thresholdPx) notifyThresholdCrossed()
-                    if (!hasNotifiedMovementThisGesture && distance > movementThresholdPx) {
+                    cumulativeScrollPx += abs(event.rawY - lastY)
+                    lastY = event.rawY
+                    if (cumulativeScrollPx > thresholdPx) notifyThresholdCrossed()
+                    // Per-gesture (not cumulative) distance: this only needs to tell a real drag
+                    // apart from a stray tap, not track absolute scroll position.
+                    if (!hasNotifiedMovementThisGesture && abs(event.rawY - downY) > movementThresholdPx) {
                         hasNotifiedMovementThisGesture = true
                         notifyMovementDetected()
                     }
-                    handleScrolled(activity, distance)
+                    handleScrolled(activity, cumulativeScrollPx)
                 }
             }
             return original.dispatchTouchEvent(event)

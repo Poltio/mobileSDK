@@ -104,6 +104,13 @@ internal class PoltioFloatingBoxTriggerView(
         applyState(currentState, animated = false)
         loadBannerImage()
         scheduleAutoOpenIfNeeded()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        // Registered here (not in `init`, which only ever runs once) so a view that gets detached
+        // and later reattached to a window — rather than torn down and recreated — re-establishes
+        // its scroll observation instead of silently losing it forever.
         setupScrollOpenIfNeeded()
         PoltioHostInteractionBus.addListener(outsideInteractionListener)
         (context as? android.app.Activity)?.let { PoltioScrollObserver.installIfNeeded(it) }

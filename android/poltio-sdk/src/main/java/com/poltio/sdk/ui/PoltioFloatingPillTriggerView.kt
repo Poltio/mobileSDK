@@ -165,7 +165,20 @@ internal class PoltioFloatingPillTriggerView(
         setupSwipeToCollapse()
 
         iconLoader.load(widget.overlayOptions, sparkleIcon) { sparkleIcon.visibility = View.GONE }
+    }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        // Auto-collapse is the default whenever expanded, for any reason — matching web's pill
+        // (the `.expanded` class always gets removed 3s after being added, regardless of how it
+        // was added) and the same "auto-collapse is default" behavior the box trigger now has.
+        // `applyState` schedules it unconditionally now, including for this initial call.
+        // Previously gated behind `isInitialActive`.
+        applyState(currentState, animated = false)
+
+        // Registered here (not in `init`, which only ever runs once) so a view that gets detached
+        // and later reattached to a window — rather than torn down and recreated — re-establishes
+        // its scroll observation instead of silently losing it forever.
         PoltioHostInteractionBus.addListener(outsideInteractionListener)
 
         // Matches web's pill (`pill.ts`'s `addPulse`): unconditionally reveals the collapsed pill
@@ -183,16 +196,6 @@ internal class PoltioFloatingPillTriggerView(
         (context as? android.app.Activity)?.let { PoltioScrollObserver.installIfNeeded(it) }
         PoltioScrollObserver.addListener(scrollOpenListener)
         PoltioScrollObserver.addMovementListener(scrollCollapseListener)
-    }
-
-    override fun onAttachedToWindow() {
-        super.onAttachedToWindow()
-        // Auto-collapse is the default whenever expanded, for any reason — matching web's pill
-        // (the `.expanded` class always gets removed 3s after being added, regardless of how it
-        // was added) and the same "auto-collapse is default" behavior the box trigger now has.
-        // `applyState` schedules it unconditionally now, including for this initial call.
-        // Previously gated behind `isInitialActive`.
-        applyState(currentState, animated = false)
     }
 
     override fun onDetachedFromWindow() {

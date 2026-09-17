@@ -98,6 +98,13 @@ internal class PoltioFloatingCardTriggerView(
         expandedIconLoader.load(widget.overlayOptions, expandedSparkle) { expandedSparkle.visibility = View.GONE }
 
         applyState(currentState, animated = false)
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        // Registered here (not in `init`, which only ever runs once) so a view that gets detached
+        // and later reattached to a window — rather than torn down and recreated — re-establishes
+        // its scroll observation instead of silently losing it forever.
         setupScrollReveal()
         (context as? android.app.Activity)?.let { PoltioScrollObserver.installIfNeeded(it) }
         PoltioScrollObserver.addMovementListener(scrollCollapseListener)
@@ -110,9 +117,16 @@ internal class PoltioFloatingCardTriggerView(
      * see `scrollCollapseListener` — a deliberate mobile-specific UX choice. */
     private fun setupScrollReveal() {
         (context as? android.app.Activity)?.let { activity ->
+            // `pendingThresholds` in PoltioScrollObserver is a long-lived list on a singleton
+            // object; a callback that strongly captures `this` would keep this view (and its
+            // Activity via `context`) alive forever if the threshold is never crossed. A weak
+            // reference lets the view (and the callback itself, once GC'd) become collectable
+            // normally instead.
+            val viewRef = java.lang.ref.WeakReference(this)
             PoltioScrollObserver.onScrollPast(activity, widget.overlayOptions.floatingScrollThreshold.toFloat()) {
                 PoltioExecutors.runOnMain {
-                    if (currentState == TriggerState.COLLAPSED) setState(TriggerState.EXPANDED, animated = true)
+                    val view = viewRef.get() ?: return@runOnMain
+                    if (view.currentState == TriggerState.COLLAPSED) view.setState(TriggerState.EXPANDED, animated = true)
                 }
             }
         }
@@ -295,7 +309,7 @@ internal class PoltioFloatingCardTriggerView(
             text = "Poltio"
             setTextColor(Color.GRAY)
             textSize = 10.5f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            typeface = resolvedTypeface(widget.overlayOptions.floatingFontFamily, android.graphics.Typeface.BOLD)
         }
         addView(brandLabel, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { leftMargin = context.dp(5f) })
     }

@@ -293,6 +293,7 @@
             let showLogo = widget.overlayOptions.showLogo
             brandingRow.translatesAutoresizingMaskIntoConstraints = false
             brandingRow.isHidden = !showLogo
+            brandingRow.configure(with: widget.overlayOptions)
             expandedContainer.addSubview(brandingRow)
 
             addSubview(expandedContainer)
