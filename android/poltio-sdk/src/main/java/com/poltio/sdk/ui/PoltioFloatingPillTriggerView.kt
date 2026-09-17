@@ -74,7 +74,7 @@ internal class PoltioFloatingPillTriggerView(
 
         background = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            cornerRadius = context.dp(28f).toFloat()
+            cornerRadius = context.dp(PoltioOverlayOptions.cssLength(widget.overlayOptions.floatingMobileTopBorderRadius, 28f)).toFloat()
             setColor(widget.overlayOptions.resolvedBgColor)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -96,13 +96,14 @@ internal class PoltioFloatingPillTriggerView(
         firstLabel.text = widget.overlayOptions.textFirst ?: "Try our"
         firstLabel.setTextColor(PoltioOverlayOptions.resolvedColor(widget.overlayOptions.textColorFirst, Color.WHITE))
         firstLabel.textSize = 13f
+        firstLabel.typeface = resolvedTypeface(widget.overlayOptions.floatingFontFamily)
         firstLabel.maxLines = 1
         textStack.addView(firstLabel)
 
         secondLabel.text = (widget.overlayOptions.textSecond ?: "PRODUCT").uppercase()
         secondLabel.setTextColor(PoltioOverlayOptions.resolvedColor(widget.overlayOptions.textColorSecond, accentColor))
         secondLabel.textSize = 15f
-        secondLabel.setTypeface(secondLabel.typeface, android.graphics.Typeface.BOLD)
+        secondLabel.typeface = resolvedTypeface(widget.overlayOptions.floatingFontFamily, android.graphics.Typeface.BOLD)
         secondLabel.letterSpacing = 0.05f
         secondLabel.maxLines = 1
         textStack.addView(secondLabel)
@@ -110,7 +111,7 @@ internal class PoltioFloatingPillTriggerView(
         thirdLabel.text = (widget.overlayOptions.textThird ?: "FINDER").uppercase()
         thirdLabel.setTextColor(PoltioOverlayOptions.resolvedColor(widget.overlayOptions.textColorThird, accentColor))
         thirdLabel.textSize = 15f
-        thirdLabel.setTypeface(thirdLabel.typeface, android.graphics.Typeface.BOLD)
+        thirdLabel.typeface = resolvedTypeface(widget.overlayOptions.floatingFontFamily, android.graphics.Typeface.BOLD)
         thirdLabel.letterSpacing = 0.05f
         thirdLabel.maxLines = 1
         textStack.addView(thirdLabel)

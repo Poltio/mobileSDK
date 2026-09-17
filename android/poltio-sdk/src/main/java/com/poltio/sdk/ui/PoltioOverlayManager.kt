@@ -157,6 +157,14 @@ internal object PoltioOverlayManager {
         contentRoot.addView(container)
         overlayContainer = container
 
+        // Android has no direct analogue of a CSS/window z-index; `floating-zindex` is instead
+        // mapped onto view elevation so a host app that stacks its own elevated views (dialogs,
+        // app bars) can still be told to render the trigger more/less prominently above them.
+        // Clamped to Material's practical elevation range so an arbitrary large value doesn't
+        // produce a runaway shadow.
+        val zIndexElevationDp = (options.floatingZindex / 100.0 * 8.0).coerceIn(0.0, 24.0)
+        container.elevation = activity.dp(zIndexElevationDp.toFloat()).toFloat()
+
         val onOpenWidget: () -> Unit = { presentWidgetWebView(widget.publicId, puid, widget.overlayOptions) }
         val onDismissForever: (Double) -> Unit = { hours ->
             resumedActivity?.get()?.let { PoltioTriggerDismissalStore.recordDismissal(it, widget.publicId, hours) }

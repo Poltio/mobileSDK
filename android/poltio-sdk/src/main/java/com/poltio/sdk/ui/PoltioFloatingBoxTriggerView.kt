@@ -112,7 +112,7 @@ internal class PoltioFloatingBoxTriggerView(
             text = widget.overlayOptions.floatingBoxTextFirst ?: "Product Finder"
             setTextColor(headerColor)
             textSize = 13f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            typeface = resolvedTypeface(widget.overlayOptions.floatingFontFamily, android.graphics.Typeface.BOLD)
             gravity = Gravity.CENTER
             rotation = -90f
         }
@@ -140,10 +140,11 @@ internal class PoltioFloatingBoxTriggerView(
         val headerColor = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxTextColorFirst, Color.BLACK)
         val footerColor = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxTextColorSecond, Color.BLACK)
         val fullImageMode = widget.overlayOptions.boxFullImageMode
+        val expandedCornerRadiusPx = context.dp(PoltioOverlayOptions.cssLength(widget.overlayOptions.floatingMobileTopBorderRadius, 18f)).toFloat()
 
         expandedContainer.background = GradientDrawable().apply {
             setColor(outerBg)
-            cornerRadius = context.dp(18f).toFloat()
+            cornerRadius = expandedCornerRadiusPx
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             expandedContainer.outlineProvider = ViewOutlineProvider.BACKGROUND
@@ -154,7 +155,7 @@ internal class PoltioFloatingBoxTriggerView(
         val innerCard = FrameLayout(context).apply {
             background = GradientDrawable().apply {
                 setColor(innerBg)
-                val r = context.dp(18f).toFloat()
+                val r = expandedCornerRadiusPx
                 cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
             }
             clipToOutline = true
@@ -166,7 +167,8 @@ internal class PoltioFloatingBoxTriggerView(
             text = widget.overlayOptions.floatingBoxTextFirst ?: "Product Finder"
             setTextColor(if (fullImageMode) Color.WHITE else headerColor)
             textSize = widget.overlayOptions.boxTextFirstFontSize
-            if (widget.overlayOptions.boxTextFirstFontWeight) setTypeface(typeface, android.graphics.Typeface.BOLD)
+            val style = if (widget.overlayOptions.boxTextFirstFontWeight) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL
+            typeface = resolvedTypeface(widget.overlayOptions.floatingFontFamily, style)
             gravity = widget.overlayOptions.boxTextAlignFirst or Gravity.CENTER_VERTICAL
             maxLines = 1
         }
@@ -179,7 +181,8 @@ internal class PoltioFloatingBoxTriggerView(
             text = widget.overlayOptions.floatingBoxTextSecond ?: "Product Finder"
             setTextColor(if (fullImageMode) Color.WHITE else footerColor)
             textSize = widget.overlayOptions.boxTextSecondFontSize
-            if (widget.overlayOptions.boxTextSecondFontWeight) setTypeface(typeface, android.graphics.Typeface.BOLD)
+            val style = if (widget.overlayOptions.boxTextSecondFontWeight) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL
+            typeface = resolvedTypeface(widget.overlayOptions.floatingFontFamily, style)
             gravity = widget.overlayOptions.boxTextAlignSecond or Gravity.CENTER_VERTICAL
             maxLines = 1
         }

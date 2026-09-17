@@ -171,7 +171,7 @@ internal class PoltioFloatingCardTriggerView(
             text = widget.overlayOptions.floatingTitle ?: widget.overlayOptions.floatingBoxTextFirst ?: DefaultStrings.TITLE.value
             setTextColor(widget.overlayOptions.resolvedTextColor)
             textSize = 18f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            typeface = resolvedTypeface(widget.overlayOptions.floatingFontFamily, android.graphics.Typeface.BOLD)
             maxLines = 2
         }
         column.addView(titleLabel, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(12f) })
@@ -180,6 +180,7 @@ internal class PoltioFloatingCardTriggerView(
             text = widget.overlayOptions.floatingDesc ?: widget.overlayOptions.floatingBoxTextSecond ?: DefaultStrings.DESCRIPTION.value
             setTextColor(withAlpha(widget.overlayOptions.resolvedTextColor, 0.95f))
             textSize = 13.5f
+            typeface = resolvedTypeface(widget.overlayOptions.floatingFontFamily)
             maxLines = 4
         }
         column.addView(descLabel, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(6f) })
@@ -188,7 +189,7 @@ internal class PoltioFloatingCardTriggerView(
             text = widget.overlayOptions.floatingButtonText ?: DefaultStrings.ACTION_BUTTON.value
             setTextColor(Color.BLACK)
             textSize = 15f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            typeface = resolvedTypeface(widget.overlayOptions.floatingFontFamily, android.graphics.Typeface.BOLD)
             gravity = Gravity.CENTER
             setPadding(context.dp(24f), 0, context.dp(24f), 0)
             background = GradientDrawable().apply {
@@ -203,6 +204,16 @@ internal class PoltioFloatingCardTriggerView(
             actionButton,
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, context.dp(Constants.ACTION_BUTTON_HEIGHT_DP)).apply { topMargin = context.dp(16f) },
         )
+
+        if (widget.overlayOptions.showLogo) {
+            column.addView(
+                buildBrandingRow(context),
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    topMargin = context.dp(10f)
+                    gravity = Gravity.CENTER_HORIZONTAL
+                },
+            )
+        }
 
         expandedContainer.addView(column, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
 
@@ -226,6 +237,28 @@ internal class PoltioFloatingCardTriggerView(
             true
         }
         expandedContainer.setOnClickListener { onOpenWidget() }
+    }
+
+    /** Small "Poltio" wordmark row shown at the bottom of the expanded card, gated by `showLogo`. */
+    private fun buildBrandingRow(context: Context): LinearLayout = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+
+        val dot = View(context).apply {
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.rgb(0, 158, 237))
+            }
+        }
+        addView(dot, LinearLayout.LayoutParams(context.dp(6f), context.dp(6f)))
+
+        val brandLabel = TextView(context).apply {
+            text = "Poltio"
+            setTextColor(Color.GRAY)
+            textSize = 10.5f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        }
+        addView(brandLabel, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { leftMargin = context.dp(5f) })
     }
 
     private fun withAlpha(@androidx.annotation.ColorInt color: Int, alphaFraction: Float): Int {

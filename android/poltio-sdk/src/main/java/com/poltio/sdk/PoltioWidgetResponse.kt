@@ -247,6 +247,9 @@ class PoltioOverlayOptions private constructor(private val fields: Map<String, S
     val floatingTextColor: String? get() = field("floating-textcolor", "floating-text-color")
     val floatingIconColor: String? get() = field("floating-icon-color", "floating-widget-icon-color")
 
+    /** Whether the Poltio branding mark is shown in the expanded card (default true), respecting mobile overrides. */
+    val showLogo: Boolean get() = boolValue(field("floating-show-logo"), true)
+
     // MARK: - pill
 
     val textFirst: String? get() = field("floating-text-first")
