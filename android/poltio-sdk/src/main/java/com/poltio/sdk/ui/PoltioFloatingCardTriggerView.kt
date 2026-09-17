@@ -150,6 +150,12 @@ internal class PoltioFloatingCardTriggerView(
     private companion object {
         /** Minimum time an expand must have been visible before a host scroll can collapse it. */
         const val SCROLL_COLLAPSE_GRACE_PERIOD_MS = 400L
+
+        /** Poltio brand blue, used for the branding mark's dot. */
+        val BRAND_DOT_COLOR: Int = Color.rgb(0, 158, 237)
+
+        /** Branding mark wordmark text color. */
+        val BRAND_TEXT_COLOR: Int = Color.GRAY
     }
 
     private fun setupCollapsedContainer() {
@@ -307,14 +313,14 @@ internal class PoltioFloatingCardTriggerView(
         val dot = View(context).apply {
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(Color.rgb(0, 158, 237))
+                setColor(BRAND_DOT_COLOR)
             }
         }
         addView(dot, LinearLayout.LayoutParams(context.dp(6f), context.dp(6f)))
 
         val brandLabel = TextView(context).apply {
             text = "Poltio"
-            setTextColor(Color.GRAY)
+            setTextColor(BRAND_TEXT_COLOR)
             textSize = 10.5f
             typeface = resolvedTypeface(widget.overlayOptions.floatingFontFamily, android.graphics.Typeface.BOLD)
         }

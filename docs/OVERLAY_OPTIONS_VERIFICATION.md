@@ -38,7 +38,10 @@ diverges from web's behavior (not just "does it do something," but "does it matc
 3. **The API validates `overlay_options` keys against a fixed schema** — it 422s on any key
    (top-level or inside `mobile`) that isn't in `fields.json`. `floating-show-logo` is one such
    field (docs list it as "page-only", no API field) — it **cannot be live-tested via the
-   dashboard/API**, only via unit tests constructing `PoltioOverlayOptions` directly.
+   dashboard/API at this time**, only via unit tests constructing `PoltioOverlayOptions` directly.
+   Both mobile SDKs already parse and honor this field from `overlay_options` JSON, so they're
+   ready to support it live as soon as it's added to the API schema — this is a backend gap, not
+   a mobile one.
 4. Build/run: `make build-android` / `make run-example-android` (emulator `Pixel_10_Pro_XL`);
    `make build-ios` / `make run-example-ios` (works now — see "iOS toolchain" section below for
    the gotchas that were fixed to get here).
