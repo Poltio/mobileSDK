@@ -410,8 +410,13 @@
                 startPulsateAnimation()
             }
 
+            // The close (X) button only makes sense once the pill is expanded and its label is
+            // readable — matching web, where the collapsed puck has no close affordance at all.
+            closeButton.isUserInteractionEnabled = isExpanded
+
             let animations = {
                 self.textStackView.alpha = isExpanded ? 1.0 : 0.0
+                self.closeButton.alpha = isExpanded ? 1.0 : 0.0
                 self.superview?.layoutIfNeeded()
             }
 

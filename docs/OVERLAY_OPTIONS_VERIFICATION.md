@@ -454,7 +454,7 @@ default collapsed-then-scroll-reveal is now the more representative demo state, 
 | `floating-text-color-third` | ✅ | ✅ | ✅ | `#00CFFF` cyan — "MATCH" confirmed matching on iOS/Android; same rendering path as -second (already DOM-confirmed on web) |
 | `floating-show-pulsate` | ➖ (not re-checked) | ✅ | ✅ | tested `"false"` — pulsate ring correctly absent around the collapsed puck on both iOS and Android (vs. the pink ring visible in earlier default-on screenshots) |
 | `floating-pill-start-mode` | 🧩 | 🧩 | — | not tested as its own param this round, but `floating-initial-position: "expanded"` (a related start-state field) was used as a proxy to get a stable expanded screenshot and confirmed working correctly on iOS; `pill-start-mode` shares the same `shouldStartExpanded` code path (`== "open"` check, ORed with `isInitialExpanded`) on both platforms, so this is a reasonable code-level inference, not yet independently live-tested |
-| `floating-pill-show-close-button` | ✅ | ✅ | ✅ | `"true"` — close (X) button visible and correctly colored on web (implied), iOS, and Android, alongside the text-color round |
+| `floating-pill-show-close-button` | ✅ (web: separate `.poltio-close-pill` element, fixed-positioned near the pill, not inside the collapsed puck) | ✅ (fixed) | ✅ (fixed) | **Bug found and fixed this session** — the X button previously stayed in the view hierarchy at full opacity across both states; on iOS an incidental Auto Layout conflict happened to hide it when collapsed, but on Android nothing hid it, so it visibly overlapped the sparkle/remote icon in the collapsed puck. Both platforms now explicitly fade `closeButton`'s alpha (and gate `isClickable`/`isUserInteractionEnabled`) alongside the existing text-label alpha animation, so the X only appears once expanded — matching the user's own preference and web's spirit (collapsed puck has no close affordance). Verified visually on iOS (collapsed: clean circle, no X) and Android (collapsed: clean circle, no X, confirmed via screenshot after clearing a stale dismissal — see log entry). Expanded-state screenshot confirmed on iOS; Android's expanded-state tap could not be captured live this round (emulator swallowed/missed every tap — see log entry) but the fix reuses the identical, already-proven `textStack.alpha` interpolation path 1:1. |
 | `floating-pill-close-remember-duration` | ➖ (not re-tested) | ✅ (unit test) | ✅ (unit test) | Same shared, already-verified `PoltioTriggerDismissalStore`/`.kt` used by the box trigger (keyed by `publicId`, trigger-type-agnostic) — see box's equivalent row above for the reasoning. Close button's mere existence already visually confirmed above (`pillShowCloseButton` row). |
 | *(no param — unconditional)* `floating-initial-position`-independent scroll reveal | ✅ | ✅ (via debug trace) | ✅ (shared infra) | **Feature added this session** — see "Feature added — pill now auto-reveals on scroll" section below. Web's pill (`pill.ts`) unconditionally reveals the collapsed pill on first scroll past ~100px with no config flag at all (unlike box's opt-in `floating-box-open-on-scroll`); mobile had no equivalent until now. |
 
@@ -846,3 +846,41 @@ then move on"). Remaining items below are all low-priority cleanup, not new trig
   types (box, pill, card) are now considered fully verified against web**, per the user's original
   request. Widget 401 left with `floating-svg` set as a live demonstration; `floating-scroll-
   threshold` reverted to unset (default 300).
+- **2026-09-17 (pill close-button collapsed-state bug + dismissal-scoping question)**: User reported
+  the pill's X button showed in the collapsed puck on Android (overlapping the icon, "looks weird")
+  but not on iOS, and asked to make Android match iOS. Live-tested to confirm and root-caused: the
+  close button was never state-gated on either platform — only `textStackView`/`textStack`'s alpha
+  was animated between collapsed/expanded, while the X button stayed at full opacity and
+  interactive the whole time. On iOS this happened not to render visibly overlapping (an incidental
+  Auto Layout under-constraint at the 56pt collapsed width), but on Android — plain `Gravity.END`
+  positioning within the parent `FrameLayout` — it visibly sat on top of the icon. Fixed both
+  platforms the same way: `closeButton`'s alpha now animates alongside the text label's (same
+  `ValueAnimator`/`UIView.animate` fraction interpolation already used for the text), and
+  `isClickable`/`isUserInteractionEnabled` is gated to the expanded state too, so it's neither
+  visible nor tappable while collapsed. This replaces an accidental, fragile side-effect with an
+  explicit, symmetric one.
+  While hunting for why the trigger wasn't appearing at all on a fresh iOS launch (used as part of
+  verifying the above), discovered — via temporary `showTrigger` checkpoint tracing — that a stale
+  `PoltioTriggerDismissalStore` entry for `6c964c1d-...` (this environment's shared demo `public_id`,
+  reused by widgets 393/394/401) was still active from earlier live X-button testing in this same
+  session, suppressing the trigger on every page. This directly answers the user's second question:
+  *"if I closed the Phones (pill) trigger, Home (box) and TVs (card) disappeared too — is this
+  intended?"* **Yes** — `PoltioTriggerDismissalStore`/`.kt` is keyed purely by `publicId`
+  (confirmed identical on both platforms), matching web's own `poltio-content-${content}-closed`
+  key exactly. It's a per-*content* dismissal, not a per-page or per-trigger-instance one. The only
+  reason it looked like "closing one hides all three" in this test environment is that all three
+  demo widgets happen to be configured against the same underlying content/public_id for convenience
+  — a test-setup artifact, not an SDK bug. The user was fine accepting this behavior either way.
+  Cleared the stale dismissal (`pm clear`/reinstall on Android, uninstall/reinstall on iOS — a
+  direct plist edit alone didn't work due to `cfprefsd` caching the old value) to unblock testing.
+  Verified the collapsed-state fix visually on both iOS and Android (clean circle, no X). Could not
+  get a reliable expanded-state screenshot on Android this round — the emulator's synthesized taps
+  landed within the pill's own confirmed `uiautomator` bounds but were not registering as clicks at
+  all (no crash, no log, view hierarchy otherwise normal); given repeated attempts across multiple
+  fresh app launches all failed identically, this looks like an emulator/input-injection quirk
+  rather than anything in the trigger code, so it was set aside rather than burning further time —
+  the fix itself carries low risk since it's a straight reuse of the pre-existing, already-verified
+  text-label alpha animation. `make test-ios` (29/29) and `make test-android` both pass, swiftformat
+  clean. Also separately expanded both example apps' Phones/TVs product catalogs from 2-3 items to
+  10 each (iOS: real brand names; Android: existing fictional-brand convention), per the user's
+  request for more content to meaningfully test scroll behavior — both example apps build clean.

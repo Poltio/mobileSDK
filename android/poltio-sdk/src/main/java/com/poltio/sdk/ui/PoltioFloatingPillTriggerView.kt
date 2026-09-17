@@ -222,11 +222,17 @@ internal class PoltioFloatingPillTriggerView(
         val startWidth = layoutParams?.width?.takeIf { it > 0 } ?: width.takeIf { it > 0 } ?: collapsedSizePx
         val startIconX = iconSlot.translationX
         val startTextAlpha = textStack.alpha
+        val startCloseAlpha = closeButton?.alpha ?: 0f
+
+        // The close (X) button only makes sense once the pill is expanded and its label is
+        // readable — matching web, where the collapsed puck has no close affordance at all.
+        closeButton?.isClickable = isExpanded
 
         if (!animated) {
             setWidthPx(targetWidth)
             iconSlot.translationX = if (isExpanded) iconLeadingX else iconCenteredX(targetWidth)
             textStack.alpha = if (isExpanded) 1f else 0f
+            closeButton?.alpha = if (isExpanded) 1f else 0f
             return
         }
 
@@ -241,6 +247,8 @@ internal class PoltioFloatingPillTriggerView(
                 iconSlot.translationX = startIconX + (targetIconX - startIconX) * fraction
                 val targetTextAlpha = if (isExpanded) 1f else 0f
                 textStack.alpha = startTextAlpha + (targetTextAlpha - startTextAlpha) * fraction
+                val targetCloseAlpha = if (isExpanded) 1f else 0f
+                closeButton?.alpha = startCloseAlpha + (targetCloseAlpha - startCloseAlpha) * fraction
             }
             start()
         }
