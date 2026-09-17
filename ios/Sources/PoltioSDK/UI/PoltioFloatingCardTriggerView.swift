@@ -29,6 +29,7 @@
         private let titleLabel = UILabel()
         private let descLabel = UILabel()
         private let actionButton = UIButton(type: .custom)
+        private let brandingRow = PoltioBrandingMarkView()
 
         /// Loads `floatingSvg`/`floatingImg` into the collapsed/expanded icon slots when configured,
         /// falling back to `PoltioSparkleIconView` (created eagerly above) otherwise.
@@ -86,6 +87,9 @@
             static let actionButtonShadowOpacity: Float = 0.12
             static let actionButtonShadowOffset = CGSize(width: 0, height: 2)
             static let actionButtonShadowRadius: CGFloat = 4
+
+            static let brandingTopSpacing: CGFloat = 10
+            static let brandingBottomInset: CGFloat = -14
 
             static let animationDuration: TimeInterval = 0.35
             static let animationDamping: CGFloat = 0.82
@@ -271,7 +275,17 @@
             actionButton.addTarget(self, action: #selector(handleActionTap), for: .touchUpInside)
             expandedContainer.addSubview(actionButton)
 
+            // 6. Poltio branding mark (hidden when `floating-show-logo` is explicitly `false`)
+            let showLogo = widget.overlayOptions.showLogo
+            brandingRow.translatesAutoresizingMaskIntoConstraints = false
+            brandingRow.isHidden = !showLogo
+            expandedContainer.addSubview(brandingRow)
+
             addSubview(expandedContainer)
+
+            let bottomAnchorConstraint = showLogo
+                ? expandedContainer.bottomAnchor.constraint(equalTo: brandingRow.bottomAnchor, constant: -Constants.brandingBottomInset)
+                : expandedContainer.bottomAnchor.constraint(equalTo: actionButton.bottomAnchor, constant: -Constants.actionButtonBottomInset)
 
             NSLayoutConstraint.activate([
                 expandedContainer.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Constants.expandedCardMargin),
@@ -302,8 +316,13 @@
                 // Action Button
                 actionButton.leadingAnchor.constraint(equalTo: expandedContainer.leadingAnchor, constant: Constants.contentHorizontalInset),
                 actionButton.topAnchor.constraint(equalTo: descLabel.bottomAnchor, constant: Constants.actionButtonTopSpacing),
-                actionButton.bottomAnchor.constraint(equalTo: expandedContainer.bottomAnchor, constant: Constants.actionButtonBottomInset),
                 actionButton.heightAnchor.constraint(equalToConstant: Constants.actionButtonHeight),
+
+                // Branding mark (only laid out when visible; container bottom otherwise ties to the action button)
+                brandingRow.centerXAnchor.constraint(equalTo: expandedContainer.centerXAnchor),
+                brandingRow.topAnchor.constraint(equalTo: actionButton.bottomAnchor, constant: Constants.brandingTopSpacing),
+
+                bottomAnchorConstraint,
             ])
 
             let loader = PoltioTriggerIconLoader(container: expandedContainer, size: Constants.sparkleSize)

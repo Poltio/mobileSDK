@@ -173,10 +173,11 @@
             let headerColor = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxTextColorFirst, fallback: .black)
             let footerColor = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxTextColorSecond, fallback: .black)
             let fullImageMode = widget.overlayOptions.boxFullImageMode
+            let expandedCornerRadius = PoltioOverlayOptions.cssLength(widget.overlayOptions.floatingMobileTopBorderRadius, default: 18)
 
             expandedContainer.translatesAutoresizingMaskIntoConstraints = false
             expandedContainer.backgroundColor = outerBg
-            expandedContainer.layer.cornerRadius = 18
+            expandedContainer.layer.cornerRadius = expandedCornerRadius
             expandedContainer.layer.shadowColor = UIColor.black.cgColor
             expandedContainer.layer.shadowOpacity = 0.20
             expandedContainer.layer.shadowOffset = CGSize(width: -3, height: 4)
@@ -186,7 +187,7 @@
 
             innerCard.translatesAutoresizingMaskIntoConstraints = false
             innerCard.backgroundColor = innerBg
-            innerCard.layer.cornerRadius = 18
+            innerCard.layer.cornerRadius = expandedCornerRadius
             innerCard.layer.maskedCorners = [.layerMinXMinYCorner, .layerMinXMaxYCorner]
             innerCard.clipsToBounds = true
             expandedContainer.addSubview(innerCard)

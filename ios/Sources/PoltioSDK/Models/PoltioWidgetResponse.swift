@@ -321,6 +321,11 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         field("floating-icon-color", "floating-widget-icon-color")
     }
 
+    /// Whether the Poltio branding mark is shown in the expanded card (default true), respecting mobile overrides.
+    public var showLogo: Bool {
+        Self.boolValue(field("floating-show-logo"), default: true)
+    }
+
     // MARK: - pill
 
     /// First pill text segment (e.g. "Try our"), respecting mobile overrides.
@@ -699,6 +704,7 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         floatingBgColor: String? = nil,
         floatingTextColor: String? = nil,
         floatingIconColor: String? = nil,
+        showLogo: String? = nil,
         floatingDesignType: String? = nil,
         floatingDisplayType: String? = nil,
         floatingPosition: String? = nil,
@@ -771,6 +777,7 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         set("floating-bgcolor", floatingBgColor)
         set("floating-textcolor", floatingTextColor)
         set("floating-icon-color", floatingIconColor)
+        set("floating-show-logo", showLogo)
         set("floating-design-type", floatingDesignType)
         set("floating-display-type", floatingDisplayType)
         set("floating-position", floatingPosition)

@@ -229,7 +229,7 @@
             // Main outer container with shadow
             cardContainer.translatesAutoresizingMaskIntoConstraints = false
             cardContainer.backgroundColor = widget.overlayOptions.resolvedBgColor
-            cardContainer.layer.cornerRadius = 28
+            cardContainer.layer.cornerRadius = PoltioOverlayOptions.cssLength(widget.overlayOptions.floatingMobileTopBorderRadius, default: 28)
             cardContainer.layer.shadowColor = UIColor.black.cgColor
             cardContainer.layer.shadowOpacity = 0.22
             cardContainer.layer.shadowOffset = CGSize(width: 0, height: 4)

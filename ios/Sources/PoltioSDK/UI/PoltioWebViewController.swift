@@ -71,12 +71,13 @@
         }
 
         private func setupUI() {
-            view.backgroundColor = .systemBackground
+            let panelBackgroundColor = overlayOptions?.resolvedWidgetBgColor ?? .systemBackground
+            view.backgroundColor = panelBackgroundColor
 
             // Header Navigation / Close Bar
             let headerView = UIView()
             headerView.translatesAutoresizingMaskIntoConstraints = false
-            headerView.backgroundColor = .systemBackground
+            headerView.backgroundColor = panelBackgroundColor
             view.addSubview(headerView)
 
             let closeButton = UIButton(type: .system)
@@ -101,7 +102,7 @@
             webView.navigationDelegate = self
             webView.isOpaque = false
             webView.backgroundColor = .clear
-            webView.scrollView.backgroundColor = .systemBackground
+            webView.scrollView.backgroundColor = panelBackgroundColor
             view.addSubview(webView)
 
             // Activity Indicator
