@@ -260,30 +260,33 @@ permission issue on their end mid-session, and the retry succeeded immediately a
 error reappears on a future widget/URL combination, it's a dashboard/domain-allowlist setting, not
 an SDK or Makefile issue — ask the user rather than debugging client-side.
 
-### box (widget 393) — only baseline confirmed so far
+### box (widget 393)
 
-| Attribute | iOS | Android | Notes |
-|---|---|---|---|
-| `floating-img` | ⬜ | 🧩 | baseline showed fallback (image URL 404s) — need a working image URL to test properly |
-| `floating-box-text-first` | ⬜ | ✅ (baseline "Product Finder") | default value only so far |
-| `floating-box-text-second` | ⬜ | ✅ (baseline "Product Finder") | default value only so far |
-| `floating-box-text-color-first` | ⬜ | ⬜ | |
-| `floating-box-text-color-second` | ⬜ | ⬜ | |
-| `floating-box-bg-color-first` | ⬜ | ⬜ | |
-| `floating-box-bg-color-second` | ⬜ | ⬜ | |
-| `floating-box-text-first-font-size` | ⬜ | ⬜ | |
-| `floating-box-text-first-font-weight` | ⬜ | ⬜ | |
-| `floating-box-text-second-font-size` | ⬜ | ⬜ | |
-| `floating-box-text-second-font-weight` | ⬜ | ⬜ | |
-| `floating-box-text-align-first` | ⬜ | ⬜ | |
-| `floating-box-text-align-second` | ⬜ | ⬜ | |
-| `floating-box-start-mode` | ⬜ | ⬜ | |
-| `floating-box-open-on-scroll` | ➖ | ➖ | no native scroll hook |
-| `floating-box-open-on-time` | ⬜ | ⬜ | |
-| `floating-box-show-close-button` | ⬜ | ✅ (baseline, default off... actually need explicit true test) | re-verify with explicit `true` |
-| `floating-box-close-remember-duration` | ⬜ | ⬜ | |
-| `floating-box-resize` | ⬜ | ⬜ | |
-| `floating-box-full-image-mode` | ⬜ | ⬜ | |
+| Attribute | Web | iOS | Android | Notes |
+|---|---|---|---|---|
+| `floating-box-text-first` | ✅ | ✅ | ✅ | `"Smart Picks"` rendered correctly on all three. |
+| `floating-box-text-second` | ✅ | ✅ | ✅ | `"Just for you"` rendered correctly on all three. |
+| `floating-box-text-color-first` | ✅ | ✅ | ✅ | `#FFFFFF` — confirmed exact via web computed-style (`rgb(255,255,255)`); visually matching white on iOS/Android screenshots. |
+| `floating-box-text-color-second` | ✅ | ✅ | ✅ | `#1A1A2E` — confirmed exact via web computed-style; visually matching dark navy on iOS/Android. |
+| `floating-box-bg-color-second` (inner card) | ✅ | ✅ | ✅ | `#F5A623` orange — confirmed exact via web computed-style; visually matching on iOS/Android. |
+| `floating-box-show-close-button` | ✅ | ✅ | ✅ | Close (X) button visible next to the header text on all three platforms. |
+| `floating-box-bg-color-first` (outer chrome) | ⬜ | ⬜ | ⬜ | **Set to `#1A1A2E` but not visually distinguishable on any platform** — the inner card (`bg-color-second`) appears to fully cover the outer container with no visible edge/sliver in the default expanded layout, on web, iOS, and Android alike. Consistent across all three, so likely not a bug — just not visually testable in this trigger's default layout. Worth a quick source read next time to confirm intentional. |
+| `floating-img` | ⬜ | 🧩 | 🧩 | baseline showed fallback (image URL 404s on both iOS/Android) — need a working image URL to test properly |
+| `floating-box-text-first-font-size` | ⬜ | ⬜ | ⬜ | |
+| `floating-box-text-first-font-weight` | ⬜ | ⬜ | ⬜ | |
+| `floating-box-text-second-font-size` | ⬜ | ⬜ | ⬜ | |
+| `floating-box-text-second-font-weight` | ⬜ | ⬜ | ⬜ | |
+| `floating-box-text-align-first` | ⬜ | ⬜ | ⬜ | |
+| `floating-box-text-align-second` | ⬜ | ⬜ | ⬜ | |
+| `floating-box-start-mode` | ⬜ | ⬜ | ⬜ | |
+| `floating-box-open-on-scroll` | ➖ | ➖ | ➖ | no native scroll hook |
+| `floating-box-open-on-time` | ⬜ | ⬜ | ⬜ | |
+| `floating-box-close-remember-duration` | ⬜ | ⬜ | ⬜ | |
+| `floating-box-resize` | ⬜ | ⬜ | ⬜ | |
+| `floating-box-full-image-mode` | ⬜ | ⬜ | ⬜ | |
+
+Widget 393's `overlay_options` currently sits at (not reverted):
+`{"floating-img":"widget/box-default.png","trigger-type":"box","floating-box-text-first":"Smart Picks","floating-box-text-second":"Just for you","floating-initial-position":"active","floating-box-bg-color-first":"#1A1A2E","floating-box-bg-color-second":"#F5A623","floating-box-text-color-first":"#FFFFFF","floating-box-show-close-button":"true","floating-box-text-color-second":"#1A1A2E"}`.
 
 ### product_card — out of scope (no native trigger)
 
@@ -311,6 +314,9 @@ All `➖` — see "Known, accepted gaps" above.
   collapsed state, showing the custom pulsate ring color (`#FF3366`, pink/red vs. default white).
 - `docs/screenshots/ios/box_home_collapsed.png`, `card_tvs_collapsed.png`,
   `pill_pulsate_collapsed.png` — iOS equivalents of the above, all confirming parity with Android.
+- `docs/screenshots/ios/box_colors_closebutton.png`,
+  `docs/screenshots/android/box_colors_closebutton.png` — box trigger (Home), expanded, with 6
+  batched text/color/close-button params all confirmed matching web exactly.
   **Note for next session**: the `mcp__Claude_Code_iOS_Simulator__control` tool's own `screenshot`
   action returns the image inline with no file path — to save one to disk, run
   `xcrun simctl io <udid> screenshot <path>` separately (confirmed working, much simpler than
@@ -381,3 +387,15 @@ All `➖` — see "Known, accepted gaps" above.
   `PoltioTriggerIconLoader` — and Android's Pill, which uses that same shared loader — never had
   this bug). See "Bug found and fixed" section above. Fixed, rebuilt, verified via pixel-sampling
   (not just visual inspection) that iOS now matches Android/web exactly. Tests + swiftformat clean.
+- **2026-09-17 (evening, continued)**: Tried to nail down the pill's tap-to-expand interaction to
+  finish verifying `text-first/second/third` visually on iOS/Android (still stuck — taps on the
+  collapsed puck don't reliably expand it on either platform; briefly suspected the icon's
+  touch-passthrough WebView might be swallowing taps on Android since `isClickable=false` doesn't
+  fully stop Android WebView's internal touch handling, but a tap just outside the WebView's bounds
+  didn't expand it either, so that theory isn't confirmed — unresolved, not worth more time this
+  session). Pivoted to the box trigger (widget 393) instead: batched 6 params (`floating-box-text-
+  first/second`, `-text-color-first/second`, `-bg-color-second`, `-show-close-button`) and confirmed
+  all of them exactly matching across web (computed-style), iOS, and Android. One param
+  (`floating-box-bg-color-first`, the outer chrome color) set but not visually distinguishable on
+  any of the three platforms — the inner card fully covers it in this trigger's default layout;
+  consistent across platforms so likely not a bug, just flagged as unverifiable this way.
