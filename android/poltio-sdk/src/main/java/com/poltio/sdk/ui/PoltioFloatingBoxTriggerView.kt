@@ -113,7 +113,7 @@ internal class PoltioFloatingBoxTriggerView(
         // its scroll observation instead of silently losing it forever.
         setupScrollOpenIfNeeded()
         PoltioHostInteractionBus.addListener(outsideInteractionListener)
-        (context as? android.app.Activity)?.let { PoltioScrollObserver.installIfNeeded(it) }
+        context.findActivity()?.let { PoltioScrollObserver.installIfNeeded(it) }
         PoltioScrollObserver.addMovementListener(scrollCollapseListener)
     }
 
@@ -385,7 +385,7 @@ internal class PoltioFloatingBoxTriggerView(
                 PoltioExecutors.runOnMain { setState(TriggerState.EXPANDED, animated = true) }
             }
         }
-        (context as? android.app.Activity)?.let { PoltioScrollObserver.installIfNeeded(it) }
+        context.findActivity()?.let { PoltioScrollObserver.installIfNeeded(it) }
         PoltioScrollObserver.addListener(scrollListener)
     }
 

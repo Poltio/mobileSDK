@@ -83,6 +83,9 @@ internal class PoltioFloatingCardTriggerView(
             PoltioExecutors.runOnMain { setState(TriggerState.COLLAPSED, animated = true) }
         }
     }
+    /** Kept so `onDetachedFromWindow` can cancel this exact still-pending registration if the
+     * threshold was never crossed — see `PoltioScrollObserver.cancelScrollPast`. */
+    private var scrollRevealListener: (() -> Unit)? = null
 
     init {
         clipChildren = false
@@ -106,7 +109,7 @@ internal class PoltioFloatingCardTriggerView(
         // and later reattached to a window — rather than torn down and recreated — re-establishes
         // its scroll observation instead of silently losing it forever.
         setupScrollReveal()
-        (context as? android.app.Activity)?.let { PoltioScrollObserver.installIfNeeded(it) }
+        context.findActivity()?.let { PoltioScrollObserver.installIfNeeded(it) }
         PoltioScrollObserver.addMovementListener(scrollCollapseListener)
     }
 
@@ -116,19 +119,22 @@ internal class PoltioFloatingCardTriggerView(
      * indefinitely once revealed), mobile also auto-collapses it while the host keeps scrolling —
      * see `scrollCollapseListener` — a deliberate mobile-specific UX choice. */
     private fun setupScrollReveal() {
-        (context as? android.app.Activity)?.let { activity ->
+        context.findActivity()?.let { activity ->
             // `pendingThresholds` in PoltioScrollObserver is a long-lived list on a singleton
             // object; a callback that strongly captures `this` would keep this view (and its
             // Activity via `context`) alive forever if the threshold is never crossed. A weak
             // reference lets the view (and the callback itself, once GC'd) become collectable
-            // normally instead.
+            // normally instead — and `onDetachedFromWindow` below proactively cancels the
+            // registration too, so it doesn't just sit dormant in that list forever either.
             val viewRef = java.lang.ref.WeakReference(this)
-            PoltioScrollObserver.onScrollPast(activity, widget.overlayOptions.floatingScrollThreshold.toFloat()) {
+            val listener: () -> Unit = {
                 PoltioExecutors.runOnMain {
                     val view = viewRef.get() ?: return@runOnMain
                     if (view.currentState == TriggerState.COLLAPSED) view.setState(TriggerState.EXPANDED, animated = true)
                 }
             }
+            scrollRevealListener = listener
+            PoltioScrollObserver.onScrollPast(activity, widget.overlayOptions.floatingScrollThreshold.toFloat(), listener)
         }
     }
 
@@ -138,6 +144,7 @@ internal class PoltioFloatingCardTriggerView(
         collapsedIconLoader.dispose()
         expandedIconLoader.dispose()
         PoltioScrollObserver.removeMovementListener(scrollCollapseListener)
+        scrollRevealListener?.let { PoltioScrollObserver.cancelScrollPast(it) }
     }
 
     private companion object {

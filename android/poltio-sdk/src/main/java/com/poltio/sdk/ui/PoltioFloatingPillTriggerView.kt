@@ -193,7 +193,7 @@ internal class PoltioFloatingPillTriggerView(
                 PoltioExecutors.runOnMain { setState(TriggerState.EXPANDED, animated = true) }
             }
         }
-        (context as? android.app.Activity)?.let { PoltioScrollObserver.installIfNeeded(it) }
+        context.findActivity()?.let { PoltioScrollObserver.installIfNeeded(it) }
         PoltioScrollObserver.addListener(scrollOpenListener)
         PoltioScrollObserver.addMovementListener(scrollCollapseListener)
     }

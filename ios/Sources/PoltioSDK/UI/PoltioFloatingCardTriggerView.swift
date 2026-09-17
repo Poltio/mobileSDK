@@ -47,6 +47,9 @@
         private var expandedAt: Date?
         /// Minimum time an expand must have been visible before a host scroll can collapse it.
         private static let scrollCollapseGracePeriod: TimeInterval = 0.4
+        /// Kept so `deinit` can cancel this still-pending registration if the threshold was never
+        /// crossed — see `PoltioScrollObserver.cancelScrollPast`.
+        private var scrollRevealToken: PoltioScrollObserver.ScrollPastToken?
 
         /// UI layout and styling constants for the collapsed/expanded card trigger.
         private enum Constants {
@@ -136,6 +139,7 @@
 
         deinit {
             NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didDetectScrollMovementNotification, object: nil)
+            scrollRevealToken.map(PoltioScrollObserver.cancelScrollPast)
         }
 
         private func setupView() {
@@ -354,7 +358,7 @@
         /// revealed), mobile also auto-collapses it while the host keeps scrolling — see
         /// `setupScrollCollapseObserver()` — a deliberate mobile-specific UX choice.
         private func setupScrollReveal() {
-            PoltioScrollObserver.onScrollPast(CGFloat(widget.overlayOptions.floatingScrollThreshold)) { [weak self] in
+            scrollRevealToken = PoltioScrollObserver.onScrollPast(CGFloat(widget.overlayOptions.floatingScrollThreshold)) { [weak self] in
                 DispatchQueue.main.async {
                     guard let self, self.currentState == .collapsed else { return }
                     self.setState(.expanded, animated: true)

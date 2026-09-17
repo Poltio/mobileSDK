@@ -524,10 +524,9 @@
         private func scheduleAutoCollapse() {
             autoCollapseTimer?.invalidate()
             autoCollapseTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self] _ in
-                DispatchQueue.main.async {
-                    guard let self, self.currentState == .expanded else { return }
-                    self.setState(.collapsed, animated: true)
-                }
+                // Already on the main run loop — this is always scheduled from a main-thread call.
+                guard let self, currentState == .expanded else { return }
+                setState(.collapsed, animated: true)
             }
         }
 

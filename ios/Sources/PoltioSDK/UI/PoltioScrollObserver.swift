@@ -28,9 +28,16 @@
         /// floating-point/rounding jitter.
         fileprivate static let movementEpsilon: CGFloat = 4
 
+        /// Opaque handle returned by `onScrollPast`, used solely to cancel that specific
+        /// registration later via `cancelScrollPast` — e.g. when its view is torn down before the
+        /// threshold was ever crossed.
+        struct ScrollPastToken: Hashable {
+            fileprivate let id = UUID()
+        }
+
         private static let lock = NSLock()
         private static var isInstalled = false
-        private static var pendingThresholds: [(threshold: CGFloat, callback: () -> Void)] = []
+        private static var pendingThresholds: [(token: ScrollPastToken, threshold: CGFloat, callback: () -> Void)] = []
 
         /// Installs the swizzle exactly once per process. Safe to call repeatedly/concurrently.
         static func installIfNeeded() {
@@ -53,12 +60,25 @@
         /// `threshold`, then automatically un-registers itself. Used by triggers with their own
         /// configurable threshold (the card trigger's `floatingScrollThreshold`, default 300pt,
         /// matching web), as an alternative to the fixed-`100`pt `didScrollPastThresholdNotification`
-        /// used by the box/pill triggers.
-        static func onScrollPast(_ threshold: CGFloat, callback: @escaping () -> Void) {
+        /// used by the box/pill triggers. Returns a token that `cancelScrollPast` can later use to
+        /// remove this registration if the threshold is never crossed (e.g. the view is torn down
+        /// first) — otherwise the closure would sit in `pendingThresholds` for the app's lifetime.
+        @discardableResult
+        static func onScrollPast(_ threshold: CGFloat, callback: @escaping () -> Void) -> ScrollPastToken {
+            let token = ScrollPastToken()
             lock.lock()
-            pendingThresholds.append((threshold, callback))
+            pendingThresholds.append((token, threshold, callback))
             lock.unlock()
             installIfNeeded()
+            return token
+        }
+
+        /// Cancels a still-pending `onScrollPast` registration. Safe to call even if it already
+        /// fired (and was thus already removed) or was never registered.
+        static func cancelScrollPast(_ token: ScrollPastToken) {
+            lock.lock()
+            pendingThresholds.removeAll { $0.token == token }
+            lock.unlock()
         }
 
         fileprivate static func handleScrolled(_ distance: CGFloat) {
@@ -88,6 +108,12 @@
             // Calls through to the original implementation — this method IS the original after the
             // swizzle exchange above, despite the name.
             poltio_setContentOffset(contentOffset)
+
+            // Skip scroll views that can't scroll vertically at all (a horizontal-only carousel,
+            // or a `UITextView` whose content fits without scrolling) — otherwise their own
+            // incidental contentOffset changes would be misread as the host page scrolling.
+            guard bounds.height > 0, contentSize.height > bounds.height else { return }
+
             let scrolled = contentOffset.y + adjustedContentInset.top
             if scrolled > PoltioScrollObserver.threshold {
                 NotificationCenter.default.post(name: PoltioScrollObserver.didScrollPastThresholdNotification, object: nil)

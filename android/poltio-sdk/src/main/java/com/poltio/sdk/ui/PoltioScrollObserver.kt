@@ -3,6 +3,7 @@ package com.poltio.sdk.ui
 import android.app.Activity
 import android.view.MotionEvent
 import android.view.Window
+import java.lang.ref.WeakReference
 import kotlin.math.abs
 
 /**
@@ -28,8 +29,13 @@ internal object PoltioScrollObserver {
     private val listeners = mutableSetOf<() -> Unit>()
     private val movementListeners = mutableSetOf<() -> Unit>()
     private val pendingThresholds = mutableListOf<Pair<Float, () -> Unit>>()
+    /** Weakly held so the singleton never keeps an `Activity` (via the callback's own reference to
+     * it) alive past its real lifetime — only used to reset scroll tracking for freshly registered
+     * listeners, see [resetCumulativeScrollForNewObservation]. */
+    private var activeCallbackRef: WeakReference<ScrollObservingCallback>? = null
 
     fun addListener(listener: () -> Unit) {
+        resetCumulativeScrollForNewObservation()
         synchronized(listeners) { listeners.add(listener) }
     }
 
@@ -60,8 +66,17 @@ internal object PoltioScrollObserver {
      * matching web), as an alternative to the fixed-100dp [addListener]/[removeListener] pair used
      * by the box/pill triggers. */
     fun onScrollPast(activity: Activity, thresholdDp: Float, callback: () -> Unit) {
+        resetCumulativeScrollForNewObservation()
         synchronized(pendingThresholds) { pendingThresholds.add(thresholdDp to callback) }
         installIfNeeded(activity)
+    }
+
+    /** Cancels a still-pending [onScrollPast] registration by the exact callback reference it was
+     * registered with — e.g. when its view is detached before the threshold was ever crossed.
+     * Without this, that callback (and anything it captures) would sit in [pendingThresholds] for
+     * the life of the process, since nothing else ever removes an entry that never fires. */
+    fun cancelScrollPast(callback: () -> Unit) {
+        synchronized(pendingThresholds) { pendingThresholds.removeAll { it.second === callback } }
     }
 
     /** Installs the wrapper on [activity]'s window if not already installed for it. Checks the
@@ -69,9 +84,23 @@ internal object PoltioScrollObserver {
      * which would otherwise leak that activity for the lifetime of the app process (this object
      * is a singleton and never releases what it holds). */
     fun installIfNeeded(activity: Activity) {
-        val original = activity.window.callback ?: return
-        if (original is ScrollObservingCallback) return
-        activity.window.callback = ScrollObservingCallback(activity, original)
+        val original = activity.window.callback
+        if (original is ScrollObservingCallback) {
+            activeCallbackRef = WeakReference(original)
+            return
+        }
+        if (original == null) return
+        val wrapper = ScrollObservingCallback(activity, original)
+        activity.window.callback = wrapper
+        activeCallbackRef = WeakReference(wrapper)
+    }
+
+    /** A freshly registered listener/threshold starts counting scroll distance from zero, rather
+     * than inheriting however far the user had already scrolled on a previous screen that shares
+     * the same Activity (and therefore the same [ScrollObservingCallback]) — otherwise a new box,
+     * pill, or card trigger could fire on the very first touch move after appearing. */
+    private fun resetCumulativeScrollForNewObservation() {
+        activeCallbackRef?.get()?.resetCumulativeScroll()
     }
 
     private fun notifyThresholdCrossed() {
@@ -103,6 +132,10 @@ internal object PoltioScrollObserver {
          * `ACTION_DOWN`, matching iOS/web's continuous scroll-offset tracking instead. */
         private var cumulativeScrollPx = 0f
         private var hasNotifiedMovementThisGesture = false
+
+        fun resetCumulativeScroll() {
+            cumulativeScrollPx = 0f
+        }
 
         override fun dispatchTouchEvent(event: MotionEvent): Boolean {
             when (event.actionMasked) {

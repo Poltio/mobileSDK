@@ -438,10 +438,10 @@
             guard let delayMs = widget.overlayOptions.boxOpenOnTime, delayMs > 0 else { return }
             autoOpenTimer?.invalidate()
             autoOpenTimer = Timer.scheduledTimer(withTimeInterval: delayMs / 1000.0, repeats: false) { [weak self] _ in
-                DispatchQueue.main.async {
-                    guard let self, self.currentState == .collapsed else { return }
-                    self.setState(.expanded, animated: true)
-                }
+                // Already on the main run loop — `scheduleAutoOpenIfNeeded` only ever runs there,
+                // so this timer is scheduled on it too; no need to hop back via `DispatchQueue`.
+                guard let self, currentState == .collapsed else { return }
+                setState(.expanded, animated: true)
             }
         }
 
@@ -510,10 +510,10 @@
             if isExpanded {
                 expandedAt = Date()
                 autoCollapseTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { [weak self] _ in
-                    DispatchQueue.main.async {
-                        guard let self, self.currentState == .expanded else { return }
-                        self.setState(.collapsed, animated: true)
-                    }
+                    // Already on the main run loop — see the identical note in
+                    // `scheduleAutoOpenIfNeeded` above.
+                    guard let self, currentState == .expanded else { return }
+                    setState(.collapsed, animated: true)
                 }
             }
 
