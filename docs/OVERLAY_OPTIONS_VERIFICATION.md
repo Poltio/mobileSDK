@@ -410,11 +410,48 @@ Widget 401's `overlay_options` currently sits at (as of this session, not revert
 | `floating-show-pulsate` | ➖ (not re-checked) | ✅ | ✅ | tested `"false"` — pulsate ring correctly absent around the collapsed puck on both iOS and Android (vs. the pink ring visible in earlier default-on screenshots) |
 | `floating-pill-start-mode` | 🧩 | 🧩 | — | not tested as its own param this round, but `floating-initial-position: "expanded"` (a related start-state field) was used as a proxy to get a stable expanded screenshot and confirmed working correctly on iOS; `pill-start-mode` shares the same `shouldStartExpanded` code path (`== "open"` check, ORed with `isInitialExpanded`) on both platforms, so this is a reasonable code-level inference, not yet independently live-tested |
 | `floating-pill-show-close-button` | ✅ | ✅ | ✅ | `"true"` — close (X) button visible and correctly colored on web (implied), iOS, and Android, alongside the text-color round |
-| `floating-pill-close-remember-duration` | ⬜ | ⬜ | ⬜ | hard to visually verify quickly; maybe code-read only |
+| `floating-pill-close-remember-duration` | ➖ (not re-tested) | ✅ (unit test) | ✅ (unit test) | Same shared, already-verified `PoltioTriggerDismissalStore`/`.kt` used by the box trigger (keyed by `publicId`, trigger-type-agnostic) — see box's equivalent row above for the reasoning. Close button's mere existence already visually confirmed above (`pillShowCloseButton` row). |
+| *(no param — unconditional)* `floating-initial-position`-independent scroll reveal | ✅ | ✅ (via debug trace) | ✅ (shared infra) | **Feature added this session** — see "Feature added — pill now auto-reveals on scroll" section below. Web's pill (`pill.ts`) unconditionally reveals the collapsed pill on first scroll past ~100px with no config flag at all (unlike box's opt-in `floating-box-open-on-scroll`); mobile had no equivalent until now. |
 
 Widget 394's `overlay_options` currently sits at (not reverted):
-`{"floating-svg":"widget/1787042301.079.svg","trigger-type":"pill","floating-text-first":"Check out","floating-text-third":"MATCH","floating-text-second":"PHONE","floating-show-pulsate":"false","floating-pulsate-color":"#FF3366","floating-initial-position":"active","floating-text-color-first":"#FFD700","floating-text-color-third":"#00CFFF","floating-text-color-second":"#00FF88","floating-pill-show-close-button":"true"}`.
-(`floating-show-pulsate` was left at `"false"` from this round's test — flip back to unset/`"true"` if the default pulsating look is wanted again. `floating-initial-position` briefly went to `"expanded"` mid-round purely to get a stable screenshot, then was explicitly reverted back to `"active"`.)
+`{"floating-svg":"widget/1787042301.079.svg","trigger-type":"pill","floating-text-first":"Check out","floating-text-third":"MATCH","floating-text-second":"PHONE","floating-show-pulsate":"false","floating-pulsate-color":"#FF3366","floating-text-color-first":"#FFD700","floating-text-color-third":"#00CFFF","floating-text-color-second":"#00FF88","floating-pill-show-close-button":"true"}`.
+(`floating-show-pulsate` was left at `"false"` from an earlier round — flip back to unset/`"true"` if the default pulsating look is wanted again. `floating-initial-position` is now deliberately **unset** — same reasoning as box: this is the live demonstration of the new default pill behavior, starts collapsed and reveals itself on first scroll.)
+
+## Fixed — pill auto-collapse is now unconditional too (matches box)
+
+Same fix as box, applied to pill for consistency: previously, both platforms only re-armed the
+pill's auto-collapse timer when `floating-initial-position: "active"` was set — a manually-tapped
+expand (with no `isInitialActive`) would stay open indefinitely. Removed that gate on both
+platforms; the pill now always schedules its existing 2-second auto-collapse whenever it enters the
+expanded state, for any reason, matching the box trigger's "auto-collapse is default" behavior and
+web's own pill (`.expanded` class always gets removed 3s after being added in `pill.ts`, regardless
+of how it was added). The pre-existing 2s timer duration itself was left unchanged.
+
+## Feature added — pill now auto-reveals on scroll (unconditionally, matching web)
+
+Reading web's actual `pill.ts` source (the same audit approach used for box) showed the pill has an
+**unconditional** scroll listener — no config flag gates it at all, unlike the box trigger's opt-in
+`floating-box-open-on-scroll`. On web, any pill widget reveals itself the first time the host page
+scrolls past ~100px, then auto-hides again 3 seconds later. Mobile had no equivalent at all until
+now.
+
+**Implemented** on both platforms, reusing the exact `PoltioScrollObserver`/`.kt` infrastructure
+built for box's `floating-box-open-on-scroll` earlier this session (the `UIScrollView.contentOffset`
+swizzle on iOS, the `Window.Callback.dispatchTouchEvent` wrapper on Android) — no new scroll-detection
+code needed, just a new one-shot listener wired into the pill trigger view that expands it once,
+relying on the now-unconditional auto-collapse (above) to close it again ~2s later.
+
+**Verification**: confirmed via temporary debug trace on iOS (`handleScrollOpenDetected` fires
+correctly with `currentState=collapsed` on a real scroll/bounce gesture) rather than a screenshot —
+the visible window is very short (expand animation + 2s auto-collapse) and, as established earlier
+this session for `box-open-on-time`, sequential tool round-trips can't reliably land inside it. The
+example app's Phones screen (where the test pill lives) also doesn't have enough content to
+genuinely scroll — only a strong swipe produces the small rubber-band `contentOffset` change needed
+to trigger it, which is what the debug trace confirmed. Not independently re-verified with an
+Android-side debug trace, since Android's `PoltioScrollObserver.kt` was already live-screenshot-
+confirmed working end-to-end for the box trigger earlier this session, and the pill's consuming code
+is structurally identical (same one-shot-listener pattern, same singleton observer) — high
+confidence without redoing that specific check.
 Also note: `update_widget` on this widget once rejected `urls` with "The user is not allowed to set
 widgets in this domain" for the `poltio.github.io` URL — the user said they fixed this domain-
 permission issue on their end mid-session, and the retry succeeded immediately after. If this
@@ -537,45 +574,35 @@ found and fixed" section above the code-fixes list.
 
 ## Next steps (in order) — pick up here
 
+**Status: box done, pill done, card next** (per the user's stated priority order: box → pill →
+card, "make sure it's 100% supports all the options and acting same on web then move on").
+
 1. ~~Debug the iOS "no trigger visible" issue~~ — done, see "RESOLVED" section above.
-2. ~~Re-run card round-1 on iOS~~ — done, plus found+fixed the `floating-font-family` bug. Card's
-   `floating-position` and `floating-hide-button` also now confirmed on all 3 platforms.
-3. `identity` section (`widget-content`/`custom_id`/`loc`/`resultfit`/`disclaimer`) is now
-   code-confirmed wired on both platforms (simple query-param passthrough, no live network capture
-   done — low priority to revisit). `trigger-page-langs` confirmed N/A (no native equivalent,
-   unreferenced in either SDK). Remaining `card`-specific gaps: `floating-initial-position`
-   (explicit non-"active" values), `floating-svg`, `floating-zindex` (needs a competing overlay to
-   be meaningful).
-4. Pill (394) is essentially done — only `floating-pill-start-mode` (as its own param, currently
-   only inferred via a related field) and `floating-pill-close-remember-duration` (behavior-only,
-   hard to visually verify quickly) remain. **If retesting the pill's expanded state, use the
-   `floating-initial-position: "expanded"` trick** (see "Solved" section above) rather than
-   `"active"` — `"active"` auto-collapses 2s after every expand, which is faster than two
-   sequential MCP tool round-trips can reliably catch.
-5. **Box (393) is now fully done** — every applicable param confirmed on iOS+Android (font-size/
-   weight/align finally confirmed cleanly with short text; `bg-color-first` bug found+fixed;
-   `open-on-time`/`close-remember-duration` confirmed via debug trace/unit tests respectively).
-   `full-image-mode`'s text-vs-no-text design difference from web is flagged for the user's decision,
-   not changed. Web's own box test page is currently broken (0×0 container, unrelated to mobile SDK
-   — see dedicated section above), so a few rows above are marked "not re-tested" for web
-   specifically rather than falsely claiming a fresh live confirmation.
-6. ~~Ask the user about the box auto-collapse timing inconsistency~~ — done, and fixed: iOS now
-   auto-collapses by default too, and `floating-box-open-on-scroll` is natively implemented on both
-   platforms. See "Fixed — box auto-collapse" and "Feature added" sections above.
-7. **Move to pill next** (per the user's stated priority order: box → pill → card). Pill is already
-   essentially done from earlier rounds — only `floating-pill-start-mode` (as its own explicit test)
-   and `floating-pill-close-remember-duration` remain, both low-priority/well-understood. Give it the
-   same full-parity treatment box just got: re-check every applicable `common` param against it too
-   (`floating-hide-button`/`floating-position`/`floating-svg`/`floating-zindex` were only tested via
-   card so far), not just the `pill`-specific table rows.
-8. **Then card** (already the most complete — see its table). Finish `floating-initial-position`
-   (non-active values), `floating-svg`, `floating-zindex`, and the `identity` passthrough params
-   (code-confirmed only so far, no live network capture).
-9. Revert all three test widgets to something close to their original values when done (or leave a
+2. ~~Box (393) full parity pass~~ — done. Every applicable param confirmed on iOS+Android; found
+   and fixed the `bg-color-first` header-stripe bug; made auto-collapse the unconditional default;
+   implemented native `floating-box-open-on-scroll`. `full-image-mode`'s text-vs-no-text difference
+   from web and the missing-chevron-on-web difference are both flagged for the user, not changed.
+   Web's own box test page is currently broken (0×0 container, unrelated to mobile SDK — see
+   dedicated section above).
+3. ~~Pill (394) full parity pass~~ — done. Made auto-collapse unconditional (matching box);
+   implemented the same native scroll-reveal web's pill always has (no config flag, unlike box's
+   opt-in version) by reusing the exact `PoltioScrollObserver` infrastructure box's fix already
+   built. `floating-pill-close-remember-duration` confirmed via the same shared, unit-tested
+   `PoltioTriggerDismissalStore`. Only `floating-pill-start-mode` remains as an explicit isolated
+   test (currently only inferred via a related field) — very low priority given the shared code
+   path is already exercised by `floating-initial-position` testing.
+4. **Card next.** Re-check every applicable `common` param the way box/pill just got, not just the
+   `card`-specific table rows: does card need the same auto-collapse-default / scroll-reveal
+   treatment? (Card's web equivalent is `core.ts`'s two-stage first/second/third reveal, driven by
+   `floatingScrollThreshold` — different mechanism from box/pill's `pill.ts`/`box.ts`, worth reading
+   closely before assuming the same fix applies.) Finish `floating-initial-position` (non-active
+   values), `floating-svg`, `floating-zindex` (needs a competing overlay to be meaningful), and the
+   `identity` passthrough params (code-confirmed only so far, no live network capture).
+5. Revert all three test widgets to something close to their original values when done (or leave a
    note if the user wants the test values kept — widget 401 has NOT been reverted yet, see above).
-10. Add/extend unit tests for `showLogo` parsing (default true / explicit false) on both platforms,
-    since it can't be live-tested. Same for the new box auto-collapse timer and scroll-observer logic
-    — currently only manually/live verified, no automated test coverage yet.
+6. Add/extend unit tests for `showLogo` parsing (default true / explicit false) on both platforms,
+   since it can't be live-tested. Same for the box/pill auto-collapse timers and scroll-observer
+   logic added this session — currently only manually/live verified, no automated test coverage yet.
 
 ## Session log
 
@@ -724,3 +751,20 @@ found and fixed" section above the code-fixes list.
   card trigger unaffected at the same time) — entirely web-SDK/dashboard-side, out of scope, flagged
   for awareness. Box trigger is now considered fully done. Tests pass on both platforms, swiftformat
   clean. Next: pill, then card, per the user's stated priority order.
+- **2026-09-17 (pill parity pass)**: Read web's actual `pill.ts` source before touching pill (same
+  method that found box's real bugs). Found the pill's auto-collapse was gated behind
+  `isInitialActive` on both platforms — a manually-tapped expand would stay open forever, unlike
+  the box trigger which was just fixed to always auto-collapse. Removed that gate on iOS and
+  Android; pill now always re-arms its existing 2s auto-collapse timer whenever expanded, for any
+  reason, matching box and web (whose `.expanded` class always drops after 3s regardless of trigger).
+  Separately found web's pill has an **unconditional** scroll-reveal (no config flag at all, unlike
+  box's opt-in `floating-box-open-on-scroll`) — implemented the equivalent on both platforms by
+  reusing the exact `PoltioScrollObserver`/`.kt` infrastructure just built for box, wiring in a new
+  one-shot listener. Verified via debug trace on iOS (screenshot timing proved impractical again,
+  consistent with every other short-window timing test this session); trusted Android's already-
+  live-verified `PoltioScrollObserver.kt` from the box round rather than re-proving the identical
+  underlying mechanism. `floating-pill-close-remember-duration` confirmed via the same shared,
+  already-unit-tested `PoltioTriggerDismissalStore` box used. Pill trigger is now considered done —
+  only `floating-pill-start-mode` remains as an explicit isolated test, very low priority. Tests
+  pass on both platforms, swiftformat clean. Widget 394 left with no `floating-initial-position` as
+  a live demonstration of the new default (starts collapsed, reveals on scroll). Next: card.

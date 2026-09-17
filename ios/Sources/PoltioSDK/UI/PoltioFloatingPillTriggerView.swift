@@ -139,6 +139,9 @@
         private var autoCollapseTimer: Timer?
         private var scrollObserver: NSObjectProtocol?
         private var imageDownloadTask: URLSessionDataTask?
+        /// Guards the unconditional scroll-triggered auto-expand so it only ever fires once per
+        /// trigger instance, matching web's one-shot scroll listener.
+        private var hasAutoOpenedFromScroll = false
 
         /// Bounce Animation Key
         private static let bounceAnimationKey = "poltio.pill.bounce"
@@ -159,13 +162,14 @@
             super.init(frame: .zero)
 
             setupView()
+            // Auto-collapse is the default whenever expanded, for any reason — matching web's pill
+            // (`.expanded` class always gets removed 3s after being added, regardless of how it
+            // was added) and the same "auto-collapse is default" behavior the box trigger now has.
+            // `applyState` schedules it unconditionally now, including for this initial call.
             applyState(currentState, animated: false)
             loadImageIfNeeded()
             setupScrollObserver()
-
-            if widget.overlayOptions.isInitialActive {
-                scheduleAutoCollapse()
-            }
+            setupScrollOpenObserver()
         }
 
         @available(*, unavailable)
@@ -183,6 +187,7 @@
             if let observer = scrollObserver {
                 NotificationCenter.default.removeObserver(observer)
             }
+            NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didScrollPastThresholdNotification, object: nil)
             imageDownloadTask?.cancel()
         }
 
@@ -397,9 +402,7 @@
                 iconLeadingConstraint.isActive = true
                 stopBouncingAnimation()
                 stopPulsateAnimation()
-                if widget.overlayOptions.isInitialActive {
-                    scheduleAutoCollapse()
-                }
+                scheduleAutoCollapse()
             } else {
                 iconLeadingConstraint.isActive = false
                 iconCenterConstraint.isActive = true
@@ -525,6 +528,27 @@
                 guard let self, currentState == .expanded else { return }
                 setState(.collapsed, animated: true)
             }
+        }
+
+        /// Matches web's pill (`pill.ts`'s `addPulse`): unconditionally reveals the collapsed pill
+        /// once the host content scrolls past a threshold, no config flag required (unlike the box
+        /// trigger's `floating-box-open-on-scroll`, which is opt-in). One-shot, like web's own
+        /// `controller.abort()`.
+        private func setupScrollOpenObserver() {
+            PoltioScrollObserver.installIfNeeded()
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleScrollOpenDetected),
+                name: PoltioScrollObserver.didScrollPastThresholdNotification,
+                object: nil
+            )
+        }
+
+        @objc private func handleScrollOpenDetected() {
+            guard !hasAutoOpenedFromScroll, currentState == .collapsed else { return }
+            hasAutoOpenedFromScroll = true
+            NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didScrollPastThresholdNotification, object: nil)
+            setState(.expanded, animated: true)
         }
 
         // MARK: - Image Loader

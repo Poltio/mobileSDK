@@ -63,6 +63,10 @@ internal class PoltioFloatingPillTriggerView(
     private val outsideInteractionListener: () -> Unit = {
         if (currentState == TriggerState.EXPANDED) setState(TriggerState.COLLAPSED, animated = true)
     }
+    /** Guards the unconditional scroll-triggered auto-expand so it only ever fires once per
+     * trigger instance, matching web's one-shot scroll listener. Assigned in `init` (not as a
+     * property initializer) so it can safely reference itself for self-removal on first fire. */
+    private lateinit var scrollOpenListener: () -> Unit
 
     init {
         clipChildren = false
@@ -146,17 +150,37 @@ internal class PoltioFloatingPillTriggerView(
         iconLoader.load(widget.overlayOptions, sparkleIcon) { sparkleIcon.visibility = View.GONE }
 
         PoltioHostInteractionBus.addListener(outsideInteractionListener)
+
+        // Matches web's pill (`pill.ts`'s `addPulse`): unconditionally reveals the collapsed pill
+        // once the host content scrolls past a threshold, no config flag required (unlike the box
+        // trigger's `floating-box-open-on-scroll`, which is opt-in). One-shot, like web's own
+        // `controller.abort()`.
+        var hasAutoOpenedFromScroll = false
+        scrollOpenListener = {
+            if (!hasAutoOpenedFromScroll && currentState == TriggerState.COLLAPSED) {
+                hasAutoOpenedFromScroll = true
+                PoltioScrollObserver.removeListener(scrollOpenListener)
+                PoltioExecutors.runOnMain { setState(TriggerState.EXPANDED, animated = true) }
+            }
+        }
+        (context as? android.app.Activity)?.let { PoltioScrollObserver.installIfNeeded(it) }
+        PoltioScrollObserver.addListener(scrollOpenListener)
     }
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        // Auto-collapse is the default whenever expanded, for any reason — matching web's pill
+        // (the `.expanded` class always gets removed 3s after being added, regardless of how it
+        // was added) and the same "auto-collapse is default" behavior the box trigger now has.
+        // `applyState` schedules it unconditionally now, including for this initial call.
+        // Previously gated behind `isInitialActive`.
         applyState(currentState, animated = false)
-        if (widget.overlayOptions.isInitialActive) scheduleAutoCollapse()
     }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         PoltioHostInteractionBus.removeListener(outsideInteractionListener)
+        if (::scrollOpenListener.isInitialized) PoltioScrollObserver.removeListener(scrollOpenListener)
         PoltioExecutors.main.removeCallbacks(autoCollapseRunnable)
         widthAnimator?.cancel()
         bounceAnimator?.cancel()
@@ -188,7 +212,7 @@ internal class PoltioFloatingPillTriggerView(
         if (isExpanded) {
             stopBouncingAnimation()
             stopPulsateAnimation()
-            if (widget.overlayOptions.isInitialActive) scheduleAutoCollapse()
+            scheduleAutoCollapse()
         } else {
             startBouncingAnimation()
             startPulsateAnimation()
