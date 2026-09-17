@@ -1,0 +1,346 @@
+# Overlay Options — Cross-Platform Verification Checklist
+
+Goal: every customization the web dashboard exposes for a Dynamic Widget's `overlay_options`
+should work the same way on iOS and Android. This doc tracks, parameter by parameter, whether it's
+wired into the native trigger views, and whether it's been visually verified on-device (with a
+screenshot) after being changed live through the Poltio API.
+
+Reference: `widget-params.md` (full parameter table, shared with the web SDK) — ask the user for a
+fresh copy if it's not in `/Users/gcg/Downloads/` anymore, or read it from wherever they re-share it.
+The web SDK's own source is checked out locally at `/Users/gcg/Work/src/github.com/Poltio/websdk` —
+read it directly when in doubt about what a parameter is actually supposed to do, rather than
+guessing from the table alone.
+
+## Web baseline (control group)
+
+The user attached the same three widgets to a static site mimicking the mobile URL structure, so
+web behavior can be used as ground truth when a native result is ambiguous:
+
+- `https://poltio.github.io/mobilesdk/home.html` → box trigger (widget 393)
+- `https://poltio.github.io/mobilesdk/plp_phones.html` → pill trigger (widget 394)
+- `https://poltio.github.io/mobilesdk/plp_tvs.html` → card trigger (widget 401)
+
+All three confirmed reachable and rendering (2026-09-17). **The full parameter-by-parameter sweep
+against this web baseline has not started yet** — next session should, for each parameter change:
+set it via `update_widget`, then screenshot all three surfaces (web via the Browser tool, iOS via
+the simulator, Android via adb) side by side, and note any platform where the visual result
+diverges from web's behavior (not just "does it do something," but "does it match web").
+
+## How to resume this work
+
+1. **Test widgets** (Poltio MCP `get_widget`/`update_widget`, staging env `api-stage.poltio.com`,
+   org owned by `guney@poltio.com`):
+   - `401` — **Mobile SDK Card Trigger TVs** → `example://plp/tvs` → card trigger
+   - `394` — **MobileSDK Phones PLP Pill** → `example://plp/phones` → pill trigger
+   - `393` — **Mobile SDK Home** → `example://home`, `example://plp` → box trigger
+2. `update_widget` requires `public_id`, `name`, `urls`, `is_default` alongside `overlay_options_json`
+   (the API rejects a partial patch) — see call examples below.
+3. **The API validates `overlay_options` keys against a fixed schema** — it 422s on any key
+   (top-level or inside `mobile`) that isn't in `fields.json`. `floating-show-logo` is one such
+   field (docs list it as "page-only", no API field) — it **cannot be live-tested via the
+   dashboard/API**, only via unit tests constructing `PoltioOverlayOptions` directly.
+4. Build/run: `make build-android` / `make run-example-android` (emulator `Pixel_10_Pro_XL`);
+   `make build-ios` / `make run-example-ios` (works now — see "iOS toolchain" section below for
+   the gotchas that were fixed to get here).
+5. Screenshot Android: `adb exec-out screencap -p > file.png`, read the file with the Read tool.
+   Get exact tap coordinates via `adb shell uiautomator dump /sdcard/window_dump.xml` then grep
+   `bounds="[...]"` — screen coordinates from a resized preview image do **not** map 1:1, always
+   get real bounds first.
+6. Screenshot iOS: `mcp__Claude_Code_iOS_Simulator__control` (`attach`/`screenshot`/`tap`).
+7. The Home-screen box trigger auto-collapses after 5s if untouched (`AUTO_COLLAPSE_DELAY_MS` in
+   `PoltioFloatingBoxTriggerView`) — screenshot fast, or re-tap to re-expand.
+
+## iOS toolchain — resolved this session, keep these notes in mind
+
+The Xcode/Simulator blocker from earlier is fixed. What it took, in case a fresh machine hits the
+same thing:
+
+1. Accept the Xcode license (`sudo xcodebuild -license`) and select a **full** Xcode
+   (`sudo xcode-select -s /Applications/<Xcode>.app/Contents/Developer`) — both need the user, not
+   Claude, since they need a password.
+2. **This machine's originally-installed Xcode (Xcode 27) has no `Simulator.app` at all** — Apple
+   replaced it with a new `DeviceHub.app` in that version, and the `mcp__Claude_Code_iOS_Simulator__control`
+   tool doesn't recognize DeviceHub-hosted simulators yet (fails with "No booted simulator found"
+   even though `xcrun simctl` shows one booted). The fix was installing **Xcode 26** alongside it
+   (still has classic `Simulator.app`) and `xcode-select -s`-ing to that instead. If this machine's
+   primary Xcode ever becomes DeviceHub-only again, that's the thing to check first.
+3. Even with the right Xcode selected, the attach tool kept failing ("No booted simulator found" /
+   120s boot timeout) until **Claude Desktop itself was fully quit and relaunched** — it had a stale
+   CoreSimulator handle cached from before the Xcode changes. If attach ever misbehaves again after
+   switching Xcode versions, relaunching Claude Desktop is the first thing to try, before re-diagnosing.
+4. **Fixed the root Makefile**: it hardcoded `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`
+   in five places, which broke the moment `Xcode.app` stopped being the working install. Now
+   `DEVELOPER_DIR` defaults to `$(shell xcode-select -p)` (one place, at the top) and every target
+   just inherits the exported var — no more hardcoded paths. Also switched `build-example-ios` from
+   a `-destination platform=iOS Simulator,name=...` spec to plain `-sdk iphonesimulator`, because
+   with multiple simulator runtimes installed (26.3.1/26.5/27.0 side by side), destination
+   resolution for a named device kept failing to match "OS:latest" even when that exact device was
+   listed as available. `-sdk iphonesimulator` sidesteps device resolution entirely for the build
+   step; the real device is only chosen later, at `simctl install`/`launch` time.
+5. `mcp__Claude_Code_iOS_Simulator__control`'s `inspect` action is unavailable in this environment
+   ("not available right now, use screenshot instead") — no accessibility-tree lookups; get tap
+   coordinates by reading screenshots directly and remember the tool's point-space is **402×874**,
+   not the screenshot's pixel dimensions (divide screenshot-pixel coords by ~2.29 for this device).
+6. `print()`-based `PoltioLogger` output is **not visible** via `xcrun simctl spawn <udid> log show`
+   for a plain `simctl launch`-ed app (unified logging doesn't seem to capture this app's stdout in
+   this setup), and `simctl launch --console`/`--console-pty` didn't stream anything either when
+   tried backgrounded. If SDK-side logging needs inspecting again, try running via Xcode directly
+   (`open example/ios/ExampleApp.xcodeproj`, Cmd+R) rather than fighting `simctl` log capture.
+
+## RESOLVED — iOS floating trigger not appearing was a launch-config bug, not an SDK bug
+
+Root cause found and fixed. It was never a rendering/window-scene issue: the widget API call was
+returning **HTTP 401**. `example/ios/ExampleApp.xcodeproj/xcshareddata/xcschemes/ExampleApp.xcscheme`
+(gitignored, same pattern as Android's `local.properties`) carries the real `POLTIO_CLIENT_KEY` as
+a scheme `<EnvironmentVariable>` — but that's an **Xcode-only** injection mechanism (only applied
+when Xcode itself launches the app, e.g. Cmd+R). The Makefile launches the built app via
+`xcrun simctl launch`, which never reads `.xcscheme` files at all, so `ProcessInfo.processInfo
+.environment["POLTIO_CLIENT_KEY"]` came back `nil` and the app silently fell back to the
+non-functional placeholder `"poltio_test_pk_12345"` — hence 401 on every widget fetch, and
+therefore never anything to show.
+
+How this was actually found: `simctl`'s log/console capture never worked in this environment (see
+toolchain note #6) — even `--stdout=<path>`/`--stderr=<path>` produced no file at all, for reasons
+unclear. What finally worked: temporarily made `PoltioLogger.log` also append to `/tmp/poltio_debug.log`
+(reverted immediately after, **do not leave this in** — it's not committed), rebuilt, relaunched,
+and the very first log line was `resolveMobileWidget server returned status 401 for URL:
+'example://home'`. If live SDK-log visibility is ever needed again, that patch-and-revert trick is
+the fastest path — `simctl`'s own log capture is not to be trusted here.
+
+**Fix applied**: `run-example-ios` in the Makefile now extracts `POLTIO_CLIENT_KEY` straight out of
+the `.xcscheme` XML (`xmllint --xpath`, same single source of truth Xcode itself uses) and passes it
+through via `simctl`'s `SIMCTL_CHILD_POLTIO_CLIENT_KEY` env var convention before launching. Verified
+fixed: rebuilt, relaunched, and the box trigger now renders correctly on the Home screen (matches
+Android's fallback-image rendering exactly) — screenshot not yet saved into `docs/screenshots/ios/`,
+do that on the next pass along with the Card trigger on TVs (confirmed visible in collapsed state,
+just didn't nail the exact tap coordinates to expand it before time ran out this session).
+
+iOS is now unblocked end-to-end for the full verification sweep.
+
+## Code fixes already applied (this session)
+
+- [x] Fixed `example/android/build.gradle.kts` — missing `com.vanniktech.maven.publish` plugin
+      version broke every Android example-app build (unrelated to overlay options, blocking gate).
+- [x] `widgetBg` (`widget-bgcolor`, "Panel Background color") — was decoded but unused on both
+      platforms. Now wired to the WebView modal's chrome (`PoltioWebViewController` / `PoltioWebViewActivity`).
+- [x] `floatingMobileTopBorderRadius` — was Card-only on both platforms. Now also applied to
+      Pill/Box's expanded container, each keeping its own original default radius when unset
+      (Pill 28pt/dp, Box 18pt/dp) so existing widgets don't visually shift.
+- [x] `floatingZindex` — was iOS-only (`UIWindow.windowLevel` offset). Added an Android analogue
+      (mapped to `View.elevation` on the overlay container, clamped 0–24dp).
+- [x] `floatingFontFamily` — was iOS-only. Added Android best-effort `Typeface.create(family, style)`
+      (silently falls back to system font for unknown names, mirroring iOS's `UIFont(name:)` behavior).
+- [x] `showLogo` (`floating-show-logo`) — didn't exist in either model, and neither Card trigger
+      rendered any branding element. Added the property (default `true`) to both models, and a
+      small "Poltio" wordmark to the bottom of the Card trigger's expanded panel on both platforms,
+      shown/hidden by it. **Cannot be live-tested via MCP** (see blocker #3 above) — verify via unit
+      tests instead.
+
+## Known, accepted gaps (not fixed — documented behavior, not bugs)
+
+- `floatingScrollThreshold`, `boxOpenOnScroll` — no generic "host page scroll" concept exists in a
+  native app; decoded for parity only, matches existing code comments.
+- `productCardEnabled` and all `product_card`-section fields — no native `product_card` trigger
+  exists yet on either platform (out of scope for this pass).
+- `parentId` / `parentClassName` / `parentHeight` (`iframe` section) — DOM-embedding-only, no native
+  equivalent possible.
+- `floatingDesignType` / `floatingDisplayType` — only consumed indirectly (trigger-type resolution
+  heuristic), never applied to styling directly; this matches how they're used (to pick card vs.
+  pill vs. box), not a customization surface of their own.
+
+---
+
+## Checklist
+
+Legend: ✅ verified this pass (on-device screenshot or DOM/computed-style inspection for web) ·
+🧩 wired in code / indirectly confirmed (e.g. widget resolved and rendered, but this specific
+sub-element wasn't isolated) · ⬜ not yet tested · ➖ N/A (documented gap above). Older tables below
+don't have a `Web` column yet — add one when a param in that table is next tested, following the
+`pill` table's format.
+
+### identity (core, iframe query params — applies to whichever trigger opens the WebView)
+
+| Attribute | iOS | Android | Notes |
+|---|---|---|---|
+| `widget-content` | ⬜ | ⬜ | passthrough query param |
+| `widget-custom_id` | ⬜ | ⬜ | passthrough query param |
+| `widget-loc` | ⬜ | ⬜ | passthrough query param |
+| `widget-resultfit` | ⬜ | ⬜ | passthrough query param, enum |
+| `widget-disclaimer` | ⬜ | ⬜ | passthrough query param, enum |
+| `trigger-page-langs` | ⬜ | ⬜ | page-only concept (matches `<html lang>`) — likely N/A natively, confirm |
+
+### common (shared across card/pill/box)
+
+| Attribute | iOS | Android | Notes |
+|---|---|---|---|
+| `floating-bgcolor` | ✅ | ✅ | verified via card round 1 (user's own screenshot + our round-1 screenshot); box/pill use their own bg fields instead, by design |
+| `widget-bgcolor` (Panel Background color) | ⬜ | ✅ | tested `#FFE9A8` on widget 401 — code is wired correctly (`sheet`/`webView` background set before load), but once the real widget page finishes loading it paints its own full-bleed opaque background (`content_background_color` from the content's theme) over the whole modal, so the custom panel color is only visible during the brief pre-load flash. **This is expected, not a bug** — same as it would be on web with a page that sets its own background. Don't chase a "durable" visual difference here; the code-level fix is the deliverable. |
+| `widget-bg-image` | ⬜ | ⬜ | not wired on either platform — decide if in scope |
+| `floating-title` | ⬜ | ✅ | card round 1: "TV Finder Pro" rendered correctly |
+| `floating-desc` | ⬜ | ✅ | card round 1: rendered correctly |
+| `floating-zindex` | ⬜ | 🧩 | Android elevation mapping just added, not yet visually confirmed (needs a competing overlay to be meaningful) |
+| `floating-font-family` | ⬜ | ✅ | card round 1, value `"serif"` — title font visibly serif'd |
+| `floating-mobile-top-border-radius` | ⬜ | ✅ | card round 1, value `"0.5em"` — visibly sharper corners than default |
+| `floating-hide-button` | ⬜ | ⬜ | should suppress the entire trigger — quick test, high confidence already (code well understood) |
+| `floating-position` | ⬜ | ⬜ | test all 6 enum values eventually; at least confirm one non-default |
+| `floating-initial-position` | ⬜ | ⬜ | `active`/`expanded`/`collapsed` — box/pill already incidentally exercised via widgets' existing `active` default |
+| `floating-svg` | ⬜ | ⬜ | icon override, remote asset |
+| `floating-product-card-enabled` | ➖ | ➖ | no native product_card trigger |
+
+### card (widget 401)
+
+| Attribute | iOS | Android | Notes |
+|---|---|---|---|
+| `floating-buttontext` | ⬜ | ✅ | card round 1: "Let's Go!" |
+| `floating-textcolor` | ⬜ | ✅ | card round 1: `#FFEE00` on title+desc |
+| `floating-icon-color` | ⬜ | ✅ | card round 1: `#FF3B30` on chevron/close |
+| `floating-show-logo` | ⬜ (unit test only) | ⬜ (unit test only) | not API-settable, see blocker #3 — need to add explicit unit test coverage (default true / explicit "false") on both platforms |
+
+**Card is functionally done for Android** except `floating-hide-button`, `floating-position`
+(non-default value), `floating-initial-position` (explicit non-"active" values), `floating-svg`,
+and the two `widget-content`-family passthrough params — all still ⬜, all low-risk/well-understood
+from code, good candidates for a fast next round.
+
+Widget 401's `overlay_options` currently sits at (as of this session, not reverted):
+`{"floating-title":"TV Finder Pro","floating-desc":"Let's find your dream TV, together!","floating-bgcolor":"rgb(174, 174, 209)","floating-buttontext":"Let's Go!","floating-textcolor":"#FFEE00","floating-icon-color":"#FF3B30","floating-font-family":"serif","floating-mobile-top-border-radius":"0.5em","widget-bgcolor":"#FFE9A8"}`
+— left as-is; revert to the original `{"floating-desc":"Let's find your perfect new TV together","floating-title":"TV Finder","floating-bgcolor":"rgb(174, 174, 209)"}` only if the user asks.
+
+### pill (widget 394)
+
+| Attribute | Web | iOS | Android | Notes |
+|---|---|---|---|---|
+| `floating-text-first` | ✅ | 🧩 | 🧩 | web: confirmed via DOM (`"Check out"`, default white). iOS/Android: pill visibly rendered with the pulsate-color change (proves the widget resolved correctly), but never got a clean tap on the exact collapsed-puck hit-target to expand and see the text itself this session — the text-rendering code path was already independently code-audited as WIRED on both platforms, so this is low-risk, just not re-screenshotted expanded. |
+| `floating-text-second` | ✅ | 🧩 | 🧩 | web: confirmed via DOM+computed style, `"PHONE"` in `#00FF88` (exact match). iOS/Android: same caveat as above. |
+| `floating-text-third` | ✅ | 🧩 | 🧩 | web: confirmed via DOM, `"MATCH"`, default accent color (untouched, as expected — only text-color-second was set). |
+| `floating-text-color-second` | ✅ | 🧩 | 🧩 | web: `rgb(0, 255, 136)` exactly matches `#00FF88` set via API. |
+| `floating-pulsate-color` | ⬜ (not checked on web this round — animated/canvas, harder to inspect via DOM) | ✅ | ✅ | **Visually confirmed on both iOS and Android**: the pulsate ring around the collapsed puck rendered in the custom pink/red (`#FF3366`) on both platforms, clearly distinguishable from the default white ring. |
+| `floating-text-color-first` | ⬜ | ⬜ | ⬜ | not set this round (left default) |
+| `floating-text-color-third` | ⬜ | ⬜ | ⬜ | not set this round (left default) |
+| `floating-show-pulsate` | ⬜ | ⬜ | ⬜ | |
+| `floating-pill-start-mode` | ⬜ | ⬜ | ⬜ | |
+| `floating-pill-show-close-button` | ⬜ | ⬜ | ⬜ | |
+| `floating-pill-close-remember-duration` | ⬜ | ⬜ | ⬜ | hard to visually verify quickly; maybe code-read only |
+
+Widget 394's `overlay_options` currently sits at (not reverted):
+`{"floating-svg":"widget/1787042301.079.svg","trigger-type":"pill","floating-text-first":"Check out","floating-text-third":"MATCH","floating-text-second":"PHONE","floating-pulsate-color":"#FF3366","floating-initial-position":"active","floating-text-color-second":"#00FF88"}`.
+Also note: `update_widget` on this widget once rejected `urls` with "The user is not allowed to set
+widgets in this domain" for the `poltio.github.io` URL — the user said they fixed this domain-
+permission issue on their end mid-session, and the retry succeeded immediately after. If this
+error reappears on a future widget/URL combination, it's a dashboard/domain-allowlist setting, not
+an SDK or Makefile issue — ask the user rather than debugging client-side.
+
+### box (widget 393) — only baseline confirmed so far
+
+| Attribute | iOS | Android | Notes |
+|---|---|---|---|
+| `floating-img` | ⬜ | 🧩 | baseline showed fallback (image URL 404s) — need a working image URL to test properly |
+| `floating-box-text-first` | ⬜ | ✅ (baseline "Product Finder") | default value only so far |
+| `floating-box-text-second` | ⬜ | ✅ (baseline "Product Finder") | default value only so far |
+| `floating-box-text-color-first` | ⬜ | ⬜ | |
+| `floating-box-text-color-second` | ⬜ | ⬜ | |
+| `floating-box-bg-color-first` | ⬜ | ⬜ | |
+| `floating-box-bg-color-second` | ⬜ | ⬜ | |
+| `floating-box-text-first-font-size` | ⬜ | ⬜ | |
+| `floating-box-text-first-font-weight` | ⬜ | ⬜ | |
+| `floating-box-text-second-font-size` | ⬜ | ⬜ | |
+| `floating-box-text-second-font-weight` | ⬜ | ⬜ | |
+| `floating-box-text-align-first` | ⬜ | ⬜ | |
+| `floating-box-text-align-second` | ⬜ | ⬜ | |
+| `floating-box-start-mode` | ⬜ | ⬜ | |
+| `floating-box-open-on-scroll` | ➖ | ➖ | no native scroll hook |
+| `floating-box-open-on-time` | ⬜ | ⬜ | |
+| `floating-box-show-close-button` | ⬜ | ✅ (baseline, default off... actually need explicit true test) | re-verify with explicit `true` |
+| `floating-box-close-remember-duration` | ⬜ | ⬜ | |
+| `floating-box-resize` | ⬜ | ⬜ | |
+| `floating-box-full-image-mode` | ⬜ | ⬜ | |
+
+### product_card — out of scope (no native trigger)
+
+All `➖` — see "Known, accepted gaps" above.
+
+### iframe — out of scope (DOM-only)
+
+All `➖` — see "Known, accepted gaps" above.
+
+---
+
+## Screenshots so far
+
+- `docs/screenshots/android/card_round1_text_colors_radius_font_logo.png` — card trigger, widget 401,
+  after setting title/desc/buttontext/textcolor/iconcolor/fontfamily/mobiletopborderradius. Confirms
+  7 params + the new branding mark at once.
+- `docs/screenshots/android/card_webview_modal_default_bg.png` — WebView modal default (white)
+  background baseline, before `widget-bgcolor` test.
+- `docs/screenshots/android/box_baseline_expanded.png` — box trigger (Home screen) default
+  appearance post-fix, confirming no regression.
+- `docs/screenshots/android/card_webview_modal_loaded_page_paints_over.png` — WebView modal with
+  `widget-bgcolor` set, after the real page finished loading (page's own white background covers
+  it — see note in the `card` table above; this is expected).
+- `docs/screenshots/android/pill_text_pulsate_collapsed.png` — pill trigger (Phones screen),
+  collapsed state, showing the custom pulsate ring color (`#FF3366`, pink/red vs. default white).
+- `docs/screenshots/ios/box_home_collapsed.png`, `card_tvs_collapsed.png`,
+  `pill_pulsate_collapsed.png` — iOS equivalents of the above, all confirming parity with Android.
+  **Note for next session**: the `mcp__Claude_Code_iOS_Simulator__control` tool's own `screenshot`
+  action returns the image inline with no file path — to save one to disk, run
+  `xcrun simctl io <udid> screenshot <path>` separately (confirmed working, much simpler than
+  fighting with the tool's return value).
+
+## Next steps (in order) — pick up here
+
+1. ~~Debug the iOS "no trigger visible" issue~~ — done, see "RESOLVED" section above. iOS is
+   unblocked now.
+2. Re-run the card round-1 checks (title/desc/buttontext/textcolor/iconcolor/fontfamily/
+   borderradius, already set on widget 401) on iOS and fill in that column — box trigger already
+   confirmed rendering correctly on Home; Card trigger confirmed visible (collapsed) on TVs but not
+   yet expanded/screenshotted (get exact tap bounds this time, don't guess from a resized preview).
+3. Start the **web-baseline sweep**: for each parameter, set it via `update_widget`, screenshot web
+   (Browser tool against the three `poltio.github.io/mobilesdk/*.html` pages) + iOS + Android
+   together, and note any platform that diverges from web's rendering — not just "does it render
+   something," but "does it match web's behavior." This supersedes the old "just check it does
+   something on native" approach for anything not already ✅ below.
+4. Test `floating-position` (pick one non-default, e.g. `top-left`) and `floating-hide-button` on
+   widget 401 — quick, one more `update_widget` + screenshot round for Android to finish out `card`.
+5. Move to pill (394): text/colors/pulsate/close-button/start-mode, one batched `update_widget` +
+   screenshot round.
+6. Move to box (393): bg colors/font size+weight/alignment/close-button/resize/full-image-mode.
+7. Revert all three test widgets to something close to their original values when done (or leave a
+   note if the user wants the test values kept — widget 401 has NOT been reverted yet, see above).
+8. Add/extend unit tests for `showLogo` parsing (default true / explicit false) on both platforms,
+   since it can't be live-tested.
+
+## Session log
+
+- **2026-09-17**: Audited both platforms (Explore agents) against `widget-params.md`; found and
+  fixed 5 real gaps (`widgetBg`, `floatingMobileTopBorderRadius` on pill/box, Android `floatingZindex`,
+  Android `floatingFontFamily`, added `showLogo` + branding mark); fixed an unrelated broken Android
+  example-app build (missing Gradle plugin version); ran both unit test suites (pass) and
+  `swiftformat` (clean); verified 7 card params live on Android (title/desc/buttontext/textcolor/
+  iconcolor/fontfamily/borderradius) plus the new branding mark, all in one round on widget 401;
+  verified `widget-bgcolor` is correctly wired (with the "page paints over it" caveat above).
+  Separately, got the iOS toolchain working end-to-end this session (Xcode license/select, the
+  Xcode-27-shipped-no-Simulator.app/DeviceHub discovery, the Claude-Desktop-relaunch fix, and a
+  Makefile fix removing hardcoded `Xcode.app` paths + switching the build to `-sdk iphonesimulator`
+  — see "iOS toolchain" section above for all of it). But then hit a new issue (resolved later the
+  same day — see next entry): no floating trigger ever visually appeared in the iOS example app
+  despite the app running fine and Android rendering the same widgets correctly. Pill (394) and Box
+  (393) not yet touched beyond the pre-existing baseline confirmation on Android. User also set up a
+  web baseline (control group) at three `poltio.github.io/mobilesdk/*.html` pages, confirmed
+  reachable, and pointed to the local `websdk` checkout for reference — the full comparison sweep
+  against that baseline has not started yet (explicitly asked to prep, not start, before lunch).
+- **2026-09-17 (after lunch)**: Root-caused and fixed the iOS "no trigger visible" issue — it was a
+  401 from a launch-time client-key misconfiguration in the Makefile (`simctl launch` doesn't read
+  `.xcscheme` env vars the way Xcode's own Cmd+R does), not an SDK/rendering bug. See "RESOLVED"
+  section above for the full story and the fix. Verified the box trigger renders correctly on iOS
+  Home afterward, matching Android. iOS is now fully unblocked for the verification sweep.
+- **2026-09-17 (late afternoon, short wrap-up round)**: Ran the pill trigger (widget 394) through 5
+  params (`floating-text-first/second/third`, `floating-text-color-second`, `floating-pulsate-color`)
+  across all three surfaces — first time using the web baseline for real (confirmed the
+  `poltio.github.io` pages are wired to the same live widgets, so `update_widget` changes show up
+  there immediately, same as native). Web: confirmed via DOM/computed-style inspection (exact color
+  match). iOS + Android: pulsate-color visually confirmed on both; text confirmed indirectly (widget
+  resolved and pill rendered correctly) but didn't land a clean tap on the exact collapsed-puck
+  hit-target to expand it on either mobile platform this round — not a concern (already
+  code-audited as wired), just unfinished screenshifting. Learned `xcrun simctl io <udid> screenshot
+  <path>` saves iOS screenshots directly to disk, much simpler than the simulator tool's inline
+  image return. Session paused here by request — pill's remaining params, box (393), and the rest
+  of `common`/`card` are next.
