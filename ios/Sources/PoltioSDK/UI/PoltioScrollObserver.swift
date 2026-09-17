@@ -108,7 +108,13 @@
             set { objc_setAssociatedObject(self, &poltio_lastScrolledKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
         }
 
-        @objc func poltio_setContentOffset(_ contentOffset: CGPoint) {
+        /// `dynamic` is required here, not just `@objc`: without it, the self-call to
+        /// `poltio_setContentOffset` a few lines below can be statically resolved/devirtualized by
+        /// the Swift optimizer (this doesn't show up in unoptimized debug builds, only release/WMO
+        /// builds), which would call straight back into this same implementation after the swizzle
+        /// swap instead of routing through the Objective-C runtime — infinite recursion and a stack
+        /// overflow. `dynamic` forces genuine objc_msgSend dispatch for this call.
+        @objc dynamic func poltio_setContentOffset(_ contentOffset: CGPoint) {
             // Calls through to the original implementation — this method IS the original after the
             // swizzle exchange above, despite the name.
             poltio_setContentOffset(contentOffset)
