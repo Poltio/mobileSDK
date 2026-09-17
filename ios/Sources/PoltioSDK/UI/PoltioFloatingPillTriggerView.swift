@@ -142,6 +142,13 @@
         /// Guards the unconditional scroll-triggered auto-expand so it only ever fires once per
         /// trigger instance, matching web's one-shot scroll listener.
         private var hasAutoOpenedFromScroll = false
+        /// Timestamp of the most recent transition into `.expanded`, used to give a brief grace
+        /// window before a real host scroll is allowed to auto-collapse the pill — otherwise the
+        /// very same scroll gesture that revealed it would immediately collapse it again a few
+        /// points later.
+        private var expandedAt: Date?
+        /// Minimum time an expand must have been visible before a host scroll can collapse it.
+        private static let scrollCollapseGracePeriod: TimeInterval = 0.4
 
         /// Bounce Animation Key
         private static let bounceAnimationKey = "poltio.pill.bounce"
@@ -170,6 +177,7 @@
             loadImageIfNeeded()
             setupScrollObserver()
             setupScrollOpenObserver()
+            setupScrollCollapseObserver()
         }
 
         @available(*, unavailable)
@@ -188,6 +196,7 @@
                 NotificationCenter.default.removeObserver(observer)
             }
             NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didScrollPastThresholdNotification, object: nil)
+            NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didDetectScrollMovementNotification, object: nil)
             imageDownloadTask?.cancel()
         }
 
@@ -398,6 +407,7 @@
             widthConstraint.constant = isExpanded ? expandedWidth : 56
 
             if isExpanded {
+                expandedAt = Date()
                 iconCenterConstraint.isActive = false
                 iconLeadingConstraint.isActive = true
                 stopBouncingAnimation()
@@ -554,6 +564,26 @@
             hasAutoOpenedFromScroll = true
             NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didScrollPastThresholdNotification, object: nil)
             setState(.expanded, animated: true)
+        }
+
+        /// Auto-collapses an expanded pill while the host page is actively being scrolled, smoothly
+        /// following the existing expand/collapse animation — regardless of what caused the expand
+        /// (manual tap or the scroll-reveal above).
+        private func setupScrollCollapseObserver() {
+            PoltioScrollObserver.installIfNeeded()
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleScrollMovementDetected),
+                name: PoltioScrollObserver.didDetectScrollMovementNotification,
+                object: nil
+            )
+        }
+
+        @objc private func handleScrollMovementDetected() {
+            guard currentState == .expanded,
+                  let expandedAt, Date().timeIntervalSince(expandedAt) > Self.scrollCollapseGracePeriod
+            else { return }
+            setState(.collapsed, animated: true)
         }
 
         // MARK: - Image Loader

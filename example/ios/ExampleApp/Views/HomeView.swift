@@ -9,6 +9,11 @@ struct HomeView: View {
         products.filter(\.isFeatured)
     }
 
+    let gridColumns = [
+        GridItem(.flexible(), spacing: 16),
+        GridItem(.flexible(), spacing: 16),
+    ]
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -75,6 +80,25 @@ struct HomeView: View {
                             }
                             .padding(.horizontal)
                         }
+                    }
+
+                    // All Products Section — gives the page enough vertical scroll room to
+                    // exercise scroll-driven trigger behavior (auto-open/auto-collapse) on Home.
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("All Products")
+                            .font(.title3)
+                            .fontWeight(.bold)
+                            .padding(.horizontal)
+
+                        LazyVGrid(columns: gridColumns, spacing: 16) {
+                            ForEach(products) { product in
+                                NavigationLink(destination: PDPView(product: product)) {
+                                    ProductCardView(product: product)
+                                        .frame(height: 250)
+                                }
+                            }
+                        }
+                        .padding(.horizontal)
                     }
                 }
                 .padding(.vertical)

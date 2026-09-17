@@ -53,6 +53,13 @@
         /// Guards `floating-box-open-on-scroll` so it only ever fires once per trigger instance,
         /// matching the web SDK's one-shot scroll listener (`controller.abort()` in `box.ts`).
         private var hasAutoOpenedFromScroll = false
+        /// Timestamp of the most recent transition into `.expanded`, used to give a brief grace
+        /// window before a real host scroll is allowed to auto-collapse the box — otherwise the
+        /// very same scroll gesture that revealed it (via `boxOpenOnScroll`) would immediately
+        /// collapse it again a few points later.
+        private var expandedAt: Date?
+        /// Minimum time an expand must have been visible before a host scroll can collapse it.
+        private static let scrollCollapseGracePeriod: TimeInterval = 0.4
 
         // Self Dimensions
         private var widthConstraint: NSLayoutConstraint!
@@ -93,6 +100,7 @@
             loadBannerImage()
             scheduleAutoOpenIfNeeded()
             setupScrollOpenIfNeeded()
+            setupScrollCollapseObserver()
         }
 
         @available(*, unavailable)
@@ -103,6 +111,7 @@
         deinit {
             imageDownloadTask?.cancel()
             NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didScrollPastThresholdNotification, object: nil)
+            NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didDetectScrollMovementNotification, object: nil)
             let autoOpen = autoOpenTimer
             let autoCollapse = autoCollapseTimer
             DispatchQueue.main.async {
@@ -457,6 +466,26 @@
             setState(.expanded, animated: true)
         }
 
+        /// Auto-collapses an expanded box while the host page is actively being scrolled, smoothly
+        /// following the existing expand/collapse animation — regardless of what caused the expand
+        /// (manual tap, `boxOpenOnTime`, or `boxOpenOnScroll`).
+        private func setupScrollCollapseObserver() {
+            PoltioScrollObserver.installIfNeeded()
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleScrollMovementDetected),
+                name: PoltioScrollObserver.didDetectScrollMovementNotification,
+                object: nil
+            )
+        }
+
+        @objc private func handleScrollMovementDetected() {
+            guard currentState == .expanded,
+                  let expandedAt, Date().timeIntervalSince(expandedAt) > Self.scrollCollapseGracePeriod
+            else { return }
+            setState(.collapsed, animated: true)
+        }
+
         // MARK: - State Handling & Actions
 
         public func setState(_ state: TriggerState, animated: Bool = true) {
@@ -479,6 +508,7 @@
             autoCollapseTimer?.invalidate()
             autoCollapseTimer = nil
             if isExpanded {
+                expandedAt = Date()
                 autoCollapseTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { [weak self] _ in
                     DispatchQueue.main.async {
                         guard let self, self.currentState == .expanded else { return }

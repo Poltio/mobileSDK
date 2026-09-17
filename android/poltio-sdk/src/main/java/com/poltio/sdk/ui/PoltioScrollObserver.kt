@@ -22,7 +22,11 @@ internal object PoltioScrollObserver {
     /** Matches the web SDK's own hardcoded `floating-box-open-on-scroll` threshold (`box.ts`). */
     private const val THRESHOLD_DP = 100f
 
+    /** Minimum per-gesture drag distance treated as real scroll activity rather than a tap. */
+    private const val MOVEMENT_THRESHOLD_DP = 8f
+
     private val listeners = mutableSetOf<() -> Unit>()
+    private val movementListeners = mutableSetOf<() -> Unit>()
     private var wrappedActivity: Activity? = null
     private val pendingThresholds = mutableListOf<Pair<Float, () -> Unit>>()
 
@@ -32,6 +36,23 @@ internal object PoltioScrollObserver {
 
     fun removeListener(listener: () -> Unit) {
         synchronized(listeners) { listeners.remove(listener) }
+    }
+
+    /** Registers a listener notified once per gesture, the first time cumulative drag distance
+     * exceeds [MOVEMENT_THRESHOLD_DP] — a genuine "the user is actively scrolling right now"
+     * signal, independent of the fixed 100dp reveal threshold above. Used to auto-collapse an
+     * expanded trigger while the host scrolls. */
+    fun addMovementListener(listener: () -> Unit) {
+        synchronized(movementListeners) { movementListeners.add(listener) }
+    }
+
+    fun removeMovementListener(listener: () -> Unit) {
+        synchronized(movementListeners) { movementListeners.remove(listener) }
+    }
+
+    private fun notifyMovementDetected() {
+        val snapshot = synchronized(movementListeners) { movementListeners.toList() }
+        snapshot.forEach { it.invoke() }
     }
 
     /** Registers a one-shot callback that fires the first time total scroll drag distance
@@ -76,14 +97,23 @@ internal object PoltioScrollObserver {
         private val original: Window.Callback,
     ) : Window.Callback by original {
         private val thresholdPx = activity.dp(THRESHOLD_DP)
+        private val movementThresholdPx = activity.dp(MOVEMENT_THRESHOLD_DP)
         private var downY = 0f
+        private var hasNotifiedMovementThisGesture = false
 
         override fun dispatchTouchEvent(event: MotionEvent): Boolean {
             when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> downY = event.rawY
+                MotionEvent.ACTION_DOWN -> {
+                    downY = event.rawY
+                    hasNotifiedMovementThisGesture = false
+                }
                 MotionEvent.ACTION_MOVE -> {
                     val distance = abs(event.rawY - downY)
                     if (distance > thresholdPx) notifyThresholdCrossed()
+                    if (!hasNotifiedMovementThisGesture && distance > movementThresholdPx) {
+                        hasNotifiedMovementThisGesture = true
+                        notifyMovementDetected()
+                    }
                     handleScrolled(activity, distance)
                 }
             }

@@ -15,13 +15,23 @@
     enum PoltioScrollObserver {
         static let didScrollPastThresholdNotification = Notification.Name("PoltioSDK.scrollObserverDidScrollPastThreshold")
 
+        /// Posted whenever the host page moves by more than `movementEpsilon` in a single update —
+        /// a genuine "the user is actively scrolling right now" signal, independent of any absolute
+        /// position threshold. Used to auto-collapse an expanded trigger while the host scrolls.
+        static let didDetectScrollMovementNotification = Notification.Name("PoltioSDK.scrollObserverDidDetectMovement")
+
         /// Matches the web SDK's own hardcoded `floating-box-open-on-scroll` threshold (`box.ts`),
         /// not the separate/configurable `floatingScrollThreshold` field used elsewhere.
         fileprivate static let threshold: CGFloat = 100
 
+        /// Minimum per-update movement (in points) treated as real scroll activity rather than
+        /// floating-point/rounding jitter.
+        fileprivate static let movementEpsilon: CGFloat = 4
+
         private static let lock = NSLock()
         private static var isInstalled = false
         private static var pendingThresholds: [(threshold: CGFloat, callback: () -> Void)] = []
+        fileprivate static var lastScrolled: CGFloat = 0
 
         /// Installs the swizzle exactly once per process. Safe to call repeatedly/concurrently.
         static func installIfNeeded() {
@@ -70,6 +80,10 @@
             if scrolled > PoltioScrollObserver.threshold {
                 NotificationCenter.default.post(name: PoltioScrollObserver.didScrollPastThresholdNotification, object: nil)
             }
+            if abs(scrolled - PoltioScrollObserver.lastScrolled) > PoltioScrollObserver.movementEpsilon {
+                NotificationCenter.default.post(name: PoltioScrollObserver.didDetectScrollMovementNotification, object: nil)
+            }
+            PoltioScrollObserver.lastScrolled = scrolled
             PoltioScrollObserver.handleScrolled(scrolled)
         }
     }

@@ -38,6 +38,11 @@ internal class PoltioFloatingBoxTriggerView(
     companion object {
         /** How long the expanded box stays open before auto-collapsing if left untouched. */
         private const val AUTO_COLLAPSE_DELAY_MS = 5000L
+
+        /** Minimum time an expand must have been visible before a host scroll can collapse it —
+         * otherwise the very same scroll gesture that revealed it (via `boxOpenOnScroll`) would
+         * immediately collapse it again a few pixels later. */
+        private const val SCROLL_COLLAPSE_GRACE_PERIOD_MS = 400L
     }
 
     /** Uniform scale factor applied to every dimension below, clamped to a sane range. */
@@ -65,6 +70,8 @@ internal class PoltioFloatingBoxTriggerView(
     /** Guards `floating-box-open-on-scroll` so it only ever fires once per trigger instance,
      * matching the web SDK's one-shot scroll listener (`controller.abort()` in `box.ts`). */
     private var hasAutoOpenedFromScroll = false
+    /** Elapsed-realtime timestamp of the most recent transition into EXPANDED. */
+    private var expandedAtMs: Long = 0L
 
     private val autoOpenRunnable = Runnable {
         if (currentState == TriggerState.COLLAPSED) setState(TriggerState.EXPANDED, animated = true)
@@ -78,6 +85,15 @@ internal class PoltioFloatingBoxTriggerView(
     /** Assigned in `init` (not as a property initializer) so it can safely reference itself for
      * self-removal on first fire — see `setupScrollOpenIfNeeded`. */
     private lateinit var scrollListener: () -> Unit
+    /** Auto-collapses an expanded box while the host page is actively being scrolled, smoothly
+     * following the existing expand/collapse animation — regardless of what caused the expand
+     * (manual tap, `boxOpenOnTime`, or `boxOpenOnScroll`). */
+    private val scrollCollapseListener: () -> Unit = {
+        val sinceExpanded = android.os.SystemClock.elapsedRealtime() - expandedAtMs
+        if (currentState == TriggerState.EXPANDED && sinceExpanded > SCROLL_COLLAPSE_GRACE_PERIOD_MS) {
+            PoltioExecutors.runOnMain { setState(TriggerState.COLLAPSED, animated = true) }
+        }
+    }
 
     init {
         clipChildren = false
@@ -90,6 +106,8 @@ internal class PoltioFloatingBoxTriggerView(
         scheduleAutoOpenIfNeeded()
         setupScrollOpenIfNeeded()
         PoltioHostInteractionBus.addListener(outsideInteractionListener)
+        (context as? android.app.Activity)?.let { PoltioScrollObserver.installIfNeeded(it) }
+        PoltioScrollObserver.addMovementListener(scrollCollapseListener)
     }
 
     override fun onDetachedFromWindow() {
@@ -100,6 +118,7 @@ internal class PoltioFloatingBoxTriggerView(
         PoltioExecutors.main.removeCallbacks(autoCollapseRunnable)
         PoltioHostInteractionBus.removeListener(outsideInteractionListener)
         if (::scrollListener.isInitialized) PoltioScrollObserver.removeListener(scrollListener)
+        PoltioScrollObserver.removeMovementListener(scrollCollapseListener)
     }
 
     private fun setupCollapsedContainer() {
@@ -384,6 +403,7 @@ internal class PoltioFloatingBoxTriggerView(
 
         PoltioExecutors.main.removeCallbacks(autoCollapseRunnable)
         if (isExpanded) {
+            expandedAtMs = android.os.SystemClock.elapsedRealtime()
             PoltioExecutors.main.postDelayed(autoCollapseRunnable, AUTO_COLLAPSE_DELAY_MS)
         }
 

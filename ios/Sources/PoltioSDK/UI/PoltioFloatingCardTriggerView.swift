@@ -40,6 +40,14 @@
         private var widthConstraint: NSLayoutConstraint!
         private var heightConstraint: NSLayoutConstraint!
 
+        /// Timestamp of the most recent transition into `.expanded`, used to give a brief grace
+        /// window before a real host scroll is allowed to auto-collapse the card — otherwise the
+        /// very same scroll gesture that revealed it would immediately collapse it again a few
+        /// points later.
+        private var expandedAt: Date?
+        /// Minimum time an expand must have been visible before a host scroll can collapse it.
+        private static let scrollCollapseGracePeriod: TimeInterval = 0.4
+
         /// UI layout and styling constants for the collapsed/expanded card trigger.
         private enum Constants {
             static let collapsedWidth: CGFloat = 44
@@ -118,11 +126,16 @@
             setupView()
             applyState(currentState, animated: false)
             setupScrollReveal()
+            setupScrollCollapseObserver()
         }
 
         @available(*, unavailable)
         required init?(coder _: NSCoder) {
             fatalError("init(coder:) has not been implemented")
+        }
+
+        deinit {
+            NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didDetectScrollMovementNotification, object: nil)
         }
 
         private func setupView() {
@@ -336,8 +349,9 @@
         /// Matches web's card (`core.ts`'s `first` → `second` transition): reveals the collapsed
         /// card once the host content scrolls past `floatingScrollThreshold` (default 300pt,
         /// matching web's own `scrollThreshold ?? 300`). One-shot, like web's own scroll listener
-        /// (`controller.abort()`), and — unlike the box/pill triggers — does **not** auto-collapse
-        /// afterward, since web's card doesn't either; it stays expanded until the user interacts.
+        /// (`controller.abort()`). Unlike web (which leaves the card expanded indefinitely once
+        /// revealed), mobile also auto-collapses it while the host keeps scrolling — see
+        /// `setupScrollCollapseObserver()` — a deliberate mobile-specific UX choice.
         private func setupScrollReveal() {
             PoltioScrollObserver.onScrollPast(CGFloat(widget.overlayOptions.floatingScrollThreshold)) { [weak self] in
                 DispatchQueue.main.async {
@@ -345,6 +359,26 @@
                     self.setState(.expanded, animated: true)
                 }
             }
+        }
+
+        /// Auto-collapses an expanded card while the host page is actively being scrolled, smoothly
+        /// following the existing expand/collapse animation — regardless of what caused the expand
+        /// (manual tap or the scroll-reveal above).
+        private func setupScrollCollapseObserver() {
+            PoltioScrollObserver.installIfNeeded()
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleScrollMovementDetected),
+                name: PoltioScrollObserver.didDetectScrollMovementNotification,
+                object: nil
+            )
+        }
+
+        @objc private func handleScrollMovementDetected() {
+            guard currentState == .expanded,
+                  let expandedAt, Date().timeIntervalSince(expandedAt) > Self.scrollCollapseGracePeriod
+            else { return }
+            setState(.collapsed, animated: true)
         }
 
         // MARK: - State Management
@@ -361,6 +395,9 @@
 
         private func applyState(_ state: TriggerState, animated: Bool) {
             let isExpanded = (state == .expanded)
+            if isExpanded {
+                expandedAt = Date()
+            }
             let targetWidth = isExpanded ? Constants.expandedTotalWidth : Constants.collapsedWidth
 
             // Measure height needed for expanded state

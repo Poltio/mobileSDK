@@ -67,6 +67,23 @@ internal class PoltioFloatingPillTriggerView(
      * trigger instance, matching web's one-shot scroll listener. Assigned in `init` (not as a
      * property initializer) so it can safely reference itself for self-removal on first fire. */
     private lateinit var scrollOpenListener: () -> Unit
+    /** Elapsed-realtime timestamp of the most recent transition into EXPANDED. */
+    private var expandedAtMs: Long = 0L
+    /** Auto-collapses an expanded pill while the host page is actively being scrolled, smoothly
+     * following the existing expand/collapse animation — regardless of what caused the expand
+     * (manual tap or the scroll-reveal below). Requires a brief grace period after expanding so
+     * the very same scroll gesture that revealed the pill doesn't immediately collapse it again. */
+    private val scrollCollapseListener: () -> Unit = {
+        val sinceExpanded = android.os.SystemClock.elapsedRealtime() - expandedAtMs
+        if (currentState == TriggerState.EXPANDED && sinceExpanded > SCROLL_COLLAPSE_GRACE_PERIOD_MS) {
+            PoltioExecutors.runOnMain { setState(TriggerState.COLLAPSED, animated = true) }
+        }
+    }
+
+    companion object {
+        /** Minimum time an expand must have been visible before a host scroll can collapse it. */
+        private const val SCROLL_COLLAPSE_GRACE_PERIOD_MS = 400L
+    }
 
     init {
         clipChildren = false
@@ -165,6 +182,7 @@ internal class PoltioFloatingPillTriggerView(
         }
         (context as? android.app.Activity)?.let { PoltioScrollObserver.installIfNeeded(it) }
         PoltioScrollObserver.addListener(scrollOpenListener)
+        PoltioScrollObserver.addMovementListener(scrollCollapseListener)
     }
 
     override fun onAttachedToWindow() {
@@ -181,6 +199,7 @@ internal class PoltioFloatingPillTriggerView(
         super.onDetachedFromWindow()
         PoltioHostInteractionBus.removeListener(outsideInteractionListener)
         if (::scrollOpenListener.isInitialized) PoltioScrollObserver.removeListener(scrollOpenListener)
+        PoltioScrollObserver.removeMovementListener(scrollCollapseListener)
         PoltioExecutors.main.removeCallbacks(autoCollapseRunnable)
         widthAnimator?.cancel()
         bounceAnimator?.cancel()
@@ -210,6 +229,7 @@ internal class PoltioFloatingPillTriggerView(
         val iconCenteredX = { width: Int -> (width - context.dp(40f)) / 2f }
 
         if (isExpanded) {
+            expandedAtMs = android.os.SystemClock.elapsedRealtime()
             stopBouncingAnimation()
             stopPulsateAnimation()
             scheduleAutoCollapse()

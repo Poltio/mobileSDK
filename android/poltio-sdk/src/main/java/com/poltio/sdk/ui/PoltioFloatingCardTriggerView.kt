@@ -69,6 +69,20 @@ internal class PoltioFloatingCardTriggerView(
     private val expandedSparkle = PoltioSparkleIconView(context)
 
     private var sizeAnimator: android.animation.ValueAnimator? = null
+    /** Elapsed-realtime timestamp of the most recent transition into EXPANDED. */
+    private var expandedAtMs: Long = 0L
+    /** Auto-collapses an expanded card while the host page is actively being scrolled, smoothly
+     * following the existing expand/collapse animation — regardless of what caused the expand
+     * (manual tap or the scroll-reveal below). Requires a brief grace period after expanding so
+     * the very same scroll gesture that revealed the card doesn't immediately collapse it again.
+     * This is a deliberate mobile-specific divergence from web, which leaves the card expanded
+     * indefinitely once revealed. */
+    private val scrollCollapseListener: () -> Unit = {
+        val sinceExpanded = android.os.SystemClock.elapsedRealtime() - expandedAtMs
+        if (currentState == TriggerState.EXPANDED && sinceExpanded > SCROLL_COLLAPSE_GRACE_PERIOD_MS) {
+            PoltioExecutors.runOnMain { setState(TriggerState.COLLAPSED, animated = true) }
+        }
+    }
 
     init {
         clipChildren = false
@@ -85,13 +99,15 @@ internal class PoltioFloatingCardTriggerView(
 
         applyState(currentState, animated = false)
         setupScrollReveal()
+        (context as? android.app.Activity)?.let { PoltioScrollObserver.installIfNeeded(it) }
+        PoltioScrollObserver.addMovementListener(scrollCollapseListener)
     }
 
     /** Matches web's card (`core.ts`'s `first` -> `second` transition): reveals the collapsed card
      * once the host content scrolls past `floatingScrollThreshold` (default 300dp, matching web's
-     * own `scrollThreshold ?? 300`). One-shot, and — unlike the box/pill triggers — does **not**
-     * auto-collapse afterward, since web's card doesn't either; it stays expanded until the user
-     * interacts. */
+     * own `scrollThreshold ?? 300`). One-shot. Unlike web (which leaves the card expanded
+     * indefinitely once revealed), mobile also auto-collapses it while the host keeps scrolling —
+     * see `scrollCollapseListener` — a deliberate mobile-specific UX choice. */
     private fun setupScrollReveal() {
         (context as? android.app.Activity)?.let { activity ->
             PoltioScrollObserver.onScrollPast(activity, widget.overlayOptions.floatingScrollThreshold.toFloat()) {
@@ -107,6 +123,12 @@ internal class PoltioFloatingCardTriggerView(
         sizeAnimator?.cancel()
         collapsedIconLoader.dispose()
         expandedIconLoader.dispose()
+        PoltioScrollObserver.removeMovementListener(scrollCollapseListener)
+    }
+
+    private companion object {
+        /** Minimum time an expand must have been visible before a host scroll can collapse it. */
+        const val SCROLL_COLLAPSE_GRACE_PERIOD_MS = 400L
     }
 
     private fun setupCollapsedContainer() {
@@ -307,6 +329,10 @@ internal class PoltioFloatingCardTriggerView(
         val isExpanded = state == TriggerState.EXPANDED
         val targetWidth = if (isExpanded) expandedTotalWidthPx else collapsedWidthPx
         val targetHeight = if (isExpanded) measuredExpandedHeightPx() else collapsedHeightPx
+
+        if (isExpanded) {
+            expandedAtMs = android.os.SystemClock.elapsedRealtime()
+        }
 
         sizeAnimator?.cancel()
 

@@ -884,3 +884,46 @@ then move on"). Remaining items below are all low-priority cleanup, not new trig
   clean. Also separately expanded both example apps' Phones/TVs product catalogs from 2-3 items to
   10 each (iOS: real brand names; Android: existing fictional-brand convention), per the user's
   request for more content to meaningfully test scroll behavior — both example apps build clean.
+- **2026-09-17 (auto-collapse on real host scroll — box, pill, card, both platforms)**: User asked
+  for all three trigger types to auto-collapse smoothly while the host page is actively scrolling
+  when expanded, noting Android "kind of" already did this but iOS didn't. Audited all six
+  combinations first (see the dedicated audit below this entry) and found the existing "Android kind
+  of does this" behavior was actually a coarse `PoltioHostInteractionBus`/`ACTION_DOWN`-only "did a
+  touch start outside the trigger" detector — fires on any stationary tap-and-release outside just as
+  readily as on a real scroll, and is completely disconnected from either platform's actual scroll-
+  distance observer (`PoltioScrollObserver`/`.kt`, which until now was only ever used to *reveal* a
+  collapsed trigger, never to *collapse* an expanded one). iOS pill had an analogous touch-passthrough-
+  hitTest detector; iOS box and card on both platforms had no collapse-on-scroll path at all — card in
+  particular had *zero* auto-collapse of any kind by design, correctly matching web's one-way reveal
+  from the earlier card round.
+  Added a genuine "the host is actively scrolling" signal to both platforms' `PoltioScrollObserver`:
+  iOS posts `didDetectScrollMovementNotification` from the existing `contentOffset` swizzle whenever
+  movement exceeds a small epsilon (4pt); Android adds `addMovementListener`/`removeMovementListener`,
+  firing once per touch gesture when cumulative drag distance exceeds 8dp. Wired this into all three
+  trigger views on both platforms: each now collapses (with the existing smooth spring animation,
+  no new animation code) whenever expanded and this signal fires, gated by a 400ms grace period after
+  any expand (manual tap or an auto-reveal) so the very same scroll gesture that revealed a trigger
+  doesn't immediately re-collapse it a few pixels later. This is purely additive — existing collapse
+  paths (swipe, close button, fixed timers, tap-outside) are untouched.
+  This is a **deliberate divergence from web for the card trigger specifically**: web's card, once
+  revealed by scroll, stays expanded indefinitely (confirmed in the earlier card-parity round). The
+  user explicitly asked for card to also auto-collapse on scroll here, overriding that web-matching
+  behavior for mobile — documented as intentional, not an oversight.
+  Verified live on iOS: expanded the box trigger on Home, scrolled the page, and it smoothly collapsed
+  back to its tab — confirmed by screenshot before/after. Could not get a reliable screenshot of pill
+  or Android box/pill/card mid-interaction this round (persistent tap-injection misses on both the iOS
+  simulator and Android emulator, unrelated to this change — see the immediately preceding log entry
+  for the same class of issue). Given pill/card on iOS and box/pill/card on Android all reuse the
+  *exact same* new notification/listener plus the identical grace-period-gated collapse call already
+  proven live on iOS box, and both platforms compile clean and pass all existing unit tests
+  (29/29 iOS, full suite Android) with no changes to any other collapse path, confidence in
+  correctness is high despite the missing screenshots. Also added an "All Products" vertical grid
+  section to iOS's `HomeView` (previously only a 4-item horizontal "Featured" carousel, giving almost
+  no vertical scroll room) so Home has enough scrollable content to exercise this on box — Android's
+  Home already lists the full catalog vertically and needed no change.
+  ### Audit: scroll-collapse behavior before this round (for reference)
+  | Trigger | iOS | Android |
+  |---|---|---|
+  | Box | No collapse-on-scroll/outside-touch at all — only a 5s timer + swipe | Collapses on any `ACTION_DOWN` outside (via `PoltioHostInteractionBus`), not scroll-distance-gated |
+  | Pill | Collapses on touch-passthrough hitTest (any touch outside, incl. a stray tap) | Same `ACTION_DOWN`-outside pattern as box |
+  | Card | No auto-collapse at all (deliberate, matches web) | No auto-collapse at all (deliberate, matches web) |
