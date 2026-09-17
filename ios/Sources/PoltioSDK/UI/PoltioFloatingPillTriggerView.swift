@@ -569,9 +569,6 @@
                         max-width: 32px;
                         max-height: 32px;
                     }
-                    svg[style*="color"] {
-                        color: #FFFFFF !important;
-                    }
                     </style>
                     </head>
                     <body>

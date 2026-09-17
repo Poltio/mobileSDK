@@ -117,6 +117,36 @@ just didn't nail the exact tap coordinates to expand it before time ran out this
 
 iOS is now unblocked end-to-end for the full verification sweep.
 
+## Bug found and fixed — iOS Pill custom icon color
+
+The user noticed the pill trigger's custom `floating-svg` icon rendered **white on iOS** but
+**grey on Android and web**, for the exact same widget/icon. Root cause: `PoltioFloatingPillTriggerView.swift`
+has its own separate, duplicated SVG-loading implementation (Card/Box use the shared
+`PoltioTriggerIconLoader` instead — Android's Pill also uses that shared loader, which is why
+Android was correct). iOS Pill's copy injected this CSS into the wrapper HTML:
+```css
+svg[style*="color"] {
+    color: #FFFFFF !important;
+}
+```
+This matched our icon's own `style="color: rgb(74, 85, 101); ..."` attribute and forcibly
+overrode it to white with `!important`, destroying any icon's author-specified color. The
+`html, body { color: #FFFFFF; }` default (for icons with no color of their own) was fine and is
+kept. **Fix**: removed the `svg[style*="color"]` override block entirely. Rebuilt, relaunched,
+confirmed via pixel-sampling the screenshot (`docs/screenshots/ios/pill_icon_color_fixed.png`) that
+the icon now renders the correct `rgb(74, 85, 101)` grey, matching Android and web exactly.
+Unit tests + swiftformat still pass.
+
+Debugging note for next time: `mcp__Claude_Code_iOS_Simulator__control`'s `screenshot` output alone
+wasn't enough to be sure "white" vs. "light grey" wasn't just an optical illusion at tiny icon
+size — installed Pillow (`python3 -m pip install Pillow`) to pixel-sample the saved PNG directly
+and confirm the actual RGB values. Also: don't assume Card/Box's `PoltioTriggerIconLoader` is used
+everywhere — Pill has its own separate copy of similar-looking SVG-loading logic on iOS; check
+both if debugging an icon issue. (A follow-up worth considering, not done this session: de-duplicate
+Pill's icon loading to use the shared `PoltioTriggerIconLoader` instead of its own copy, so this
+class of divergence can't happen again — flagging but not doing it now since it's a bigger,
+riskier refactor than the immediate bug fix.)
+
 ## Code fixes already applied (this session)
 
 - [x] Fixed `example/android/build.gradle.kts` — missing `com.vanniktech.maven.publish` plugin
@@ -214,6 +244,7 @@ Widget 401's `overlay_options` currently sits at (as of this session, not revert
 | `floating-text-third` | ✅ | 🧩 | 🧩 | web: confirmed via DOM, `"MATCH"`, default accent color (untouched, as expected — only text-color-second was set). |
 | `floating-text-color-second` | ✅ | 🧩 | 🧩 | web: `rgb(0, 255, 136)` exactly matches `#00FF88` set via API. |
 | `floating-pulsate-color` | ⬜ (not checked on web this round — animated/canvas, harder to inspect via DOM) | ✅ | ✅ | **Visually confirmed on both iOS and Android**: the pulsate ring around the collapsed puck rendered in the custom pink/red (`#FF3366`) on both platforms, clearly distinguishable from the default white ring. |
+| `floating-svg` (icon color specifically) | ✅ | ✅ (fixed) | ✅ | **Bug found and fixed this session** — see "Bug found and fixed" section above. iOS was forcibly overriding any custom-colored SVG icon to white; now matches Android/web's correct grey (`rgb(74, 85, 101)`) rendering. Pixel-sampled to confirm, not just eyeballed. |
 | `floating-text-color-first` | ⬜ | ⬜ | ⬜ | not set this round (left default) |
 | `floating-text-color-third` | ⬜ | ⬜ | ⬜ | not set this round (left default) |
 | `floating-show-pulsate` | ⬜ | ⬜ | ⬜ | |
@@ -344,3 +375,9 @@ All `➖` — see "Known, accepted gaps" above.
   <path>` saves iOS screenshots directly to disk, much simpler than the simulator tool's inline
   image return. Session paused here by request — pill's remaining params, box (393), and the rest
   of `common`/`card` are next.
+- **2026-09-17 (evening)**: User noticed the pill's custom icon rendered white on iOS but grey on
+  Android/web — found and fixed a real bug (iOS Pill had its own duplicated SVG-loading code with a
+  `!important` CSS rule forcibly overriding any custom-colored icon to white; Card/Box's shared
+  `PoltioTriggerIconLoader` — and Android's Pill, which uses that same shared loader — never had
+  this bug). See "Bug found and fixed" section above. Fixed, rebuilt, verified via pixel-sampling
+  (not just visual inspection) that iOS now matches Android/web exactly. Tests + swiftformat clean.
