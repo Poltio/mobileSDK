@@ -383,6 +383,12 @@ internal class PoltioFloatingBoxTriggerView(
      * `box.ts` — `boxOpenOnTime` wins if both are configured, since the two are alternative ways
      * of specifying the same "auto-reveal once" moment. */
     private fun setupScrollOpenIfNeeded() {
+        // Called from onAttachedToWindow, which can re-run across a detach/reattach cycle (not
+        // just once like init) — without this guard, a trigger that already auto-opened from
+        // scroll in a previous attach would register a brand new listener every time it
+        // reattaches, and that new listener's own guard (hasAutoOpenedFromScroll already true)
+        // would prevent it from ever unregistering itself, leaking one dead listener per cycle.
+        if (hasAutoOpenedFromScroll) return
         val openOnTime = widget.overlayOptions.boxOpenOnTime
         if ((openOnTime != null && openOnTime > 0) || !widget.overlayOptions.boxOpenOnScroll) return
         scrollListener = {

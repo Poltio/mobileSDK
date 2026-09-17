@@ -67,6 +67,10 @@ internal class PoltioFloatingPillTriggerView(
      * trigger instance, matching web's one-shot scroll listener. Assigned in `init` (not as a
      * property initializer) so it can safely reference itself for self-removal on first fire. */
     private lateinit var scrollOpenListener: () -> Unit
+    /** Must be a class member, not a local inside `onAttachedToWindow` — that function can re-run
+     * across a detach/reattach cycle, and a local would silently reset to `false` on every
+     * reattach, breaking the "only ever fires once per trigger instance" guarantee above. */
+    private var hasAutoOpenedFromScroll = false
     /** Elapsed-realtime timestamp of the most recent transition into EXPANDED. */
     private var expandedAtMs: Long = 0L
     /** Auto-collapses an expanded pill while the host page is actively being scrolled, smoothly
@@ -184,21 +188,24 @@ internal class PoltioFloatingPillTriggerView(
         // Matches web's pill (`pill.ts`'s `addPulse`): unconditionally reveals the collapsed pill
         // once the host content scrolls past a threshold, no config flag required (unlike the box
         // trigger's `floating-box-open-on-scroll`, which is opt-in). One-shot, like web's own
-        // `controller.abort()`.
-        var hasAutoOpenedFromScroll = false
-        scrollOpenListener = {
-            // Unregisters on the very first scroll-past-threshold notification regardless of
-            // current state — see the identical note in the box trigger's equivalent listener.
-            if (!hasAutoOpenedFromScroll) {
-                hasAutoOpenedFromScroll = true
-                PoltioScrollObserver.removeListener(scrollOpenListener)
-                if (currentState == TriggerState.COLLAPSED) {
-                    PoltioExecutors.runOnMain { setState(TriggerState.EXPANDED, animated = true) }
+        // `controller.abort()`. Guarded so a reattach after it already fired doesn't register a
+        // brand new listener that (its own guard already true) would never unregister itself —
+        // see the identical note in the box trigger's `setupScrollOpenIfNeeded`.
+        if (!hasAutoOpenedFromScroll) {
+            scrollOpenListener = {
+                // Unregisters on the very first scroll-past-threshold notification regardless of
+                // current state — see the identical note in the box trigger's equivalent listener.
+                if (!hasAutoOpenedFromScroll) {
+                    hasAutoOpenedFromScroll = true
+                    PoltioScrollObserver.removeListener(scrollOpenListener)
+                    if (currentState == TriggerState.COLLAPSED) {
+                        PoltioExecutors.runOnMain { setState(TriggerState.EXPANDED, animated = true) }
+                    }
                 }
             }
+            context.findActivity()?.let { PoltioScrollObserver.installIfNeeded(it) }
+            PoltioScrollObserver.addListener(scrollOpenListener)
         }
-        context.findActivity()?.let { PoltioScrollObserver.installIfNeeded(it) }
-        PoltioScrollObserver.addListener(scrollOpenListener)
         PoltioScrollObserver.addMovementListener(scrollCollapseListener)
     }
 
