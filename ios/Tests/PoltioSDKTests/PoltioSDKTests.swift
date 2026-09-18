@@ -367,6 +367,255 @@ final class PoltioSDKTests: XCTestCase {
         waitForExpectations(timeout: 2.0)
     }
 
+    func testIsValidConversionURL() {
+        XCTAssertTrue(PoltioSDK.isValidConversionURL("https://www.poltio.com/checkout/complete"))
+        XCTAssertTrue(PoltioSDK.isValidConversionURL("myapp://checkout/complete"))
+        XCTAssertTrue(PoltioSDK.isValidConversionURL("myapp://checkout"))
+        XCTAssertFalse(PoltioSDK.isValidConversionURL(""))
+        XCTAssertFalse(PoltioSDK.isValidConversionURL("checkout/complete"))
+        XCTAssertFalse(PoltioSDK.isValidConversionURL("/checkout/complete"))
+    }
+
+    func testRecordPurchaseAPIClientRequestFormattingWithFullPayload() {
+        let mockSession = createMockSession()
+        let client = PoltioAPIClient(session: mockSession)
+        let expectation = expectation(description: "purchase network request fired")
+
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-Poltio-SDK-Key"), "pk_test_purchase")
+            XCTAssertEqual(request.url?.absoluteString, "https://sdk-stage.poltio.com/sdk/mobile/v1/purchase")
+
+            guard let bodyData = request.httpBody ?? request.httpBodyStreamData(),
+                  let json = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+            else {
+                XCTFail("Failed to parse request body")
+                let response = HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!
+                return (response, nil)
+            }
+
+            XCTAssertEqual(json["url"] as? String, "myapp://checkout/complete")
+            XCTAssertEqual(json["device_id"] as? String, "device_purchase_1")
+            XCTAssertEqual(json["order_id"] as? String, "ORD-1")
+            XCTAssertEqual(json["value"] as? Double, 249.9)
+            XCTAssertEqual(json["currency"] as? String, "TRY")
+            XCTAssertEqual(json["event_time"] as? Int, 1_700_000_000)
+
+            guard let contents = json["contents"] as? [[String: Any]], let firstItem = contents.first else {
+                XCTFail("Expected contents array")
+                let response = HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!
+                return (response, nil)
+            }
+            XCTAssertEqual(firstItem["id"] as? String, "SKU-1")
+            XCTAssertEqual(firstItem["name"] as? String, "Running Shoe")
+            XCTAssertEqual(firstItem["productName"] as? String, "Running Shoe")
+            XCTAssertEqual(firstItem["category"] as? String, "footwear")
+            XCTAssertEqual(firstItem["quantity"] as? Int, 2)
+            XCTAssertEqual(firstItem["value"] as? Double, 124.95)
+            XCTAssertEqual(firstItem["price"] as? Double, 124.95)
+
+            expectation.fulfill()
+            let response = HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!
+            return (response, nil)
+        }
+
+        client.recordPurchase(
+            clientKey: "pk_test_purchase",
+            deviceId: "device_purchase_1",
+            url: "myapp://checkout/complete",
+            orderId: "ORD-1",
+            value: 249.9,
+            currency: "TRY",
+            eventTime: Date(timeIntervalSince1970: 1_700_000_000),
+            items: [PoltioPurchaseItem(id: "SKU-1", name: "Running Shoe", category: "footwear", quantity: 2, value: 124.95)]
+        )
+
+        waitForExpectations(timeout: 2.0)
+    }
+
+    func testRecordPurchaseAPIClientOmitsOptionalFieldsWhenNotProvided() {
+        let mockSession = createMockSession()
+        let client = PoltioAPIClient(session: mockSession)
+        let expectation = expectation(description: "minimal purchase network request fired")
+
+        MockURLProtocol.requestHandler = { request in
+            guard let bodyData = request.httpBody ?? request.httpBodyStreamData(),
+                  let json = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+            else {
+                XCTFail("Failed to parse request body")
+                let response = HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!
+                return (response, nil)
+            }
+            XCTAssertNil(json["currency"])
+            XCTAssertNil(json["event_time"])
+            XCTAssertNil(json["contents"])
+            expectation.fulfill()
+            let response = HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!
+            return (response, nil)
+        }
+
+        client.recordPurchase(
+            clientKey: "pk_test_purchase",
+            deviceId: "device_purchase_2",
+            url: "myapp://checkout/complete",
+            orderId: "ORD-2",
+            value: 10.0,
+            currency: nil,
+            eventTime: nil,
+            items: []
+        )
+
+        waitForExpectations(timeout: 2.0)
+    }
+
+    func testRecordPurchaseAPIClientDoesNotCrashOnServerError() {
+        let mockSession = createMockSession()
+        let client = PoltioAPIClient(session: mockSession)
+        let expectation = expectation(description: "purchase request fired despite server error")
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!
+            expectation.fulfill()
+            return (response, nil)
+        }
+
+        client.recordPurchase(
+            clientKey: "pk_test_purchase",
+            deviceId: "device_purchase_3",
+            url: "myapp://checkout/complete",
+            orderId: "ORD-3",
+            value: 10.0,
+            currency: nil,
+            eventTime: nil,
+            items: []
+        )
+
+        waitForExpectations(timeout: 2.0)
+    }
+
+    func testSDKRecordPurchaseSkipsNetworkCallWhenNotConfigured() {
+        MockURLProtocol.requestHandler = { _ in
+            XCTFail("No network request should be made before configuration")
+            throw URLError(.badURL)
+        }
+
+        let sdk = PoltioSDK()
+        sdk.recordPurchase(orderId: "ORD-unconfigured", value: 10.0, url: "myapp://checkout/complete")
+        // No expectation to wait on: assert synchronously that nothing was scheduled.
+    }
+
+    func testSDKRecordPurchaseRejectsBlankOrderId() {
+        MockURLProtocol.requestHandler = { _ in
+            XCTFail("No network request should be made for a blank orderId")
+            throw URLError(.badURL)
+        }
+
+        let sdk = PoltioSDK.shared
+        PoltioSDK.configure(clientKey: "pk_test_purchase_guard")
+        sdk.recordPurchase(orderId: "   ", value: 10.0, url: "myapp://checkout/complete")
+    }
+
+    func testSDKRecordPurchaseRejectsNonPositiveValue() {
+        MockURLProtocol.requestHandler = { _ in
+            XCTFail("No network request should be made for a non-positive value")
+            throw URLError(.badURL)
+        }
+
+        let sdk = PoltioSDK.shared
+        PoltioSDK.configure(clientKey: "pk_test_purchase_guard")
+        sdk.recordPurchase(orderId: "ORD-zero", value: 0, url: "myapp://checkout/complete")
+        sdk.recordPurchase(orderId: "ORD-negative", value: -5.0, url: "myapp://checkout/complete")
+    }
+
+    func testSDKRecordPurchaseRejectsNonFiniteValue() {
+        MockURLProtocol.requestHandler = { _ in
+            XCTFail("No network request should be made for a non-finite value")
+            throw URLError(.badURL)
+        }
+
+        let sdk = PoltioSDK.shared
+        PoltioSDK.configure(clientKey: "pk_test_purchase_guard")
+        sdk.recordPurchase(orderId: "ORD-nan", value: .nan, url: "myapp://checkout/complete")
+        sdk.recordPurchase(orderId: "ORD-infinite", value: .infinity, url: "myapp://checkout/complete")
+    }
+
+    func testSDKRecordPurchaseRejectsInvalidURL() {
+        MockURLProtocol.requestHandler = { _ in
+            XCTFail("No network request should be made for an invalid url")
+            throw URLError(.badURL)
+        }
+
+        let sdk = PoltioSDK.shared
+        PoltioSDK.configure(clientKey: "pk_test_purchase_guard")
+        sdk.recordPurchase(orderId: "ORD-bad-url", value: 10.0, url: "checkout/complete")
+    }
+
+    func testSDKRecordPurchaseSendsDeviceIdAndClientKeyWhenConfigured() {
+        let mockSession = createMockSession()
+        let sdk = PoltioSDK.shared
+        PoltioSDK.configure(clientKey: "pk_test_purchase_sdk")
+        sdk.apiClient = PoltioAPIClient(session: mockSession)
+
+        let requestExpectation = expectation(description: "purchase request reflects configured sdk_id/clientKey")
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-Poltio-SDK-Key"), "pk_test_purchase_sdk")
+            if let bodyData = request.httpBody ?? request.httpBodyStreamData(),
+               let json = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+            {
+                XCTAssertEqual(json["device_id"] as? String, sdk.sdkId)
+                XCTAssertEqual(json["order_id"] as? String, "ORD-sdk-1")
+                XCTAssertEqual(json["value"] as? Double, 42.5)
+            } else {
+                XCTFail("Failed to parse request body")
+            }
+            let response = HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!
+            requestExpectation.fulfill()
+            return (response, nil)
+        }
+
+        sdk.recordPurchase(orderId: "ORD-sdk-1", value: 42.5, url: "myapp://checkout/complete")
+
+        waitForExpectations(timeout: 2.0)
+    }
+
+    func testSDKRecordPurchaseFiltersOutInvalidItemsInsteadOfDroppingWholePurchase() {
+        let mockSession = createMockSession()
+        let sdk = PoltioSDK.shared
+        PoltioSDK.configure(clientKey: "pk_test_purchase_items")
+        sdk.apiClient = PoltioAPIClient(session: mockSession)
+
+        let requestExpectation = expectation(description: "purchase request sent with only valid items")
+        MockURLProtocol.requestHandler = { request in
+            guard let bodyData = request.httpBody ?? request.httpBodyStreamData(),
+                  let json = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any],
+                  let contents = json["contents"] as? [[String: Any]]
+            else {
+                XCTFail("Failed to parse request body")
+                let response = HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!
+                return (response, nil)
+            }
+            XCTAssertEqual(contents.count, 1)
+            XCTAssertEqual(contents.first?["id"] as? String, "SKU-valid")
+            let response = HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!
+            requestExpectation.fulfill()
+            return (response, nil)
+        }
+
+        sdk.recordPurchase(
+            orderId: "ORD-mixed-items",
+            value: 42.5,
+            url: "myapp://checkout/complete",
+            items: [
+                PoltioPurchaseItem(id: "SKU-valid", quantity: 1, value: 10.0),
+                PoltioPurchaseItem(id: "", quantity: 1, value: 10.0),
+                PoltioPurchaseItem(id: "SKU-nan-value", value: .nan),
+                PoltioPurchaseItem(id: "SKU-negative-quantity", quantity: -1),
+            ]
+        )
+
+        waitForExpectations(timeout: 2.0)
+    }
+
     func testSDKReportCtaViewSkipsNetworkCallWhenNotConfigured() {
         let sdk = PoltioSDK()
         MockURLProtocol.requestHandler = { _ in

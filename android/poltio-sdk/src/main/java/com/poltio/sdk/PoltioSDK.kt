@@ -301,6 +301,77 @@ object PoltioSDK {
         }
     }
 
+    // MARK: - Public Conversion Tracking API
+
+    /**
+     * Records a completed purchase for conversion attribution ("recordMobilePurchase"). Books
+     * the purchase against the Poltio session already recorded for this device (via
+     * `track(event = "view", ...)`), crediting revenue back to the recommendation that led to
+     * it. Fire-and-forget: performs the request on a background thread, suppresses all errors,
+     * and never blocks or throws — safe to call from a checkout-success handler.
+     *
+     * @param orderId Unique order/transaction identifier. Used by the backend as a deduplication
+     * key — retrying with the same `orderId` records the purchase once. Reusing an `orderId`
+     * across distinct purchases silently drops revenue, so always pass a fresh one per order.
+     * @param value Total monetary value of the purchase. Must be greater than zero.
+     * @param url The checkout/success screen URL or deep link (e.g. "myapp://checkout/complete").
+     * Must include a scheme and host.
+     * @param currency Optional ISO 4217 currency code (e.g. "USD").
+     * @param items Optional line items included in the purchase.
+     * @param eventTimeSeconds Optional unix timestamp (seconds) the purchase actually occurred.
+     */
+    fun recordPurchase(
+        orderId: String,
+        value: Double,
+        url: String,
+        currency: String? = null,
+        items: List<PoltioPurchaseItem> = emptyList(),
+        eventTimeSeconds: Long? = null,
+    ) {
+        val trimmedOrderId = orderId.trim()
+        if (trimmedOrderId.isEmpty()) {
+            PoltioLogger.error { "recordPurchase requires a non-empty orderId." }
+            return
+        }
+        if (value <= 0 || !value.isFinite()) {
+            PoltioLogger.error { "recordPurchase requires a positive, finite value (received $value)." }
+            return
+        }
+        val trimmedURL = url.trim()
+        if (!isValidConversionURL(trimmedURL)) {
+            PoltioLogger.error { "recordPurchase requires a valid url with a scheme and host (e.g. 'myapp://checkout/complete'); received '$url'." }
+            return
+        }
+
+        val key = clientKey
+        if (!isInitialized || key == null) {
+            PoltioLogger.warning { "recordPurchase() called before configuration. Call PoltioSDK.configure(context, clientKey) first." }
+            return
+        }
+
+        val validItems = items.filter { item ->
+            val hasValidId = item.id.trim().isNotEmpty()
+            val hasValidValue = item.value == null || (item.value.isFinite() && item.value >= 0)
+            val hasValidQuantity = item.quantity == null || item.quantity > 0
+            val isValid = hasValidId && hasValidValue && hasValidQuantity
+            if (!isValid) {
+                PoltioLogger.warning { "recordPurchase ignoring invalid item '${item.id}' for order '$trimmedOrderId'." }
+            }
+            isValid
+        }
+
+        apiClient.recordPurchase(
+            clientKey = key,
+            deviceId = sdkId,
+            url = trimmedURL,
+            orderId = trimmedOrderId,
+            value = value,
+            currency = currency,
+            eventTimeSeconds = eventTimeSeconds,
+            items = validItems,
+        )
+    }
+
     // MARK: - Internal Impression Reporting
 
     /**

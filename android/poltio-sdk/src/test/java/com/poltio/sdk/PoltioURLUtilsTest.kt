@@ -1,6 +1,8 @@
 package com.poltio.sdk
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -45,5 +47,19 @@ class PoltioURLUtilsTest {
         // U+1F600 GRINNING FACE is a surrogate pair in UTF-16; a naive Char-by-Char encoder
         // mangles each half into a replacement byte (%EF%BF%BD) instead of the real UTF-8 bytes.
         assertEquals("https://app.poltio.com/%F0%9F%98%80", sanitizeOrFormatURL("https://app.poltio.com/😀"))
+    }
+
+    @Test
+    fun `isValidConversionURL accepts absolute URLs and deep links with scheme and host`() {
+        assertTrue(isValidConversionURL("https://www.poltio.com/checkout/complete"))
+        assertTrue(isValidConversionURL("myapp://checkout/complete"))
+        assertTrue(isValidConversionURL("myapp://checkout"))
+    }
+
+    @Test
+    fun `isValidConversionURL rejects blank input and bare paths without a fallback`() {
+        assertFalse(isValidConversionURL(""))
+        assertFalse(isValidConversionURL("checkout/complete"))
+        assertFalse(isValidConversionURL("/checkout/complete"))
     }
 }

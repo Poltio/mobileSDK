@@ -2,6 +2,7 @@ package com.poltio.sdk
 
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -10,6 +11,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
 class PoltioSDKTest {
@@ -113,5 +115,68 @@ class PoltioSDKTest {
             widgetId = 42,
         )
         PoltioSDK.reportCtaView(widget)
+    }
+
+    @Test
+    fun `recordPurchase before configure is a no-op and does not throw`() {
+        PoltioSDK.recordPurchase(orderId = "ORD-unconfigured", value = 10.0, url = "myapp://checkout/complete")
+        // No assertion beyond "did not throw" — must never attempt a network call before a client key exists.
+    }
+
+    @Test
+    fun `recordPurchase rejects a blank orderId`() {
+        PoltioSDK.configure(application, clientKey = "poltio_test_pk_123")
+        PoltioSDK.recordPurchase(orderId = "   ", value = 10.0, url = "myapp://checkout/complete")
+        // No assertion beyond "did not throw" — a blank orderId must never reach the network layer.
+    }
+
+    @Test
+    fun `recordPurchase rejects a non-positive value`() {
+        PoltioSDK.configure(application, clientKey = "poltio_test_pk_123")
+        PoltioSDK.recordPurchase(orderId = "ORD-zero", value = 0.0, url = "myapp://checkout/complete")
+        PoltioSDK.recordPurchase(orderId = "ORD-negative", value = -5.0, url = "myapp://checkout/complete")
+    }
+
+    @Test
+    fun `recordPurchase rejects a non-finite value`() {
+        PoltioSDK.configure(application, clientKey = "poltio_test_pk_123")
+        PoltioSDK.recordPurchase(orderId = "ORD-nan", value = Double.NaN, url = "myapp://checkout/complete")
+        PoltioSDK.recordPurchase(orderId = "ORD-infinite", value = Double.POSITIVE_INFINITY, url = "myapp://checkout/complete")
+    }
+
+    @Test
+    fun `recordPurchase rejects a url without scheme and host`() {
+        PoltioSDK.configure(application, clientKey = "poltio_test_pk_123")
+        PoltioSDK.recordPurchase(orderId = "ORD-bad-url", value = 10.0, url = "checkout/complete")
+    }
+
+    @Test
+    fun `recordPurchase after configure does not throw`() {
+        PoltioSDK.configure(application, clientKey = "poltio_test_pk_123")
+        PoltioSDK.recordPurchase(orderId = "ORD-ok", value = 42.5, url = "myapp://checkout/complete", currency = "USD")
+    }
+
+    @Test
+    fun `recordPurchase filters out invalid items instead of dropping the whole purchase`() {
+        val (port, future) = startCapturingServer()
+        PoltioSDK.configure(application, clientKey = "poltio_test_pk_123")
+        PoltioSDK.apiClient = PoltioAPIClient(baseURL = "http://127.0.0.1:$port")
+
+        PoltioSDK.recordPurchase(
+            orderId = "ORD-mixed-items",
+            value = 42.5,
+            url = "myapp://checkout/complete",
+            items = listOf(
+                PoltioPurchaseItem(id = "SKU-valid", quantity = 1, value = 10.0),
+                PoltioPurchaseItem(id = "", quantity = 1, value = 10.0),
+                PoltioPurchaseItem(id = "SKU-nan-value", value = Double.NaN),
+                PoltioPurchaseItem(id = "SKU-negative-quantity", quantity = -1),
+            ),
+        )
+
+        val body = JSONObject(future.get(3, TimeUnit.SECONDS).body)
+        val contents = body.getJSONArray("contents")
+        assertEquals(1, contents.length())
+        assertEquals("SKU-valid", contents.getJSONObject(0).getString("id"))
     }
 }
