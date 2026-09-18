@@ -368,6 +368,74 @@ public final class PoltioSDK {
         }
     }
 
+    // MARK: - Public Conversion Tracking API
+
+    /// Records a completed purchase for conversion attribution ("recordMobilePurchase").
+    /// Books the purchase against the Poltio session already recorded for this device (via
+    /// `track(event: "view", ...)`), crediting revenue back to the recommendation that led to it.
+    /// Fire-and-forget: performs the request on a background queue, suppresses all errors, and
+    /// never blocks or throws — safe to call from a checkout-success handler.
+    /// - Parameters:
+    ///   - orderId: Unique order/transaction identifier. Used by the backend as a deduplication
+    ///     key — retrying with the same `orderId` records the purchase once. Reusing an `orderId`
+    ///     across distinct purchases silently drops revenue, so always pass a fresh one per order.
+    ///   - value: Total monetary value of the purchase. Must be greater than zero.
+    ///   - url: The checkout/success screen URL or deep link (e.g. "myapp://checkout/complete").
+    ///     Must include a scheme and host.
+    ///   - currency: Optional ISO 4217 currency code (e.g. "USD").
+    ///   - items: Optional line items included in the purchase.
+    ///   - eventTime: Optional time the purchase actually occurred (defaults to receipt time server-side when omitted).
+    public static func recordPurchase(
+        orderId: String,
+        value: Double,
+        url: String,
+        currency: String? = nil,
+        items: [PoltioPurchaseItem] = [],
+        eventTime: Date? = nil
+    ) {
+        shared.recordPurchase(orderId: orderId, value: value, url: url, currency: currency, items: items, eventTime: eventTime)
+    }
+
+    /// Instance method to record a purchase.
+    func recordPurchase(
+        orderId: String,
+        value: Double,
+        url: String,
+        currency: String? = nil,
+        items: [PoltioPurchaseItem] = [],
+        eventTime: Date? = nil
+    ) {
+        let trimmedOrderId = orderId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedOrderId.isEmpty else {
+            PoltioLogger.error("recordPurchase requires a non-empty orderId.")
+            return
+        }
+        guard value > 0 else {
+            PoltioLogger.error("recordPurchase requires a positive value (received \(value)).")
+            return
+        }
+        let trimmedURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard PoltioSDK.isValidConversionURL(trimmedURL) else {
+            PoltioLogger.error("recordPurchase requires a valid url with a scheme and host (e.g. 'myapp://checkout/complete'); received '\(url)'.")
+            return
+        }
+        guard isInitialized, let key = clientKey else {
+            PoltioLogger.warning("recordPurchase called before configuration. Call PoltioSDK.configure(clientKey:) first.")
+            return
+        }
+
+        apiClient.recordPurchase(
+            clientKey: key,
+            deviceId: sdkId,
+            url: trimmedURL,
+            orderId: trimmedOrderId,
+            value: value,
+            currency: currency,
+            eventTime: eventTime,
+            items: items
+        )
+    }
+
     // MARK: - Internal Impression Reporting
 
     /// Reports a widget impression ("cta-view") to the backend. Called exactly once by
@@ -397,6 +465,16 @@ public final class PoltioSDK {
     func isViewEvent(_ eventName: String) -> Bool {
         let lower = eventName.lowercased()
         return lower == "view" || lower == "viewcontent" || lower == "view_content"
+    }
+
+    /// Validates a purchase/conversion URL: must include a scheme and host. Unlike
+    /// `sanitizeOrFormatURL`, this never substitutes a fallback domain — an invalid purchase URL
+    /// is rejected outright so conversions are never silently misattributed to a synthesized address.
+    static func isValidConversionURL(_ rawInput: String) -> Bool {
+        guard let parsed = URL(string: rawInput) else {
+            return false
+        }
+        return parsed.scheme != nil && parsed.host != nil
     }
 
     /// Sanitizes or formats a raw URL string to guarantee it contains a scheme and host required by the API.

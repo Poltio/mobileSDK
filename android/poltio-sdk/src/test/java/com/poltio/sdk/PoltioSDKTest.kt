@@ -114,4 +114,36 @@ class PoltioSDKTest {
         )
         PoltioSDK.reportCtaView(widget)
     }
+
+    @Test
+    fun `recordPurchase before configure is a no-op and does not throw`() {
+        PoltioSDK.recordPurchase(orderId = "ORD-unconfigured", value = 10.0, url = "myapp://checkout/complete")
+        // No assertion beyond "did not throw" — must never attempt a network call before a client key exists.
+    }
+
+    @Test
+    fun `recordPurchase rejects a blank orderId`() {
+        PoltioSDK.configure(application, clientKey = "poltio_test_pk_123")
+        PoltioSDK.recordPurchase(orderId = "   ", value = 10.0, url = "myapp://checkout/complete")
+        // No assertion beyond "did not throw" — a blank orderId must never reach the network layer.
+    }
+
+    @Test
+    fun `recordPurchase rejects a non-positive value`() {
+        PoltioSDK.configure(application, clientKey = "poltio_test_pk_123")
+        PoltioSDK.recordPurchase(orderId = "ORD-zero", value = 0.0, url = "myapp://checkout/complete")
+        PoltioSDK.recordPurchase(orderId = "ORD-negative", value = -5.0, url = "myapp://checkout/complete")
+    }
+
+    @Test
+    fun `recordPurchase rejects a url without scheme and host`() {
+        PoltioSDK.configure(application, clientKey = "poltio_test_pk_123")
+        PoltioSDK.recordPurchase(orderId = "ORD-bad-url", value = 10.0, url = "checkout/complete")
+    }
+
+    @Test
+    fun `recordPurchase after configure does not throw`() {
+        PoltioSDK.configure(application, clientKey = "poltio_test_pk_123")
+        PoltioSDK.recordPurchase(orderId = "ORD-ok", value = 42.5, url = "myapp://checkout/complete", currency = "USD")
+    }
 }

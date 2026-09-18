@@ -61,6 +61,13 @@ internal fun sanitizeOrFormatURL(rawInput: String): String {
     return "https://app.poltio.com/$cleanPath"
 }
 
+/**
+ * Validates a purchase/conversion URL: must include a scheme and host. Unlike
+ * [sanitizeOrFormatURL], this never substitutes a fallback domain — an invalid purchase URL is
+ * rejected outright so conversions are never silently misattributed to a synthesized address.
+ */
+internal fun isValidConversionURL(rawInput: String): Boolean = isWellFormedUrl(rawInput.trim())
+
 /** Whether every `%` in [s] is followed by exactly two hex digits — i.e. safe to percent-decode. */
 private fun hasOnlyWellFormedPercentEscapes(s: String): Boolean {
     var i = 0

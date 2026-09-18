@@ -18,6 +18,9 @@ final class PoltioAPIClient {
     /// Endpoint path for reporting a widget impression ("cta-view").
     static let ctaViewEndpointPath = "/sdk/mobile/v1/cta-view"
 
+    /// Endpoint path for recording a purchase for conversion attribution.
+    static let purchaseEndpointPath = "/sdk/mobile/v1/purchase"
+
     private let baseURL: String
     private let session: URLSession
 
@@ -190,6 +193,100 @@ final class PoltioAPIClient {
             }
             if let httpResponse = response as? HTTPURLResponse, !(200 ... 299).contains(httpResponse.statusCode) {
                 PoltioLogger.debug("cta-view report for widget '\(publicId)' returned status \(httpResponse.statusCode).")
+            }
+        }.resume()
+    }
+
+    /// Records a completed purchase for conversion attribution ("recordMobilePurchase").
+    /// Fire-and-forget: performs the request on a background queue, never blocks the caller, and
+    /// suppresses/logs all errors instead of surfacing them. The backend responds 204 as soon as
+    /// the request is accepted and writes the conversion afterwards, so there is nothing
+    /// actionable to hand back to the caller beyond "the request was sent".
+    /// - Parameters:
+    ///   - clientKey: Publishable client key configured for the SDK session.
+    ///   - deviceId: Unique SDK device identifier (`sdk_id`) — must match the `deviceId` sent to
+    ///     `resolveMobileWidget`, or the purchase is recorded without attribution.
+    ///   - url: The checkout/success screen URL or deep link, with scheme and host.
+    ///   - orderId: Unique order identifier; the backend's deduplication key.
+    ///   - value: Total monetary value of the purchase (must be positive).
+    ///   - currency: Optional ISO 4217 currency code.
+    ///   - eventTime: Optional time the purchase actually occurred (server defaults to receipt time when omitted).
+    ///   - items: Optional line items included in the purchase.
+    func recordPurchase(
+        clientKey: String,
+        deviceId: String,
+        url: String,
+        orderId: String,
+        value: Double,
+        currency: String?,
+        eventTime: Date?,
+        items: [PoltioPurchaseItem]
+    ) {
+        let endpointString = "\(baseURL)\(PoltioAPIClient.purchaseEndpointPath)"
+        guard let requestURL = URL(string: endpointString) else {
+            PoltioLogger.error("Invalid purchase endpoint URL '\(endpointString)'.")
+            return
+        }
+
+        var request = URLRequest(url: requestURL)
+        request.httpMethod = "POST"
+        request.setValue(clientKey, forHTTPHeaderField: "X-Poltio-SDK-Key")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        var payload: [String: Any] = [
+            "url": url,
+            "device_id": deviceId,
+            "order_id": orderId,
+            "value": value,
+        ]
+        if let currency, !currency.isEmpty {
+            payload["currency"] = currency
+        }
+        if let eventTime {
+            payload["event_time"] = Int(eventTime.timeIntervalSince1970)
+        }
+        if !items.isEmpty {
+            payload["contents"] = items.map { item -> [String: Any] in
+                var content: [String: Any] = ["id": item.id]
+                if let name = item.name {
+                    content["name"] = name
+                    content["productName"] = name
+                }
+                if let category = item.category {
+                    content["category"] = category
+                }
+                if let quantity = item.quantity {
+                    content["quantity"] = quantity
+                }
+                if let value = item.value {
+                    content["value"] = value
+                    content["price"] = value
+                }
+                return content
+            }
+        }
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
+        } catch {
+            PoltioLogger.error("Failed to serialize purchase payload: \(error.localizedDescription)")
+            return
+        }
+
+        session.dataTask(with: request) { _, response, error in
+            if let error {
+                if (error as? URLError)?.code != .cancelled, (error as NSError).code != NSURLErrorCancelled {
+                    PoltioLogger.warning("recordPurchase failed for order '\(orderId)': \(error.localizedDescription)")
+                }
+                return
+            }
+            guard let httpResponse = response as? HTTPURLResponse else {
+                return
+            }
+            if (200 ... 299).contains(httpResponse.statusCode) {
+                PoltioLogger.info("recordPurchase accepted for order '\(orderId)' (Status: \(httpResponse.statusCode)).")
+            } else {
+                PoltioLogger.warning("recordPurchase for order '\(orderId)' returned status \(httpResponse.statusCode).")
             }
         }.resume()
     }

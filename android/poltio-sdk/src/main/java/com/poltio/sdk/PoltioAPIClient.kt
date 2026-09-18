@@ -1,5 +1,6 @@
 package com.poltio.sdk
 
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -26,6 +27,7 @@ internal class PoltioAPIClient(
 
         const val WIDGET_ENDPOINT_PATH = "/sdk/mobile/v1/widget"
         const val CTA_VIEW_ENDPOINT_PATH = "/sdk/mobile/v1/cta-view"
+        const val PURCHASE_ENDPOINT_PATH = "/sdk/mobile/v1/purchase"
     }
 
     /** Exposes the resolved base URL. Used exclusively for unit testing. */
@@ -174,6 +176,89 @@ internal class PoltioAPIClient(
                 }
             } catch (error: Exception) {
                 PoltioLogger.debug { "cta-view report failed for widget '$publicId': ${error.message}" }
+            } finally {
+                connection?.disconnect()
+            }
+        }
+    }
+
+    /**
+     * Records a completed purchase for conversion attribution ("recordMobilePurchase").
+     * Fire-and-forget on a background thread: never blocks the caller, and suppresses/logs all
+     * errors instead of surfacing them. The backend responds 204 as soon as the request is
+     * accepted and writes the conversion afterwards, so there is nothing actionable to hand back
+     * to the caller beyond "the request was sent".
+     *
+     * @param deviceId Must match the `deviceId` sent to [resolveMobileWidget], or the purchase is
+     * recorded without attribution.
+     * @param url The checkout/success screen URL or deep link, with scheme and host.
+     * @param orderId Unique order identifier; the backend's deduplication key.
+     * @param value Total monetary value of the purchase (must be positive).
+     * @param eventTimeSeconds Optional unix timestamp (seconds) the purchase actually occurred.
+     * @param items Optional line items included in the purchase.
+     */
+    fun recordPurchase(
+        clientKey: String,
+        deviceId: String,
+        url: String,
+        orderId: String,
+        value: Double,
+        currency: String?,
+        eventTimeSeconds: Long?,
+        items: List<PoltioPurchaseItem>,
+    ) {
+        PoltioExecutors.io.submit {
+            var connection: HttpURLConnection? = null
+            try {
+                val endpoint = URL("$baseURL$PURCHASE_ENDPOINT_PATH")
+                connection = (endpoint.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 15_000
+                    readTimeout = 15_000
+                    doOutput = true
+                    setRequestProperty("X-Poltio-SDK-Key", clientKey)
+                    setRequestProperty("Content-Type", "application/json")
+                }
+
+                val payload = JSONObject().apply {
+                    put("url", url)
+                    put("device_id", deviceId)
+                    put("order_id", orderId)
+                    put("value", value)
+                    if (!currency.isNullOrEmpty()) put("currency", currency)
+                    if (eventTimeSeconds != null) put("event_time", eventTimeSeconds)
+                    if (items.isNotEmpty()) {
+                        val contents = JSONArray()
+                        items.forEach { item ->
+                            val content = JSONObject().apply {
+                                put("id", item.id)
+                                item.name?.let {
+                                    put("name", it)
+                                    put("productName", it)
+                                }
+                                item.category?.let { put("category", it) }
+                                item.quantity?.let { put("quantity", it) }
+                                item.value?.let {
+                                    put("value", it)
+                                    put("price", it)
+                                }
+                            }
+                            contents.put(content)
+                        }
+                        put("contents", contents)
+                    }
+                }.toString()
+
+                connection.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
+
+                val statusCode = connection.responseCode
+                if (statusCode in 200..299) {
+                    PoltioLogger.info { "recordPurchase accepted for order '$orderId' (Status: $statusCode)." }
+                } else {
+                    PoltioLogger.warning { "recordPurchase for order '$orderId' returned status $statusCode." }
+                }
+            } catch (error: Exception) {
+                PoltioLogger.warning { "recordPurchase failed for order '$orderId': ${error.message}" }
             } finally {
                 connection?.disconnect()
             }

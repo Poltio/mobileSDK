@@ -125,4 +125,100 @@ class PoltioAPIClientTest {
         // No assertion beyond "did not throw" on this calling thread — the failure happens
         // asynchronously on the background executor and must never propagate to the host app.
     }
+
+    @Test
+    fun `recordPurchase sends the full payload including contents to the correct endpoint`() {
+        val (port, future) = startCapturingServer()
+
+        val client = PoltioAPIClient(baseURL = "http://127.0.0.1:$port")
+        client.recordPurchase(
+            clientKey = "pk_test_purchase",
+            deviceId = "device_purchase_1",
+            url = "myapp://checkout/complete",
+            orderId = "ORD-1",
+            value = 249.9,
+            currency = "TRY",
+            eventTimeSeconds = 1_700_000_000L,
+            items = listOf(PoltioPurchaseItem(id = "SKU-1", name = "Running Shoe", category = "footwear", quantity = 2, value = 124.95)),
+        )
+
+        val request = future.get(3, TimeUnit.SECONDS)
+        val body = JSONObject(request.body)
+
+        assertEquals("/sdk/mobile/v1/purchase", request.path)
+        assertEquals("pk_test_purchase", request.headers["X-Poltio-SDK-Key"])
+        assertEquals("application/json", request.headers["Content-Type"])
+        assertEquals("myapp://checkout/complete", body.getString("url"))
+        assertEquals("device_purchase_1", body.getString("device_id"))
+        assertEquals("ORD-1", body.getString("order_id"))
+        assertEquals(249.9, body.getDouble("value"), 0.0)
+        assertEquals("TRY", body.getString("currency"))
+        assertEquals(1_700_000_000L, body.getLong("event_time"))
+
+        val firstItem = body.getJSONArray("contents").getJSONObject(0)
+        assertEquals("SKU-1", firstItem.getString("id"))
+        assertEquals("Running Shoe", firstItem.getString("name"))
+        assertEquals("Running Shoe", firstItem.getString("productName"))
+        assertEquals("footwear", firstItem.getString("category"))
+        assertEquals(2, firstItem.getInt("quantity"))
+        assertEquals(124.95, firstItem.getDouble("value"), 0.0)
+        assertEquals(124.95, firstItem.getDouble("price"), 0.0)
+    }
+
+    @Test
+    fun `recordPurchase omits optional fields when not provided`() {
+        val (port, future) = startCapturingServer()
+
+        val client = PoltioAPIClient(baseURL = "http://127.0.0.1:$port")
+        client.recordPurchase(
+            clientKey = "pk_test_purchase",
+            deviceId = "device_purchase_2",
+            url = "myapp://checkout/complete",
+            orderId = "ORD-2",
+            value = 10.0,
+            currency = null,
+            eventTimeSeconds = null,
+            items = emptyList(),
+        )
+
+        val body = JSONObject(future.get(3, TimeUnit.SECONDS).body)
+        assertFalse(body.has("currency"))
+        assertFalse(body.has("event_time"))
+        assertFalse(body.has("contents"))
+    }
+
+    @Test
+    fun `recordPurchase does not throw when the server returns an error`() {
+        val (port, future) = startCapturingServer(responseStatusLine = "HTTP/1.1 500 Internal Server Error")
+
+        val client = PoltioAPIClient(baseURL = "http://127.0.0.1:$port")
+        client.recordPurchase(
+            clientKey = "pk_test_purchase",
+            deviceId = "device_purchase_3",
+            url = "myapp://checkout/complete",
+            orderId = "ORD-3",
+            value = 10.0,
+            currency = null,
+            eventTimeSeconds = null,
+            items = emptyList(),
+        )
+
+        assertTrue("Request was not received in time", future.get(3, TimeUnit.SECONDS) != null)
+    }
+
+    @Test
+    fun `recordPurchase does not throw when the server is unreachable`() {
+        val client = PoltioAPIClient(baseURL = "http://127.0.0.1:1")
+        client.recordPurchase(
+            clientKey = "pk_test_purchase",
+            deviceId = "device_purchase_unreachable",
+            url = "myapp://checkout/complete",
+            orderId = "ORD-unreachable",
+            value = 10.0,
+            currency = null,
+            eventTimeSeconds = null,
+            items = emptyList(),
+        )
+        // No assertion beyond "did not throw" on this calling thread.
+    }
 }
