@@ -116,11 +116,19 @@ internal object PoltioOverlayManager {
         if (currentPublicId == widget.publicId &&
             currentTriggerType == targetTriggerType &&
             activeTriggerView != null &&
-            activeTriggerView?.parent != null
+            activeTriggerView?.parent != null &&
+            activeTriggerView?.context === activity
         ) {
-            // Already active and visible for this exact widget and trigger type. Still a fresh
-            // impression from the caller's perspective (e.g. the same widget is configured for two
-            // screens), so report it even though nothing is rebuilt.
+            // Already active and visible for this exact widget and trigger type on the current
+            // Activity. Still a fresh impression from the caller's perspective (e.g. the same
+            // widget is configured for two screens), so report it even though nothing is rebuilt.
+            //
+            // The `context === activity` check matters because the trigger is attached to the
+            // current Activity's content view: without it, navigating to a *new* Activity (which
+            // only backstacks the old one rather than destroying it) that resolves the same widget
+            // would match on publicId/triggerType alone and return here — leaving the trigger
+            // attached to the paused, off-screen Activity underneath instead of the one actually
+            // visible now.
             PoltioSDK.reportCtaView(widget)
             return
         }
