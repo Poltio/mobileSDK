@@ -159,12 +159,12 @@ internal object PoltioOverlayManager {
 
         showTriggerRetryCount = 0
 
+        val contentRoot = activity.findViewById<ViewGroup>(android.R.id.content) ?: return
+
         // The trigger is now guaranteed to actually render below — report the impression once
         // here rather than at the top of the method, so retries while waiting for a resumed
         // Activity (which re-enter this same method) don't double-report.
         PoltioSDK.reportCtaView(widget)
-
-        val contentRoot = activity.findViewById<ViewGroup>(android.R.id.content) ?: return
         val container = FrameLayout(activity).apply {
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
             clipChildren = false
