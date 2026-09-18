@@ -88,6 +88,26 @@ Then install the pod:
 pod install
 ```
 
+### Android
+
+Add the Maven Central dependency to your app module's build script.
+
+**Kotlin DSL** (`build.gradle.kts`):
+```kotlin
+dependencies {
+    implementation("com.poltio:poltio-sdk:1.0.0")
+}
+```
+
+**Groovy DSL** (`build.gradle`):
+```groovy
+dependencies {
+    implementation 'com.poltio:poltio-sdk:1.0.0'
+}
+```
+
+Maven Central is included by default via `mavenCentral()` in most projects' repositories block, so no extra repository setup is needed.
+
 ---
 
 ## 💻 Usage Example
@@ -109,6 +129,29 @@ PoltioSDK.track(event: "view", params: ["url": "https://www.poltio.com/pdp"])
 // 4. Track conversion events
 PoltioSDK.track(event: "TrackConversion", params: ["value": 99.99, "currency": "USD"])
 ```
+
+### Android (Kotlin)
+
+```kotlin
+import com.poltio.sdk.PoltioSDK
+
+// 1. Configure the SDK at app launch (e.g., inside your Application.onCreate())
+PoltioSDK.configure(context = this, clientKey = "poltio_test_pk_12345")
+
+// 2. (Optional) Identify logged-in user with developer-provided user ID (puid)
+PoltioSDK.identify(puid = "user_12345")
+
+// 3. Track screen/view events (automatically includes internal sdk_id and puid)
+PoltioSDK.track(event = "view", params = mapOf("url" to "https://www.poltio.com/pdp"))
+
+// 4. Track conversion events
+PoltioSDK.track(event = "TrackConversion", params = mapOf("value" to 99.99, "currency" to "USD"))
+```
+
+> **Note:** Call `configure()` once at app startup — e.g. from a custom `Application` subclass, as
+> shown above — and pass it an `Application` context so the SDK can attach the floating trigger
+> overlay to whichever Activity is on screen. Passing an `Activity` (or other) context is safe too,
+> since only `applicationContext` is retained, but the overlay won't attach without one.
 
 ---
 
