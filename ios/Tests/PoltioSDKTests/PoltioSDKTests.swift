@@ -578,6 +578,44 @@ final class PoltioSDKTests: XCTestCase {
         waitForExpectations(timeout: 2.0)
     }
 
+    func testSDKRecordPurchaseFiltersOutInvalidItemsInsteadOfDroppingWholePurchase() {
+        let mockSession = createMockSession()
+        let sdk = PoltioSDK.shared
+        PoltioSDK.configure(clientKey: "pk_test_purchase_items")
+        sdk.apiClient = PoltioAPIClient(session: mockSession)
+
+        let requestExpectation = expectation(description: "purchase request sent with only valid items")
+        MockURLProtocol.requestHandler = { request in
+            guard let bodyData = request.httpBody ?? request.httpBodyStreamData(),
+                  let json = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any],
+                  let contents = json["contents"] as? [[String: Any]]
+            else {
+                XCTFail("Failed to parse request body")
+                let response = HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!
+                return (response, nil)
+            }
+            XCTAssertEqual(contents.count, 1)
+            XCTAssertEqual(contents.first?["id"] as? String, "SKU-valid")
+            let response = HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!
+            requestExpectation.fulfill()
+            return (response, nil)
+        }
+
+        sdk.recordPurchase(
+            orderId: "ORD-mixed-items",
+            value: 42.5,
+            url: "myapp://checkout/complete",
+            items: [
+                PoltioPurchaseItem(id: "SKU-valid", quantity: 1, value: 10.0),
+                PoltioPurchaseItem(id: "", quantity: 1, value: 10.0),
+                PoltioPurchaseItem(id: "SKU-nan-value", value: .nan),
+                PoltioPurchaseItem(id: "SKU-negative-quantity", quantity: -1),
+            ]
+        )
+
+        waitForExpectations(timeout: 2.0)
+    }
+
     func testSDKReportCtaViewSkipsNetworkCallWhenNotConfigured() {
         let sdk = PoltioSDK()
         MockURLProtocol.requestHandler = { _ in

@@ -424,6 +424,17 @@ public final class PoltioSDK {
             return
         }
 
+        let validItems = items.filter { item in
+            let hasValidId = !item.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let hasValidValue = item.value == nil || (item.value!.isFinite && item.value! >= 0)
+            let hasValidQuantity = item.quantity == nil || item.quantity! > 0
+            let isValid = hasValidId && hasValidValue && hasValidQuantity
+            if !isValid {
+                PoltioLogger.warning("recordPurchase ignoring invalid item '\(item.id)' for order '\(trimmedOrderId)'.")
+            }
+            return isValid
+        }
+
         apiClient.recordPurchase(
             clientKey: key,
             deviceId: sdkId,
@@ -432,7 +443,7 @@ public final class PoltioSDK {
             value: value,
             currency: currency,
             eventTime: eventTime,
-            items: items
+            items: validItems
         )
     }
 

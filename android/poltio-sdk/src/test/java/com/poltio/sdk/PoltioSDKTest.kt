@@ -2,6 +2,7 @@ package com.poltio.sdk
 
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -10,6 +11,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
 class PoltioSDKTest {
@@ -152,5 +154,29 @@ class PoltioSDKTest {
     fun `recordPurchase after configure does not throw`() {
         PoltioSDK.configure(application, clientKey = "poltio_test_pk_123")
         PoltioSDK.recordPurchase(orderId = "ORD-ok", value = 42.5, url = "myapp://checkout/complete", currency = "USD")
+    }
+
+    @Test
+    fun `recordPurchase filters out invalid items instead of dropping the whole purchase`() {
+        val (port, future) = startCapturingServer()
+        PoltioSDK.configure(application, clientKey = "poltio_test_pk_123")
+        PoltioSDK.apiClient = PoltioAPIClient(baseURL = "http://127.0.0.1:$port")
+
+        PoltioSDK.recordPurchase(
+            orderId = "ORD-mixed-items",
+            value = 42.5,
+            url = "myapp://checkout/complete",
+            items = listOf(
+                PoltioPurchaseItem(id = "SKU-valid", quantity = 1, value = 10.0),
+                PoltioPurchaseItem(id = "", quantity = 1, value = 10.0),
+                PoltioPurchaseItem(id = "SKU-nan-value", value = Double.NaN),
+                PoltioPurchaseItem(id = "SKU-negative-quantity", quantity = -1),
+            ),
+        )
+
+        val body = JSONObject(future.get(3, TimeUnit.SECONDS).body)
+        val contents = body.getJSONArray("contents")
+        assertEquals(1, contents.length())
+        assertEquals("SKU-valid", contents.getJSONObject(0).getString("id"))
     }
 }

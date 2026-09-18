@@ -16,8 +16,11 @@ internal class PoltioNoWidgetException : IOException("No widget configured for t
  * dependency, keeping the SDK's footprint minimal.
  */
 internal class PoltioAPIClient(
-    private val baseURL: String = DEFAULT_BASE_URL,
+    baseURL: String = DEFAULT_BASE_URL,
 ) {
+    /** Trimmed of leading/trailing slashes so endpoint concatenation never doubles up (`.../purchase//sdk/...`). */
+    private val baseURL: String = baseURL.trim('/')
+
     companion object {
         const val PRODUCTION_BASE_URL = "https://sdk.poltio.com"
         const val STAGE_BASE_URL = "https://sdk-stage.poltio.com"

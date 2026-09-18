@@ -349,6 +349,17 @@ object PoltioSDK {
             return
         }
 
+        val validItems = items.filter { item ->
+            val hasValidId = item.id.trim().isNotEmpty()
+            val hasValidValue = item.value == null || (item.value.isFinite() && item.value >= 0)
+            val hasValidQuantity = item.quantity == null || item.quantity > 0
+            val isValid = hasValidId && hasValidValue && hasValidQuantity
+            if (!isValid) {
+                PoltioLogger.warning { "recordPurchase ignoring invalid item '${item.id}' for order '$trimmedOrderId'." }
+            }
+            isValid
+        }
+
         apiClient.recordPurchase(
             clientKey = key,
             deviceId = sdkId,
@@ -357,7 +368,7 @@ object PoltioSDK {
             value = value,
             currency = currency,
             eventTimeSeconds = eventTimeSeconds,
-            items = items,
+            items = validItems,
         )
     }
 
