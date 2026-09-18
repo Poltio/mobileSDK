@@ -1,5 +1,6 @@
 package com.poltio.sdk.ui
 
+import android.app.Activity
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -21,6 +22,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Future
 import kotlin.math.abs
+import kotlin.math.max
 
 /**
  * Native floating box trigger view supporting collapsed and expanded states matching Poltio
@@ -38,6 +40,11 @@ internal class PoltioFloatingBoxTriggerView(
     companion object {
         /** How long the expanded box stays open before auto-collapsing if left untouched. */
         private const val AUTO_COLLAPSE_DELAY_MS = 5000L
+
+        /** Minimum time an expand must have been visible before a host scroll can collapse it —
+         * otherwise the very same scroll gesture that revealed it (via `boxOpenOnScroll`) would
+         * immediately collapse it again a few pixels later. */
+        private const val SCROLL_COLLAPSE_GRACE_PERIOD_MS = 400L
     }
 
     /** Uniform scale factor applied to every dimension below, clamped to a sane range. */
@@ -62,6 +69,12 @@ internal class PoltioFloatingBoxTriggerView(
     private val bannerFallback = FrameLayout(context)
     private var sizeAnimator: android.animation.ValueAnimator? = null
     private var bannerDownload: Future<*>? = null
+    /** Guards `floating-box-open-on-scroll` so it only ever fires once per trigger instance,
+     * matching the web SDK's one-shot scroll listener (`controller.abort()` in `box.ts`). */
+    private var hasAutoOpenedFromScroll = false
+    /** Elapsed-realtime timestamp of the most recent transition into EXPANDED. */
+    private var expandedAtMs: Long = 0L
+
     private val autoOpenRunnable = Runnable {
         if (currentState == TriggerState.COLLAPSED) setState(TriggerState.EXPANDED, animated = true)
     }
@@ -70,6 +83,24 @@ internal class PoltioFloatingBoxTriggerView(
     }
     private val outsideInteractionListener: () -> Unit = {
         if (currentState == TriggerState.EXPANDED) setState(TriggerState.COLLAPSED, animated = true)
+    }
+    /** Assigned in `init` (not as a property initializer) so it can safely reference itself for
+     * self-removal on first fire — see `setupScrollOpenIfNeeded`. */
+    private lateinit var scrollListener: (Activity) -> Unit
+    /** Auto-collapses an expanded box while the host page is actively being scrolled, smoothly
+     * following the existing expand/collapse animation — regardless of what caused the expand
+     * (manual tap, `boxOpenOnTime`, or `boxOpenOnScroll`). Ignores scroll events from any Activity
+     * other than this view's own host — PoltioScrollObserver's listener sets are process-wide, so
+     * without this check, a trigger left attached to a backgrounded/backstacked Activity would
+     * react to scrolling happening in a completely different, now-foreground Activity. */
+    private val scrollCollapseListener: (Activity) -> Unit = { scrolledActivity ->
+        val sinceExpanded = android.os.SystemClock.elapsedRealtime() - expandedAtMs
+        if (context.findActivity() == scrolledActivity &&
+            currentState == TriggerState.EXPANDED &&
+            sinceExpanded > SCROLL_COLLAPSE_GRACE_PERIOD_MS
+        ) {
+            PoltioExecutors.runOnMain { setState(TriggerState.COLLAPSED, animated = true) }
+        }
     }
 
     init {
@@ -81,7 +112,17 @@ internal class PoltioFloatingBoxTriggerView(
         applyState(currentState, animated = false)
         loadBannerImage()
         scheduleAutoOpenIfNeeded()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        // Registered here (not in `init`, which only ever runs once) so a view that gets detached
+        // and later reattached to a window — rather than torn down and recreated — re-establishes
+        // its scroll observation instead of silently losing it forever.
+        setupScrollOpenIfNeeded()
         PoltioHostInteractionBus.addListener(outsideInteractionListener)
+        context.findActivity()?.let { PoltioScrollObserver.installIfNeeded(it) }
+        PoltioScrollObserver.addMovementListener(scrollCollapseListener)
     }
 
     override fun onDetachedFromWindow() {
@@ -91,6 +132,8 @@ internal class PoltioFloatingBoxTriggerView(
         PoltioExecutors.main.removeCallbacks(autoOpenRunnable)
         PoltioExecutors.main.removeCallbacks(autoCollapseRunnable)
         PoltioHostInteractionBus.removeListener(outsideInteractionListener)
+        if (::scrollListener.isInitialized) PoltioScrollObserver.removeListener(scrollListener)
+        PoltioScrollObserver.removeMovementListener(scrollCollapseListener)
     }
 
     private fun setupCollapsedContainer() {
@@ -112,7 +155,7 @@ internal class PoltioFloatingBoxTriggerView(
             text = widget.overlayOptions.floatingBoxTextFirst ?: "Product Finder"
             setTextColor(headerColor)
             textSize = 13f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            typeface = resolvedTypeface(widget.overlayOptions.floatingFontFamily, android.graphics.Typeface.BOLD)
             gravity = Gravity.CENTER
             rotation = -90f
         }
@@ -135,15 +178,27 @@ internal class PoltioFloatingBoxTriggerView(
     }
 
     private fun setupExpandedContainer() {
-        val outerBg = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxBgColorFirst, Color.WHITE)
+        // Matches web's `.poltio-first-text` background — a distinct stripe behind the header
+        // row, not the outer card chrome (see the "Fixed" note on `floating-box-bg-color-first`
+        // in docs/OVERLAY_OPTIONS_VERIFICATION.md).
+        val headerBg = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxBgColorFirst, Color.WHITE)
         val innerBg = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxBgColorSecond, Color.WHITE)
         val headerColor = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxTextColorFirst, Color.BLACK)
         val footerColor = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxTextColorSecond, Color.BLACK)
         val fullImageMode = widget.overlayOptions.boxFullImageMode
+        val expandedCornerRadiusPx = context.dp(PoltioOverlayOptions.cssLength(widget.overlayOptions.floatingMobileTopBorderRadius, 18f)).toFloat()
+        // Header block height: 14dp top padding + a single line of `boxTextFirstFontSize` text
+        // (headerLabel is always `maxLines = 1`). Floors at the original fixed 32dp text-height
+        // assumption so default-size headers are unchanged; scales up for larger custom sizes so
+        // the background stripe/banner/footer layout don't overlap a taller header.
+        val headerTextHeightDp = max(32f, widget.overlayOptions.boxTextFirstFontSize * 1.3f)
+        val headerBlockHeightDp = 14f + headerTextHeightDp
 
+        // Matches web's `.poltio-floating-container.second`, whose own background comes from the
+        // generic `floating-bgcolor`, not `floating-box-bg-color-first` (see `headerBg` above).
         expandedContainer.background = GradientDrawable().apply {
-            setColor(outerBg)
-            cornerRadius = context.dp(18f).toFloat()
+            setColor(widget.overlayOptions.resolvedBgColor)
+            cornerRadius = expandedCornerRadiusPx
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             expandedContainer.outlineProvider = ViewOutlineProvider.BACKGROUND
@@ -154,7 +209,7 @@ internal class PoltioFloatingBoxTriggerView(
         val innerCard = FrameLayout(context).apply {
             background = GradientDrawable().apply {
                 setColor(innerBg)
-                val r = context.dp(18f).toFloat()
+                val r = expandedCornerRadiusPx
                 cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
             }
             clipToOutline = true
@@ -166,7 +221,8 @@ internal class PoltioFloatingBoxTriggerView(
             text = widget.overlayOptions.floatingBoxTextFirst ?: "Product Finder"
             setTextColor(if (fullImageMode) Color.WHITE else headerColor)
             textSize = widget.overlayOptions.boxTextFirstFontSize
-            if (widget.overlayOptions.boxTextFirstFontWeight) setTypeface(typeface, android.graphics.Typeface.BOLD)
+            val style = if (widget.overlayOptions.boxTextFirstFontWeight) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL
+            typeface = resolvedTypeface(widget.overlayOptions.floatingFontFamily, style)
             gravity = widget.overlayOptions.boxTextAlignFirst or Gravity.CENTER_VERTICAL
             maxLines = 1
         }
@@ -179,7 +235,8 @@ internal class PoltioFloatingBoxTriggerView(
             text = widget.overlayOptions.floatingBoxTextSecond ?: "Product Finder"
             setTextColor(if (fullImageMode) Color.WHITE else footerColor)
             textSize = widget.overlayOptions.boxTextSecondFontSize
-            if (widget.overlayOptions.boxTextSecondFontWeight) setTypeface(typeface, android.graphics.Typeface.BOLD)
+            val style = if (widget.overlayOptions.boxTextSecondFontWeight) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL
+            typeface = resolvedTypeface(widget.overlayOptions.floatingFontFamily, style)
             gravity = widget.overlayOptions.boxTextAlignSecond or Gravity.CENTER_VERTICAL
             maxLines = 1
         }
@@ -220,6 +277,8 @@ internal class PoltioFloatingBoxTriggerView(
                 })
             }
         } else {
+            val headerBackgroundView = View(context).apply { setBackgroundColor(headerBg) }
+            innerCard.addView(headerBackgroundView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, context.dp(headerBlockHeightDp), Gravity.TOP))
             innerCard.addView(headerLabel, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP).apply {
                 topMargin = context.dp(14f); leftMargin = context.dp(16f); rightMargin = context.dp(34f)
             })
@@ -227,10 +286,10 @@ internal class PoltioFloatingBoxTriggerView(
                 topMargin = context.dp(14f); rightMargin = context.dp(10f)
             })
             innerCard.addView(bannerContainer, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, context.dp(95f * scale), Gravity.TOP).apply {
-                topMargin = context.dp(14f + 32f)
+                topMargin = context.dp(headerBlockHeightDp)
             })
             innerCard.addView(footerLabel, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP).apply {
-                topMargin = context.dp(14f + 32f + 95f * scale + 14f); leftMargin = context.dp(16f); rightMargin = context.dp(16f)
+                topMargin = context.dp(headerBlockHeightDp + 95f * scale + 14f); leftMargin = context.dp(16f); rightMargin = context.dp(16f)
             })
             closeButton?.let {
                 innerCard.addView(it, FrameLayout.LayoutParams(context.dp(24f), context.dp(24f), Gravity.TOP or Gravity.END).apply {
@@ -327,6 +386,38 @@ internal class PoltioFloatingBoxTriggerView(
         PoltioExecutors.main.postDelayed(autoOpenRunnable, delayMs.toLong())
     }
 
+    /** Mirrors the web SDK's `else if (params.boxOpenOnScroll === 'true')` precedence in
+     * `box.ts` — `boxOpenOnTime` wins if both are configured, since the two are alternative ways
+     * of specifying the same "auto-reveal once" moment. */
+    private fun setupScrollOpenIfNeeded() {
+        // Called from onAttachedToWindow, which can re-run across a detach/reattach cycle (not
+        // just once like init) — without this guard, a trigger that already auto-opened from
+        // scroll in a previous attach would register a brand new listener every time it
+        // reattaches, and that new listener's own guard (hasAutoOpenedFromScroll already true)
+        // would prevent it from ever unregistering itself, leaking one dead listener per cycle.
+        if (hasAutoOpenedFromScroll) return
+        val openOnTime = widget.overlayOptions.boxOpenOnTime
+        if ((openOnTime != null && openOnTime > 0) || !widget.overlayOptions.boxOpenOnScroll) return
+        scrollListener = { scrolledActivity ->
+            // Ignores scroll events from any Activity other than this view's own host — see the
+            // note on `scrollCollapseListener` above — and, separately, unregisters on the very
+            // first scroll-past-threshold notification FROM ITS OWN ACTIVITY regardless of current
+            // state: previously, if the box happened to already be expanded (e.g. a manual tap) at
+            // that moment, the combined guard skipped entirely, leaving this listener registered
+            // (and re-checked on every subsequent scroll) for the rest of the view's lifetime
+            // instead of behaving as the one-shot it's meant to be.
+            if (context.findActivity() == scrolledActivity && !hasAutoOpenedFromScroll) {
+                hasAutoOpenedFromScroll = true
+                PoltioScrollObserver.removeListener(scrollListener)
+                if (currentState == TriggerState.COLLAPSED) {
+                    PoltioExecutors.runOnMain { setState(TriggerState.EXPANDED, animated = true) }
+                }
+            }
+        }
+        context.findActivity()?.let { PoltioScrollObserver.installIfNeeded(it) }
+        PoltioScrollObserver.addListener(scrollListener)
+    }
+
     // MARK: - State handling
 
     fun setState(state: TriggerState, animated: Boolean = true) {
@@ -348,6 +439,7 @@ internal class PoltioFloatingBoxTriggerView(
 
         PoltioExecutors.main.removeCallbacks(autoCollapseRunnable)
         if (isExpanded) {
+            expandedAtMs = android.os.SystemClock.elapsedRealtime()
             PoltioExecutors.main.postDelayed(autoCollapseRunnable, AUTO_COLLAPSE_DELAY_MS)
         }
 

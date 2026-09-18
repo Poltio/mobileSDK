@@ -1,5 +1,6 @@
 package com.poltio.sdk.ui
 
+import android.app.Activity
 import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
@@ -12,6 +13,7 @@ import android.view.animation.OvershootInterpolator
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.poltio.sdk.PoltioExecutors
 import com.poltio.sdk.PoltioWidgetResponse
 import kotlin.math.abs
 import kotlin.math.max
@@ -68,6 +70,27 @@ internal class PoltioFloatingCardTriggerView(
     private val expandedSparkle = PoltioSparkleIconView(context)
 
     private var sizeAnimator: android.animation.ValueAnimator? = null
+    /** Elapsed-realtime timestamp of the most recent transition into EXPANDED. */
+    private var expandedAtMs: Long = 0L
+    /** Auto-collapses an expanded card while the host page is actively being scrolled, smoothly
+     * following the existing expand/collapse animation — regardless of what caused the expand
+     * (manual tap or the scroll-reveal below). Requires a brief grace period after expanding so
+     * the very same scroll gesture that revealed the card doesn't immediately collapse it again.
+     * This is a deliberate mobile-specific divergence from web, which leaves the card expanded
+     * indefinitely once revealed. Ignores scroll events from any Activity other than this view's
+     * own host — see the identical note on the box trigger's equivalent listener. */
+    private val scrollCollapseListener: (Activity) -> Unit = { scrolledActivity ->
+        val sinceExpanded = android.os.SystemClock.elapsedRealtime() - expandedAtMs
+        if (context.findActivity() == scrolledActivity &&
+            currentState == TriggerState.EXPANDED &&
+            sinceExpanded > SCROLL_COLLAPSE_GRACE_PERIOD_MS
+        ) {
+            PoltioExecutors.runOnMain { setState(TriggerState.COLLAPSED, animated = true) }
+        }
+    }
+    /** Kept so `onDetachedFromWindow` can cancel this exact still-pending registration if the
+     * threshold was never crossed — see `PoltioScrollObserver.cancelScrollPast`. */
+    private var scrollRevealListener: ((Activity) -> Unit)? = null
 
     init {
         clipChildren = false
@@ -85,11 +108,61 @@ internal class PoltioFloatingCardTriggerView(
         applyState(currentState, animated = false)
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        // Registered here (not in `init`, which only ever runs once) so a view that gets detached
+        // and later reattached to a window — rather than torn down and recreated — re-establishes
+        // its scroll observation instead of silently losing it forever.
+        setupScrollReveal()
+        context.findActivity()?.let { PoltioScrollObserver.installIfNeeded(it) }
+        PoltioScrollObserver.addMovementListener(scrollCollapseListener)
+    }
+
+    /** Matches web's card (`core.ts`'s `first` -> `second` transition): reveals the collapsed card
+     * once the host content scrolls past `floatingScrollThreshold` (default 300dp, matching web's
+     * own `scrollThreshold ?? 300`). One-shot. Unlike web (which leaves the card expanded
+     * indefinitely once revealed), mobile also auto-collapses it while the host keeps scrolling —
+     * see `scrollCollapseListener` — a deliberate mobile-specific UX choice. */
+    private fun setupScrollReveal() {
+        context.findActivity()?.let { activity ->
+            // `pendingThresholds` in PoltioScrollObserver is a long-lived list on a singleton
+            // object; a callback that strongly captures `this` would keep this view (and its
+            // Activity via `context`) alive forever if the threshold is never crossed. A weak
+            // reference lets the view (and the callback itself, once GC'd) become collectable
+            // normally instead — and `onDetachedFromWindow` below proactively cancels the
+            // registration too, so it doesn't just sit dormant in that list forever either.
+            val viewRef = java.lang.ref.WeakReference(this)
+            val listener: (Activity) -> Unit = { scrolledActivity ->
+                PoltioExecutors.runOnMain {
+                    val view = viewRef.get() ?: return@runOnMain
+                    if (view.context.findActivity() == scrolledActivity && view.currentState == TriggerState.COLLAPSED) {
+                        view.setState(TriggerState.EXPANDED, animated = true)
+                    }
+                }
+            }
+            scrollRevealListener = listener
+            PoltioScrollObserver.onScrollPast(activity, widget.overlayOptions.floatingScrollThreshold.toFloat(), listener)
+        }
+    }
+
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         sizeAnimator?.cancel()
         collapsedIconLoader.dispose()
         expandedIconLoader.dispose()
+        PoltioScrollObserver.removeMovementListener(scrollCollapseListener)
+        scrollRevealListener?.let { PoltioScrollObserver.cancelScrollPast(it) }
+    }
+
+    private companion object {
+        /** Minimum time an expand must have been visible before a host scroll can collapse it. */
+        const val SCROLL_COLLAPSE_GRACE_PERIOD_MS = 400L
+
+        /** Poltio brand blue, used for the branding mark's dot. */
+        val BRAND_DOT_COLOR: Int = Color.rgb(0, 158, 237)
+
+        /** Branding mark wordmark text color. */
+        val BRAND_TEXT_COLOR: Int = Color.GRAY
     }
 
     private fun setupCollapsedContainer() {
@@ -171,7 +244,7 @@ internal class PoltioFloatingCardTriggerView(
             text = widget.overlayOptions.floatingTitle ?: widget.overlayOptions.floatingBoxTextFirst ?: DefaultStrings.TITLE.value
             setTextColor(widget.overlayOptions.resolvedTextColor)
             textSize = 18f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            typeface = resolvedTypeface(widget.overlayOptions.floatingFontFamily, android.graphics.Typeface.BOLD)
             maxLines = 2
         }
         column.addView(titleLabel, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(12f) })
@@ -180,6 +253,7 @@ internal class PoltioFloatingCardTriggerView(
             text = widget.overlayOptions.floatingDesc ?: widget.overlayOptions.floatingBoxTextSecond ?: DefaultStrings.DESCRIPTION.value
             setTextColor(withAlpha(widget.overlayOptions.resolvedTextColor, 0.95f))
             textSize = 13.5f
+            typeface = resolvedTypeface(widget.overlayOptions.floatingFontFamily)
             maxLines = 4
         }
         column.addView(descLabel, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(6f) })
@@ -188,7 +262,7 @@ internal class PoltioFloatingCardTriggerView(
             text = widget.overlayOptions.floatingButtonText ?: DefaultStrings.ACTION_BUTTON.value
             setTextColor(Color.BLACK)
             textSize = 15f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            typeface = resolvedTypeface(widget.overlayOptions.floatingFontFamily, android.graphics.Typeface.BOLD)
             gravity = Gravity.CENTER
             setPadding(context.dp(24f), 0, context.dp(24f), 0)
             background = GradientDrawable().apply {
@@ -203,6 +277,16 @@ internal class PoltioFloatingCardTriggerView(
             actionButton,
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, context.dp(Constants.ACTION_BUTTON_HEIGHT_DP)).apply { topMargin = context.dp(16f) },
         )
+
+        if (widget.overlayOptions.showLogo) {
+            column.addView(
+                buildBrandingRow(context),
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    topMargin = context.dp(10f)
+                    gravity = Gravity.CENTER_HORIZONTAL
+                },
+            )
+        }
 
         expandedContainer.addView(column, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
 
@@ -226,6 +310,28 @@ internal class PoltioFloatingCardTriggerView(
             true
         }
         expandedContainer.setOnClickListener { onOpenWidget() }
+    }
+
+    /** Small "Poltio" wordmark row shown at the bottom of the expanded card, gated by `showLogo`. */
+    private fun buildBrandingRow(context: Context): LinearLayout = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+
+        val dot = View(context).apply {
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(BRAND_DOT_COLOR)
+            }
+        }
+        addView(dot, LinearLayout.LayoutParams(context.dp(6f), context.dp(6f)))
+
+        val brandLabel = TextView(context).apply {
+            text = "Poltio"
+            setTextColor(BRAND_TEXT_COLOR)
+            textSize = 10.5f
+            typeface = resolvedTypeface(widget.overlayOptions.floatingFontFamily, android.graphics.Typeface.BOLD)
+        }
+        addView(brandLabel, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { leftMargin = context.dp(5f) })
     }
 
     private fun withAlpha(@androidx.annotation.ColorInt color: Int, alphaFraction: Float): Int {
@@ -257,6 +363,18 @@ internal class PoltioFloatingCardTriggerView(
         val isExpanded = state == TriggerState.EXPANDED
         val targetWidth = if (isExpanded) expandedTotalWidthPx else collapsedWidthPx
         val targetHeight = if (isExpanded) measuredExpandedHeightPx() else collapsedHeightPx
+
+        if (isExpanded) {
+            expandedAtMs = android.os.SystemClock.elapsedRealtime()
+            // The scroll-reveal registration (if still pending) has nothing left to do once
+            // already expanded — its own callback checks `currentState == COLLAPSED` before
+            // acting — so free it now instead of leaving it to be checked against every further
+            // scroll update until it happens to cross the threshold on its own.
+            scrollRevealListener?.let {
+                PoltioScrollObserver.cancelScrollPast(it)
+                scrollRevealListener = null
+            }
+        }
 
         sizeAnimator?.cancel()
 

@@ -29,6 +29,7 @@
         private let titleLabel = UILabel()
         private let descLabel = UILabel()
         private let actionButton = UIButton(type: .custom)
+        private let brandingRow = PoltioBrandingMarkView()
 
         /// Loads `floatingSvg`/`floatingImg` into the collapsed/expanded icon slots when configured,
         /// falling back to `PoltioSparkleIconView` (created eagerly above) otherwise.
@@ -38,6 +39,17 @@
         // Dimensions constraints
         private var widthConstraint: NSLayoutConstraint!
         private var heightConstraint: NSLayoutConstraint!
+
+        /// Timestamp of the most recent transition into `.expanded`, used to give a brief grace
+        /// window before a real host scroll is allowed to auto-collapse the card — otherwise the
+        /// very same scroll gesture that revealed it would immediately collapse it again a few
+        /// points later.
+        private var expandedAt: Date?
+        /// Minimum time an expand must have been visible before a host scroll can collapse it.
+        private static let scrollCollapseGracePeriod: TimeInterval = 0.4
+        /// Kept so `deinit` can cancel this still-pending registration if the threshold was never
+        /// crossed — see `PoltioScrollObserver.cancelScrollPast`.
+        private var scrollRevealToken: PoltioScrollObserver.ScrollPastToken?
 
         /// UI layout and styling constants for the collapsed/expanded card trigger.
         private enum Constants {
@@ -87,6 +99,9 @@
             static let actionButtonShadowOffset = CGSize(width: 0, height: 2)
             static let actionButtonShadowRadius: CGFloat = 4
 
+            static let brandingTopSpacing: CGFloat = 10
+            static let brandingBottomInset: CGFloat = -14
+
             static let animationDuration: TimeInterval = 0.35
             static let animationDamping: CGFloat = 0.82
             static let animationInitialVelocity: CGFloat = 0.5
@@ -113,11 +128,18 @@
 
             setupView()
             applyState(currentState, animated: false)
+            setupScrollReveal()
+            setupScrollCollapseObserver()
         }
 
         @available(*, unavailable)
         required init?(coder _: NSCoder) {
             fatalError("init(coder:) has not been implemented")
+        }
+
+        deinit {
+            NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didDetectScrollMovementNotification, object: nil)
+            scrollRevealToken.map(PoltioScrollObserver.cancelScrollPast)
         }
 
         private func setupView() {
@@ -271,7 +293,18 @@
             actionButton.addTarget(self, action: #selector(handleActionTap), for: .touchUpInside)
             expandedContainer.addSubview(actionButton)
 
+            // 6. Poltio branding mark (hidden when `floating-show-logo` is explicitly `false`)
+            let showLogo = widget.overlayOptions.showLogo
+            brandingRow.translatesAutoresizingMaskIntoConstraints = false
+            brandingRow.isHidden = !showLogo
+            brandingRow.configure(with: widget.overlayOptions)
+            expandedContainer.addSubview(brandingRow)
+
             addSubview(expandedContainer)
+
+            let bottomAnchorConstraint = showLogo
+                ? expandedContainer.bottomAnchor.constraint(equalTo: brandingRow.bottomAnchor, constant: -Constants.brandingBottomInset)
+                : expandedContainer.bottomAnchor.constraint(equalTo: actionButton.bottomAnchor, constant: -Constants.actionButtonBottomInset)
 
             NSLayoutConstraint.activate([
                 expandedContainer.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Constants.expandedCardMargin),
@@ -302,8 +335,13 @@
                 // Action Button
                 actionButton.leadingAnchor.constraint(equalTo: expandedContainer.leadingAnchor, constant: Constants.contentHorizontalInset),
                 actionButton.topAnchor.constraint(equalTo: descLabel.bottomAnchor, constant: Constants.actionButtonTopSpacing),
-                actionButton.bottomAnchor.constraint(equalTo: expandedContainer.bottomAnchor, constant: Constants.actionButtonBottomInset),
                 actionButton.heightAnchor.constraint(equalToConstant: Constants.actionButtonHeight),
+
+                // Branding mark (only laid out when visible; container bottom otherwise ties to the action button)
+                brandingRow.centerXAnchor.constraint(equalTo: expandedContainer.centerXAnchor),
+                brandingRow.topAnchor.constraint(equalTo: actionButton.bottomAnchor, constant: Constants.brandingTopSpacing),
+
+                bottomAnchorConstraint,
             ])
 
             let loader = PoltioTriggerIconLoader(container: expandedContainer, size: Constants.sparkleSize)
@@ -311,6 +349,49 @@
             loader.load(from: widget.overlayOptions, centeredOn: expandedSparkleIcon) { [weak self] in
                 self?.expandedSparkleIcon.isHidden = true
             }
+        }
+
+        /// Matches web's card (`core.ts`'s `first` → `second` transition): reveals the collapsed
+        /// card once the host content scrolls past `floatingScrollThreshold` (default 300pt,
+        /// matching web's own `scrollThreshold ?? 300`). One-shot, like web's own scroll listener
+        /// (`controller.abort()`). Unlike web (which leaves the card expanded indefinitely once
+        /// revealed), mobile also auto-collapses it while the host keeps scrolling — see
+        /// `setupScrollCollapseObserver()` — a deliberate mobile-specific UX choice.
+        private func setupScrollReveal() {
+            scrollRevealToken = PoltioScrollObserver.onScrollPast(for: self, threshold: CGFloat(widget.overlayOptions.floatingScrollThreshold)) { [weak self] in
+                DispatchQueue.main.async {
+                    guard let self, self.currentState == .collapsed else { return }
+                    self.setState(.expanded, animated: true)
+                }
+            }
+        }
+
+        /// Auto-collapses an expanded card while the host page is actively being scrolled, smoothly
+        /// following the existing expand/collapse animation — regardless of what caused the expand
+        /// (manual tap or the scroll-reveal above).
+        private func setupScrollCollapseObserver() {
+            PoltioScrollObserver.installIfNeeded()
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleScrollMovementDetected),
+                name: PoltioScrollObserver.didDetectScrollMovementNotification,
+                object: nil
+            )
+        }
+
+        @objc private func handleScrollMovementDetected(_ notification: Notification) {
+            // Ignores scroll events from any window scene other than this view's own — see the
+            // type-level doc comment on PoltioScrollObserver.
+            // A `nil` scene on either side must never count as a match — see the identical note
+            // on PoltioScrollObserver.handleScrolled.
+            guard let scrollView = notification.object as? UIScrollView,
+                  let scrolledScene = scrollView.window?.windowScene,
+                  scrolledScene == window?.windowScene
+            else { return }
+            guard currentState == .expanded,
+                  let expandedAt, Date().timeIntervalSince(expandedAt) > Self.scrollCollapseGracePeriod
+            else { return }
+            setState(.collapsed, animated: true)
         }
 
         // MARK: - State Management
@@ -327,6 +408,17 @@
 
         private func applyState(_ state: TriggerState, animated: Bool) {
             let isExpanded = (state == .expanded)
+            if isExpanded {
+                expandedAt = Date()
+                // The scroll-reveal registration (if still pending) has nothing left to do once
+                // already expanded — its own callback checks `currentState == .collapsed` before
+                // acting — so free it now instead of leaving it to be checked against every
+                // further scroll update until it happens to cross the threshold on its own.
+                if let token = scrollRevealToken {
+                    PoltioScrollObserver.cancelScrollPast(token)
+                    scrollRevealToken = nil
+                }
+            }
             let targetWidth = isExpanded ? Constants.expandedTotalWidth : Constants.collapsedWidth
 
             // Measure height needed for expanded state

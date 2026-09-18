@@ -4,6 +4,7 @@ import android.animation.Keyframe
 import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
 import android.animation.ValueAnimator
+import android.app.Activity
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
@@ -63,6 +64,36 @@ internal class PoltioFloatingPillTriggerView(
     private val outsideInteractionListener: () -> Unit = {
         if (currentState == TriggerState.EXPANDED) setState(TriggerState.COLLAPSED, animated = true)
     }
+    /** Guards the unconditional scroll-triggered auto-expand so it only ever fires once per
+     * trigger instance, matching web's one-shot scroll listener. Assigned in `init` (not as a
+     * property initializer) so it can safely reference itself for self-removal on first fire. */
+    private lateinit var scrollOpenListener: (Activity) -> Unit
+    /** Must be a class member, not a local inside `onAttachedToWindow` — that function can re-run
+     * across a detach/reattach cycle, and a local would silently reset to `false` on every
+     * reattach, breaking the "only ever fires once per trigger instance" guarantee above. */
+    private var hasAutoOpenedFromScroll = false
+    /** Elapsed-realtime timestamp of the most recent transition into EXPANDED. */
+    private var expandedAtMs: Long = 0L
+    /** Auto-collapses an expanded pill while the host page is actively being scrolled, smoothly
+     * following the existing expand/collapse animation — regardless of what caused the expand
+     * (manual tap or the scroll-reveal below). Requires a brief grace period after expanding so
+     * the very same scroll gesture that revealed the pill doesn't immediately collapse it again.
+     * Ignores scroll events from any Activity other than this view's own host — see the identical
+     * note on the box trigger's equivalent listener. */
+    private val scrollCollapseListener: (Activity) -> Unit = { scrolledActivity ->
+        val sinceExpanded = android.os.SystemClock.elapsedRealtime() - expandedAtMs
+        if (context.findActivity() == scrolledActivity &&
+            currentState == TriggerState.EXPANDED &&
+            sinceExpanded > SCROLL_COLLAPSE_GRACE_PERIOD_MS
+        ) {
+            PoltioExecutors.runOnMain { setState(TriggerState.COLLAPSED, animated = true) }
+        }
+    }
+
+    companion object {
+        /** Minimum time an expand must have been visible before a host scroll can collapse it. */
+        private const val SCROLL_COLLAPSE_GRACE_PERIOD_MS = 400L
+    }
 
     init {
         clipChildren = false
@@ -74,7 +105,7 @@ internal class PoltioFloatingPillTriggerView(
 
         background = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            cornerRadius = context.dp(28f).toFloat()
+            cornerRadius = context.dp(PoltioOverlayOptions.cssLength(widget.overlayOptions.floatingMobileTopBorderRadius, 28f)).toFloat()
             setColor(widget.overlayOptions.resolvedBgColor)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -96,13 +127,14 @@ internal class PoltioFloatingPillTriggerView(
         firstLabel.text = widget.overlayOptions.textFirst ?: "Try our"
         firstLabel.setTextColor(PoltioOverlayOptions.resolvedColor(widget.overlayOptions.textColorFirst, Color.WHITE))
         firstLabel.textSize = 13f
+        firstLabel.typeface = resolvedTypeface(widget.overlayOptions.floatingFontFamily)
         firstLabel.maxLines = 1
         textStack.addView(firstLabel)
 
         secondLabel.text = (widget.overlayOptions.textSecond ?: "PRODUCT").uppercase()
         secondLabel.setTextColor(PoltioOverlayOptions.resolvedColor(widget.overlayOptions.textColorSecond, accentColor))
         secondLabel.textSize = 15f
-        secondLabel.setTypeface(secondLabel.typeface, android.graphics.Typeface.BOLD)
+        secondLabel.typeface = resolvedTypeface(widget.overlayOptions.floatingFontFamily, android.graphics.Typeface.BOLD)
         secondLabel.letterSpacing = 0.05f
         secondLabel.maxLines = 1
         textStack.addView(secondLabel)
@@ -110,7 +142,7 @@ internal class PoltioFloatingPillTriggerView(
         thirdLabel.text = (widget.overlayOptions.textThird ?: "FINDER").uppercase()
         thirdLabel.setTextColor(PoltioOverlayOptions.resolvedColor(widget.overlayOptions.textColorThird, accentColor))
         thirdLabel.textSize = 15f
-        thirdLabel.setTypeface(thirdLabel.typeface, android.graphics.Typeface.BOLD)
+        thirdLabel.typeface = resolvedTypeface(widget.overlayOptions.floatingFontFamily, android.graphics.Typeface.BOLD)
         thirdLabel.letterSpacing = 0.05f
         thirdLabel.maxLines = 1
         textStack.addView(thirdLabel)
@@ -143,19 +175,53 @@ internal class PoltioFloatingPillTriggerView(
         setupSwipeToCollapse()
 
         iconLoader.load(widget.overlayOptions, sparkleIcon) { sparkleIcon.visibility = View.GONE }
-
-        PoltioHostInteractionBus.addListener(outsideInteractionListener)
     }
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        // Auto-collapse is the default whenever expanded, for any reason — matching web's pill
+        // (the `.expanded` class always gets removed 3s after being added, regardless of how it
+        // was added) and the same "auto-collapse is default" behavior the box trigger now has.
+        // `applyState` schedules it unconditionally now, including for this initial call.
+        // Previously gated behind `isInitialActive`.
         applyState(currentState, animated = false)
-        if (widget.overlayOptions.isInitialActive) scheduleAutoCollapse()
+
+        // Registered here (not in `init`, which only ever runs once) so a view that gets detached
+        // and later reattached to a window — rather than torn down and recreated — re-establishes
+        // its scroll observation instead of silently losing it forever.
+        PoltioHostInteractionBus.addListener(outsideInteractionListener)
+
+        // Matches web's pill (`pill.ts`'s `addPulse`): unconditionally reveals the collapsed pill
+        // once the host content scrolls past a threshold, no config flag required (unlike the box
+        // trigger's `floating-box-open-on-scroll`, which is opt-in). One-shot, like web's own
+        // `controller.abort()`. Guarded so a reattach after it already fired doesn't register a
+        // brand new listener that (its own guard already true) would never unregister itself —
+        // see the identical note in the box trigger's `setupScrollOpenIfNeeded`.
+        if (!hasAutoOpenedFromScroll) {
+            scrollOpenListener = { scrolledActivity ->
+                // Ignores scroll events from any Activity other than this view's own host, and
+                // separately unregisters on the very first scroll-past-threshold notification
+                // FROM ITS OWN ACTIVITY regardless of current state — see the identical notes on
+                // the box trigger's equivalent listener.
+                if (context.findActivity() == scrolledActivity && !hasAutoOpenedFromScroll) {
+                    hasAutoOpenedFromScroll = true
+                    PoltioScrollObserver.removeListener(scrollOpenListener)
+                    if (currentState == TriggerState.COLLAPSED) {
+                        PoltioExecutors.runOnMain { setState(TriggerState.EXPANDED, animated = true) }
+                    }
+                }
+            }
+            context.findActivity()?.let { PoltioScrollObserver.installIfNeeded(it) }
+            PoltioScrollObserver.addListener(scrollOpenListener)
+        }
+        PoltioScrollObserver.addMovementListener(scrollCollapseListener)
     }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         PoltioHostInteractionBus.removeListener(outsideInteractionListener)
+        if (::scrollOpenListener.isInitialized) PoltioScrollObserver.removeListener(scrollOpenListener)
+        PoltioScrollObserver.removeMovementListener(scrollCollapseListener)
         PoltioExecutors.main.removeCallbacks(autoCollapseRunnable)
         widthAnimator?.cancel()
         bounceAnimator?.cancel()
@@ -185,9 +251,10 @@ internal class PoltioFloatingPillTriggerView(
         val iconCenteredX = { width: Int -> (width - context.dp(40f)) / 2f }
 
         if (isExpanded) {
+            expandedAtMs = android.os.SystemClock.elapsedRealtime()
             stopBouncingAnimation()
             stopPulsateAnimation()
-            if (widget.overlayOptions.isInitialActive) scheduleAutoCollapse()
+            scheduleAutoCollapse()
         } else {
             startBouncingAnimation()
             startPulsateAnimation()
@@ -197,11 +264,17 @@ internal class PoltioFloatingPillTriggerView(
         val startWidth = layoutParams?.width?.takeIf { it > 0 } ?: width.takeIf { it > 0 } ?: collapsedSizePx
         val startIconX = iconSlot.translationX
         val startTextAlpha = textStack.alpha
+        val startCloseAlpha = closeButton?.alpha ?: 0f
+
+        // The close (X) button only makes sense once the pill is expanded and its label is
+        // readable — matching web, where the collapsed puck has no close affordance at all.
+        closeButton?.isClickable = isExpanded
 
         if (!animated) {
             setWidthPx(targetWidth)
             iconSlot.translationX = if (isExpanded) iconLeadingX else iconCenteredX(targetWidth)
             textStack.alpha = if (isExpanded) 1f else 0f
+            closeButton?.alpha = if (isExpanded) 1f else 0f
             return
         }
 
@@ -216,6 +289,8 @@ internal class PoltioFloatingPillTriggerView(
                 iconSlot.translationX = startIconX + (targetIconX - startIconX) * fraction
                 val targetTextAlpha = if (isExpanded) 1f else 0f
                 textStack.alpha = startTextAlpha + (targetTextAlpha - startTextAlpha) * fraction
+                val targetCloseAlpha = if (isExpanded) 1f else 0f
+                closeButton?.alpha = startCloseAlpha + (targetCloseAlpha - startCloseAlpha) * fraction
             }
             start()
         }

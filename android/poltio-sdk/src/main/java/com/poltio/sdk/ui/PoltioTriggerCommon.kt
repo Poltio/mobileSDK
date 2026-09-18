@@ -20,6 +20,35 @@ internal fun Context.dp(value: Float): Int = (value * resources.displayMetrics.d
 
 internal fun Context.dp(value: Int): Int = dp(value.toFloat())
 
+/** Unwraps a `ContextWrapper` chain (as `ContextThemeWrapper`, used by many custom-theme and DI
+ * setups, would otherwise defeat a plain `context as? Activity`) to find the underlying Activity,
+ * if any. Trigger views need this to locate the host Activity for scroll observation. */
+internal fun Context.findActivity(): android.app.Activity? {
+    var current = this
+    while (current is android.content.ContextWrapper) {
+        if (current is android.app.Activity) return current
+        current = current.baseContext
+    }
+    return null
+}
+
+/**
+ * Resolves `floatingFontFamily` to a [android.graphics.Typeface], mirroring iOS's
+ * `UIFont(name:)` attempt-then-fall-back-to-system behavior. Android has no API to resolve an
+ * arbitrary custom font family name the host app hasn't registered, but [android.graphics.Typeface.create]
+ * still resolves known system family names (e.g. "sans-serif-medium") and silently falls back to
+ * the default typeface for anything else — never throws, so this stays safe to call unconditionally.
+ */
+internal fun resolvedTypeface(familyName: String?, style: Int = android.graphics.Typeface.NORMAL): android.graphics.Typeface {
+    val trimmed = familyName?.trim()
+    if (trimmed.isNullOrEmpty()) return android.graphics.Typeface.defaultFromStyle(style)
+    return try {
+        android.graphics.Typeface.create(trimmed, style)
+    } catch (error: Exception) {
+        android.graphics.Typeface.defaultFromStyle(style)
+    }
+}
+
 /** Draws the Poltio sparkle question-mark glyph used as the default trigger icon fallback. */
 internal class PoltioSparkleIconView(context: Context) : View(context) {
     private val topSparklePath = Path()

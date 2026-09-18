@@ -321,6 +321,11 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         field("floating-icon-color", "floating-widget-icon-color")
     }
 
+    /// Whether the Poltio branding mark is shown in the expanded card (default true), respecting mobile overrides.
+    public var showLogo: Bool {
+        Self.boolValue(field("floating-show-logo"), default: true)
+    }
+
     // MARK: - pill
 
     /// First pill text segment (e.g. "Try our"), respecting mobile overrides.
@@ -560,13 +565,30 @@ public struct PoltioOverlayOptions: Codable, Equatable {
 
         /// Resolves a custom font family name, falling back to the system font of the same size/weight
         /// if the named font isn't registered in the host app (custom fonts can't be downloaded natively).
+        /// Also recognizes CSS generic family keywords (`serif`, `monospace`, ...) the same way
+        /// Android's `Typeface.create` does natively, since `UIFont(name:)` doesn't understand them.
         public func resolvedFont(size: CGFloat, weight: UIFont.Weight = .regular) -> UIFont {
-            if let family = floatingFontFamily?.trimmingCharacters(in: .whitespacesAndNewlines), !family.isEmpty,
-               let font = UIFont(name: family, size: size)
-            {
+            let base = UIFont.systemFont(ofSize: size, weight: weight)
+            guard let family = floatingFontFamily?.trimmingCharacters(in: .whitespacesAndNewlines), !family.isEmpty else {
+                return base
+            }
+            if let font = UIFont(name: family, size: size) {
                 return font
             }
-            return .systemFont(ofSize: size, weight: weight)
+            if let design = Self.systemDesign(forGenericFamily: family),
+               let descriptor = base.fontDescriptor.withDesign(design)
+            {
+                return UIFont(descriptor: descriptor, size: size)
+            }
+            return base
+        }
+
+        private static func systemDesign(forGenericFamily family: String) -> UIFontDescriptor.SystemDesign? {
+            switch family.lowercased() {
+            case "serif": .serif
+            case "monospace", "ui-monospace": .monospaced
+            default: nil
+            }
         }
 
         /// Parses a CSS length string (`"1.75em"`, `"1rem"`, `"16px"`, `"16"`) into points.
@@ -699,6 +721,7 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         floatingBgColor: String? = nil,
         floatingTextColor: String? = nil,
         floatingIconColor: String? = nil,
+        showLogo: String? = nil,
         floatingDesignType: String? = nil,
         floatingDisplayType: String? = nil,
         floatingPosition: String? = nil,
@@ -771,6 +794,7 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         set("floating-bgcolor", floatingBgColor)
         set("floating-textcolor", floatingTextColor)
         set("floating-icon-color", floatingIconColor)
+        set("floating-show-logo", showLogo)
         set("floating-design-type", floatingDesignType)
         set("floating-display-type", floatingDisplayType)
         set("floating-position", floatingPosition)

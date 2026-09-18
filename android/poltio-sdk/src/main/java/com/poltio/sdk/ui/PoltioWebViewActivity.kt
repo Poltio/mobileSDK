@@ -57,6 +57,7 @@ class PoltioWebViewActivity : Activity() {
         private const val EXTRA_CUSTOM_ID = "com.poltio.sdk.extra.CUSTOM_ID"
         private const val EXTRA_LOC = "com.poltio.sdk.extra.LOC"
         private const val EXTRA_RESULTFIT = "com.poltio.sdk.extra.RESULTFIT"
+        private const val EXTRA_WIDGET_BG_COLOR = "com.poltio.sdk.extra.WIDGET_BG_COLOR"
         private const val BRIDGE_NAME = "PoltioNativeBridge"
 
         /** Fraction of the sheet's height a downward drag must cross before it counts as a dismiss. */
@@ -74,6 +75,7 @@ class PoltioWebViewActivity : Activity() {
                 putExtra(EXTRA_CUSTOM_ID, overlayOptions?.customId)
                 putExtra(EXTRA_LOC, overlayOptions?.loc)
                 putExtra(EXTRA_RESULTFIT, overlayOptions?.resultfit)
+                putExtra(EXTRA_WIDGET_BG_COLOR, overlayOptions?.resolvedWidgetBgColor ?: Color.WHITE)
             }
 
         /** Builds the widget WebView URL with pass-through query parameters. */
@@ -156,9 +158,10 @@ class PoltioWebViewActivity : Activity() {
         }
         root.addView(scrim, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
 
+        val panelBackgroundColor = intent.getIntExtra(EXTRA_WIDGET_BG_COLOR, Color.WHITE)
         sheet = FrameLayout(this).apply {
             background = GradientDrawable().apply {
-                setColor(Color.WHITE)
+                setColor(panelBackgroundColor)
                 val r = dp(20f).toFloat()
                 cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
             }
@@ -204,6 +207,7 @@ class PoltioWebViewActivity : Activity() {
         sheet.addView(dragHandle, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, headerHeightPx, Gravity.TOP))
 
         val webView = WebView(this).apply {
+            setBackgroundColor(panelBackgroundColor)
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false

@@ -1,6 +1,9 @@
 # Poltio Mobile SDK Monorepo Makefile
 
-DEVELOPER_DIR ?= /Applications/Xcode.app/Contents/Developer
+# Defaults to whatever Xcode is currently selected via `xcode-select` rather than a fixed path —
+# a hardcoded `/Applications/Xcode.app` breaks the moment that install is replaced/renamed
+# (e.g. a differently-named Xcode version, or a reinstall at a different path).
+DEVELOPER_DIR ?= $(shell xcode-select -p 2>/dev/null)
 export DEVELOPER_DIR
 
 .PHONY: all help check build build-ios build-android build-rn test test-ios test-android test-rn format format-ios lint lint-ios lint-android lint-pod lint-actions zizmor run-example-ios run-example-android run-example-rn version submit-version publish-cocoapods publish-maven clean
@@ -162,7 +165,12 @@ test-rn:
 # ------------------------------------------------------------------------------
 build-example-ios:
 	@echo "==> Building iOS Example App (.app bundle)..."
-	@DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project example/ios/ExampleApp.xcodeproj -scheme ExampleApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath example/ios/.build/DerivedData build
+	@# `-sdk iphonesimulator` (rather than `-destination platform=iOS Simulator,...`) sidesteps
+	@# device/OS destination resolution entirely — with multiple Xcode/runtime versions installed,
+	@# a specific device+"OS:latest" destination can fail to resolve even when that exact device
+	@# is listed as available (cross-version runtime registration confuses "latest" resolution).
+	@# The actual device is chosen later, at install/launch time, so the build doesn't need one.
+	@xcodebuild -project example/ios/ExampleApp.xcodeproj -scheme ExampleApp -sdk iphonesimulator -derivedDataPath example/ios/.build/DerivedData build
 
 open-example-ios:
 	@echo "==> Opening iOS Example App in Xcode..."
@@ -171,10 +179,16 @@ open-example-ios:
 run-example-ios: build-example-ios
 	@echo "==> Booting iOS Simulator & Installing Example App..."
 	@open -a Simulator
-	@DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun simctl boot "iPhone 17 Pro" 2>/dev/null || true
-	@DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun simctl install booted example/ios/.build/DerivedData/Build/Products/Debug-iphonesimulator/ExampleApp.app
+	@xcrun simctl boot "iPhone 17 Pro" 2>/dev/null || true
+	@xcrun simctl install booted example/ios/.build/DerivedData/Build/Products/Debug-iphonesimulator/ExampleApp.app
 	@echo "==> Launching ExampleApp on iOS Simulator screen..."
-	@DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun simctl launch booted com.poltio.ExampleApp
+	@# `simctl launch` does NOT read the scheme's <EnvironmentVariables> the way Xcode's own Cmd+R
+	@# does — that's an Xcode-only mechanism — so POLTIO_CLIENT_KEY (set in the gitignored shared
+	@# scheme, exactly like example/android/local.properties) has to be re-extracted and passed
+	@# through explicitly via simctl's SIMCTL_CHILD_ env var convention. Without this, the app
+	@# silently falls back to the non-functional placeholder key and every widget fetch 401s.
+	@KEY=$$(xmllint --xpath 'string(//EnvironmentVariable[@key="POLTIO_CLIENT_KEY"]/@value)' example/ios/ExampleApp.xcodeproj/xcshareddata/xcschemes/ExampleApp.xcscheme 2>/dev/null); \
+	SIMCTL_CHILD_POLTIO_CLIENT_KEY="$$KEY" xcrun simctl launch booted com.poltio.ExampleApp
 
 build-example-android:
 	@echo "==> Building Android Example App (APK)..."

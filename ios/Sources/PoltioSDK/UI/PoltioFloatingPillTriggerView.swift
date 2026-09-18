@@ -139,6 +139,16 @@
         private var autoCollapseTimer: Timer?
         private var scrollObserver: NSObjectProtocol?
         private var imageDownloadTask: URLSessionDataTask?
+        /// Guards the unconditional scroll-triggered auto-expand so it only ever fires once per
+        /// trigger instance, matching web's one-shot scroll listener.
+        private var hasAutoOpenedFromScroll = false
+        /// Timestamp of the most recent transition into `.expanded`, used to give a brief grace
+        /// window before a real host scroll is allowed to auto-collapse the pill — otherwise the
+        /// very same scroll gesture that revealed it would immediately collapse it again a few
+        /// points later.
+        private var expandedAt: Date?
+        /// Minimum time an expand must have been visible before a host scroll can collapse it.
+        private static let scrollCollapseGracePeriod: TimeInterval = 0.4
 
         /// Bounce Animation Key
         private static let bounceAnimationKey = "poltio.pill.bounce"
@@ -159,13 +169,15 @@
             super.init(frame: .zero)
 
             setupView()
+            // Auto-collapse is the default whenever expanded, for any reason — matching web's pill
+            // (`.expanded` class always gets removed 3s after being added, regardless of how it
+            // was added) and the same "auto-collapse is default" behavior the box trigger now has.
+            // `applyState` schedules it unconditionally now, including for this initial call.
             applyState(currentState, animated: false)
             loadImageIfNeeded()
             setupScrollObserver()
-
-            if widget.overlayOptions.isInitialActive {
-                scheduleAutoCollapse()
-            }
+            setupScrollOpenObserver()
+            setupScrollCollapseObserver()
         }
 
         @available(*, unavailable)
@@ -183,6 +195,8 @@
             if let observer = scrollObserver {
                 NotificationCenter.default.removeObserver(observer)
             }
+            NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didScrollPastThresholdNotification, object: nil)
+            NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didDetectScrollMovementNotification, object: nil)
             imageDownloadTask?.cancel()
         }
 
@@ -229,7 +243,7 @@
             // Main outer container with shadow
             cardContainer.translatesAutoresizingMaskIntoConstraints = false
             cardContainer.backgroundColor = widget.overlayOptions.resolvedBgColor
-            cardContainer.layer.cornerRadius = 28
+            cardContainer.layer.cornerRadius = PoltioOverlayOptions.cssLength(widget.overlayOptions.floatingMobileTopBorderRadius, default: 28)
             cardContainer.layer.shadowColor = UIColor.black.cgColor
             cardContainer.layer.shadowOpacity = 0.22
             cardContainer.layer.shadowOffset = CGSize(width: 0, height: 4)
@@ -393,13 +407,12 @@
             widthConstraint.constant = isExpanded ? expandedWidth : 56
 
             if isExpanded {
+                expandedAt = Date()
                 iconCenterConstraint.isActive = false
                 iconLeadingConstraint.isActive = true
                 stopBouncingAnimation()
                 stopPulsateAnimation()
-                if widget.overlayOptions.isInitialActive {
-                    scheduleAutoCollapse()
-                }
+                scheduleAutoCollapse()
             } else {
                 iconLeadingConstraint.isActive = false
                 iconCenterConstraint.isActive = true
@@ -407,8 +420,13 @@
                 startPulsateAnimation()
             }
 
+            // The close (X) button only makes sense once the pill is expanded and its label is
+            // readable — matching web, where the collapsed puck has no close affordance at all.
+            closeButton.isUserInteractionEnabled = isExpanded
+
             let animations = {
                 self.textStackView.alpha = isExpanded ? 1.0 : 0.0
+                self.closeButton.alpha = isExpanded ? 1.0 : 0.0
                 self.superview?.layoutIfNeeded()
             }
 
@@ -506,10 +524,9 @@
         private func scheduleAutoCollapse() {
             autoCollapseTimer?.invalidate()
             autoCollapseTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self] _ in
-                DispatchQueue.main.async {
-                    guard let self, self.currentState == .expanded else { return }
-                    self.setState(.collapsed, animated: true)
-                }
+                // Already on the main run loop — this is always scheduled from a main-thread call.
+                guard let self, currentState == .expanded else { return }
+                setState(.collapsed, animated: true)
             }
         }
 
@@ -525,6 +542,67 @@
                 guard let self, currentState == .expanded else { return }
                 setState(.collapsed, animated: true)
             }
+        }
+
+        /// Matches web's pill (`pill.ts`'s `addPulse`): unconditionally reveals the collapsed pill
+        /// once the host content scrolls past a threshold, no config flag required (unlike the box
+        /// trigger's `floating-box-open-on-scroll`, which is opt-in). One-shot, like web's own
+        /// `controller.abort()`.
+        private func setupScrollOpenObserver() {
+            PoltioScrollObserver.installIfNeeded()
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleScrollOpenDetected),
+                name: PoltioScrollObserver.didScrollPastThresholdNotification,
+                object: nil
+            )
+        }
+
+        @objc private func handleScrollOpenDetected(_ notification: Notification) {
+            // Ignores scroll events from any window scene other than this view's own, and
+            // unregisters on the very first scroll-past-threshold notification from its own scene
+            // regardless of current state — see the identical notes on the box trigger's
+            // equivalent handler.
+            // A `nil` scene on either side must never count as a match — see the identical note
+            // on PoltioScrollObserver.handleScrolled.
+            guard let scrollView = notification.object as? UIScrollView,
+                  let scrolledScene = scrollView.window?.windowScene,
+                  scrolledScene == window?.windowScene
+            else { return }
+            guard !hasAutoOpenedFromScroll else { return }
+            hasAutoOpenedFromScroll = true
+            NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didScrollPastThresholdNotification, object: nil)
+            if currentState == .collapsed {
+                setState(.expanded, animated: true)
+            }
+        }
+
+        /// Auto-collapses an expanded pill while the host page is actively being scrolled, smoothly
+        /// following the existing expand/collapse animation — regardless of what caused the expand
+        /// (manual tap or the scroll-reveal above).
+        private func setupScrollCollapseObserver() {
+            PoltioScrollObserver.installIfNeeded()
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleScrollMovementDetected),
+                name: PoltioScrollObserver.didDetectScrollMovementNotification,
+                object: nil
+            )
+        }
+
+        @objc private func handleScrollMovementDetected(_ notification: Notification) {
+            // Ignores scroll events from any window scene other than this view's own — see the
+            // type-level doc comment on PoltioScrollObserver.
+            // A `nil` scene on either side must never count as a match — see the identical note
+            // on PoltioScrollObserver.handleScrolled.
+            guard let scrollView = notification.object as? UIScrollView,
+                  let scrolledScene = scrollView.window?.windowScene,
+                  scrolledScene == window?.windowScene
+            else { return }
+            guard currentState == .expanded,
+                  let expandedAt, Date().timeIntervalSince(expandedAt) > Self.scrollCollapseGracePeriod
+            else { return }
+            setState(.collapsed, animated: true)
         }
 
         // MARK: - Image Loader
@@ -568,9 +646,6 @@
                         height: 100%;
                         max-width: 32px;
                         max-height: 32px;
-                    }
-                    svg[style*="color"] {
-                        color: #FFFFFF !important;
                     }
                     </style>
                     </head>

@@ -30,6 +30,10 @@
         private let collapsedLabel = UILabel()
 
         // Subviews for expanded state
+        /// Colored with `boxBgColorFirst`, matching web's `.poltio-first-text` background — a
+        /// distinct stripe behind the header row, not the outer card chrome (see the "Fixed" note
+        /// on `floating-box-bg-color-first` in `docs/OVERLAY_OPTIONS_VERIFICATION.md`).
+        private let headerBackgroundView = UIView()
         private let headerLabel = UILabel()
         private let collapseButton = UIButton(type: .system)
         private let closeButton = UIButton(type: .custom)
@@ -43,6 +47,19 @@
         private var imageDownloadTask: URLSessionDataTask?
         /// One-shot timer for `boxOpenOnTime` auto-expand.
         private var autoOpenTimer: Timer?
+        /// Re-armed every time the box expands, for any reason — collapses it back down if left
+        /// untouched, matching Android's existing (already-shipped) behavior.
+        private var autoCollapseTimer: Timer?
+        /// Guards `floating-box-open-on-scroll` so it only ever fires once per trigger instance,
+        /// matching the web SDK's one-shot scroll listener (`controller.abort()` in `box.ts`).
+        private var hasAutoOpenedFromScroll = false
+        /// Timestamp of the most recent transition into `.expanded`, used to give a brief grace
+        /// window before a real host scroll is allowed to auto-collapse the box — otherwise the
+        /// very same scroll gesture that revealed it (via `boxOpenOnScroll`) would immediately
+        /// collapse it again a few points later.
+        private var expandedAt: Date?
+        /// Minimum time an expand must have been visible before a host scroll can collapse it.
+        private static let scrollCollapseGracePeriod: TimeInterval = 0.4
 
         // Self Dimensions
         private var widthConstraint: NSLayoutConstraint!
@@ -82,6 +99,8 @@
             applyState(currentState, animated: false)
             loadBannerImage()
             scheduleAutoOpenIfNeeded()
+            setupScrollOpenIfNeeded()
+            setupScrollCollapseObserver()
         }
 
         @available(*, unavailable)
@@ -91,9 +110,13 @@
 
         deinit {
             imageDownloadTask?.cancel()
-            let timer = autoOpenTimer
+            NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didScrollPastThresholdNotification, object: nil)
+            NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didDetectScrollMovementNotification, object: nil)
+            let autoOpen = autoOpenTimer
+            let autoCollapse = autoCollapseTimer
             DispatchQueue.main.async {
-                timer?.invalidate()
+                autoOpen?.invalidate()
+                autoCollapse?.invalidate()
             }
         }
 
@@ -168,15 +191,18 @@
         // MARK: - Expanded View Setup
 
         private func setupExpandedContainer() {
-            let outerBg = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxBgColorFirst, fallback: .white)
+            let headerBg = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxBgColorFirst, fallback: .white)
             let innerBg = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxBgColorSecond, fallback: .white)
             let headerColor = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxTextColorFirst, fallback: .black)
             let footerColor = PoltioOverlayOptions.resolvedColor(widget.overlayOptions.boxTextColorSecond, fallback: .black)
             let fullImageMode = widget.overlayOptions.boxFullImageMode
+            let expandedCornerRadius = PoltioOverlayOptions.cssLength(widget.overlayOptions.floatingMobileTopBorderRadius, default: 18)
 
             expandedContainer.translatesAutoresizingMaskIntoConstraints = false
-            expandedContainer.backgroundColor = outerBg
-            expandedContainer.layer.cornerRadius = 18
+            // Matches web's `.poltio-floating-container.second`, whose own background comes from
+            // the generic `floating-bgcolor`, not `floating-box-bg-color-first` (see `headerBg` below).
+            expandedContainer.backgroundColor = widget.overlayOptions.resolvedBgColor
+            expandedContainer.layer.cornerRadius = expandedCornerRadius
             expandedContainer.layer.shadowColor = UIColor.black.cgColor
             expandedContainer.layer.shadowOpacity = 0.20
             expandedContainer.layer.shadowOffset = CGSize(width: -3, height: 4)
@@ -186,10 +212,17 @@
 
             innerCard.translatesAutoresizingMaskIntoConstraints = false
             innerCard.backgroundColor = innerBg
-            innerCard.layer.cornerRadius = 18
+            innerCard.layer.cornerRadius = expandedCornerRadius
             innerCard.layer.maskedCorners = [.layerMinXMinYCorner, .layerMinXMaxYCorner]
             innerCard.clipsToBounds = true
             expandedContainer.addSubview(innerCard)
+
+            // 1. Header background stripe (standard layout only — full-image mode has no header row)
+            if !fullImageMode {
+                headerBackgroundView.translatesAutoresizingMaskIntoConstraints = false
+                headerBackgroundView.backgroundColor = headerBg
+                innerCard.addSubview(headerBackgroundView)
+            }
 
             // 1. Top Header Label
             headerLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -281,6 +314,11 @@
         /// Default layout: header text, a fixed-height banner strip, footer text.
         private func setupStandardBannerLayout() {
             NSLayoutConstraint.activate([
+                headerBackgroundView.topAnchor.constraint(equalTo: innerCard.topAnchor),
+                headerBackgroundView.leadingAnchor.constraint(equalTo: innerCard.leadingAnchor),
+                headerBackgroundView.trailingAnchor.constraint(equalTo: innerCard.trailingAnchor),
+                headerBackgroundView.bottomAnchor.constraint(equalTo: bannerImageView.topAnchor),
+
                 headerLabel.topAnchor.constraint(equalTo: innerCard.topAnchor, constant: 14),
                 headerLabel.leadingAnchor.constraint(equalTo: innerCard.leadingAnchor, constant: 16),
                 headerLabel.trailingAnchor.constraint(equalTo: collapseButton.leadingAnchor, constant: -4),
@@ -394,17 +432,81 @@
             imageDownloadTask?.resume()
         }
 
-        // MARK: - Auto Open (`boxOpenOnTime`)
+        // MARK: - Auto Open (`boxOpenOnTime` / `boxOpenOnScroll`)
 
         private func scheduleAutoOpenIfNeeded() {
             guard let delayMs = widget.overlayOptions.boxOpenOnTime, delayMs > 0 else { return }
             autoOpenTimer?.invalidate()
             autoOpenTimer = Timer.scheduledTimer(withTimeInterval: delayMs / 1000.0, repeats: false) { [weak self] _ in
-                DispatchQueue.main.async {
-                    guard let self, self.currentState == .collapsed else { return }
-                    self.setState(.expanded, animated: true)
-                }
+                // Already on the main run loop — `scheduleAutoOpenIfNeeded` only ever runs there,
+                // so this timer is scheduled on it too; no need to hop back via `DispatchQueue`.
+                guard let self, currentState == .collapsed else { return }
+                setState(.expanded, animated: true)
             }
+        }
+
+        /// Mirrors the web SDK's `else if (params.boxOpenOnScroll === 'true')` precedence in
+        /// `box.ts` — `boxOpenOnTime` wins if both are configured, since the two are alternative
+        /// ways of specifying the same "auto-reveal once" moment.
+        private func setupScrollOpenIfNeeded() {
+            guard widget.overlayOptions.boxOpenOnTime == nil, widget.overlayOptions.boxOpenOnScroll else { return }
+            PoltioScrollObserver.installIfNeeded()
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleScrollDetected),
+                name: PoltioScrollObserver.didScrollPastThresholdNotification,
+                object: nil
+            )
+        }
+
+        @objc private func handleScrollDetected(_ notification: Notification) {
+            // Ignores scroll events from any window scene other than this view's own — see the
+            // type-level doc comment on PoltioScrollObserver — and, separately, unregisters on the
+            // very first scroll-past-threshold notification FROM ITS OWN SCENE regardless of
+            // current state: previously, if the box happened to already be expanded (e.g. a manual
+            // tap) at that moment, the combined guard skipped entirely, leaving this observer
+            // registered (and re-checked on every subsequent scroll) for the rest of the view's
+            // lifetime instead of behaving as the one-shot it's meant to be.
+            // A `nil` scene on either side must never count as a match — see the identical note
+            // on PoltioScrollObserver.handleScrolled.
+            guard let scrollView = notification.object as? UIScrollView,
+                  let scrolledScene = scrollView.window?.windowScene,
+                  scrolledScene == window?.windowScene
+            else { return }
+            guard !hasAutoOpenedFromScroll else { return }
+            hasAutoOpenedFromScroll = true
+            NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didScrollPastThresholdNotification, object: nil)
+            if currentState == .collapsed {
+                setState(.expanded, animated: true)
+            }
+        }
+
+        /// Auto-collapses an expanded box while the host page is actively being scrolled, smoothly
+        /// following the existing expand/collapse animation — regardless of what caused the expand
+        /// (manual tap, `boxOpenOnTime`, or `boxOpenOnScroll`).
+        private func setupScrollCollapseObserver() {
+            PoltioScrollObserver.installIfNeeded()
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleScrollMovementDetected),
+                name: PoltioScrollObserver.didDetectScrollMovementNotification,
+                object: nil
+            )
+        }
+
+        @objc private func handleScrollMovementDetected(_ notification: Notification) {
+            // Ignores scroll events from any window scene other than this view's own — see the
+            // type-level doc comment on PoltioScrollObserver.
+            // A `nil` scene on either side must never count as a match — see the identical note
+            // on PoltioScrollObserver.handleScrolled.
+            guard let scrollView = notification.object as? UIScrollView,
+                  let scrolledScene = scrollView.window?.windowScene,
+                  scrolledScene == window?.windowScene
+            else { return }
+            guard currentState == .expanded,
+                  let expandedAt, Date().timeIntervalSince(expandedAt) > Self.scrollCollapseGracePeriod
+            else { return }
+            setState(.collapsed, animated: true)
         }
 
         // MARK: - State Handling & Actions
@@ -421,6 +523,22 @@
 
         private func applyState(_ state: TriggerState, animated: Bool) {
             let isExpanded = (state == .expanded)
+
+            // Re-armed on every expand, for any reason (manual tap, `boxOpenOnTime`,
+            // `boxOpenOnScroll`) — auto-collapsing an untouched expanded box back down is the
+            // default behavior here, matching Android (which has always done this) rather than
+            // something gated behind a specific trigger.
+            autoCollapseTimer?.invalidate()
+            autoCollapseTimer = nil
+            if isExpanded {
+                expandedAt = Date()
+                autoCollapseTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { [weak self] _ in
+                    // Already on the main run loop — see the identical note in
+                    // `scheduleAutoOpenIfNeeded` above.
+                    guard let self, currentState == .expanded else { return }
+                    setState(.collapsed, animated: true)
+                }
+            }
 
             widthConstraint.constant = isExpanded ? expandedWidth : collapsedWidth
             heightConstraint.constant = isExpanded ? expandedHeight : collapsedHeight
@@ -466,6 +584,8 @@
         }
 
         @objc private func handleExpandedTap() {
+            autoCollapseTimer?.invalidate()
+            autoCollapseTimer = nil
             onOpenWidget()
         }
 
