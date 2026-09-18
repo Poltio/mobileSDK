@@ -43,4 +43,36 @@ class PoltioWidgetResponseTest {
 
         assertNull(decoded.widgetId)
     }
+
+    @Test
+    fun `fromJson decodes a numeric string id instead of throwing`() {
+        val json = JSONObject(
+            """
+            {
+              "id": "8801",
+              "public_id": "test-uuid-string-id",
+              "overlay_options": { "trigger-type": "box" }
+            }
+            """.trimIndent(),
+        )
+
+        assertEquals(8801, PoltioWidgetResponse.fromJson(json).widgetId)
+    }
+
+    @Test
+    fun `fromJson leaves widgetId null instead of throwing when id has an unexpected type`() {
+        val json = JSONObject(
+            """
+            {
+              "id": true,
+              "public_id": "test-uuid-bad-id",
+              "overlay_options": { "trigger-type": "box" }
+            }
+            """.trimIndent(),
+        )
+
+        // Must not throw JSONException — a malformed id should degrade to a missing widgetId,
+        // not take down decoding of the whole widget response.
+        assertNull(PoltioWidgetResponse.fromJson(json).widgetId)
+    }
 }

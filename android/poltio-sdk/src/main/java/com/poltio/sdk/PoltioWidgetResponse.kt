@@ -40,7 +40,15 @@ private fun JSONObject.optStringOrNull(key: String): String? =
     if (has(key) && !isNull(key)) getString(key) else null
 
 private fun JSONObject.optIntOrNull(key: String): Int? =
-    if (has(key) && !isNull(key)) getInt(key) else null
+    if (has(key) && !isNull(key)) {
+        when (val value = opt(key)) {
+            is Number -> value.toInt()
+            is String -> value.toIntOrNull()
+            else -> null
+        }
+    } else {
+        null
+    }
 
 /**
  * Overlay presentation and style options for native triggers.
