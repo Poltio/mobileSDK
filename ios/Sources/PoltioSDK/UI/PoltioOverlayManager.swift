@@ -92,10 +92,22 @@
 
                 if currentPublicId == widget.publicId,
                    currentTriggerType == targetTriggerType,
-                   activeTriggerView != nil,
-                   activeTriggerView?.superview != nil
+                   let activeView = activeTriggerView,
+                   activeView.superview != nil,
+                   let activeScene = activeView.window?.windowScene,
+                   activeScene === findActiveWindowScene()
                 {
-                    // Already active and visible for this exact widget and trigger type
+                    // Already active and visible for this exact widget and trigger type on the
+                    // currently active window scene. Still a fresh impression from the caller's
+                    // perspective (e.g. the same widget is configured for two screens), so report
+                    // it even though nothing is rebuilt.
+                    //
+                    // The scene check matters on iPadOS multi-window setups: without it, switching
+                    // focus to a different scene of the same app while this widget's trigger is
+                    // still attached (but inactive) in the first scene would match on
+                    // publicId/triggerType alone and return here, leaving the trigger invisible in
+                    // the scene actually on screen instead of reattaching to it.
+                    PoltioSDK.shared.reportCtaView(widget: widget)
                     return
                 }
 
@@ -132,6 +144,11 @@
                 }
 
                 showTriggerRetryCount = 0
+
+                // The trigger is now guaranteed to actually render below — report the impression
+                // once here rather than at the top of the method, so retries while waiting for a
+                // `UIWindowScene` (which re-enter this same method) don't double-report.
+                PoltioSDK.shared.reportCtaView(widget: widget)
 
                 let window: PoltioPassthroughWindow
                 if #available(iOS 13.0, *) {

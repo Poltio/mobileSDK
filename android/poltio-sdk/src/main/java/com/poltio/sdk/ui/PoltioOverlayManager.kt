@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import com.poltio.sdk.PoltioExecutors
 import com.poltio.sdk.PoltioLogger
+import com.poltio.sdk.PoltioSDK
 import com.poltio.sdk.PoltioTriggerDismissalStore
 import com.poltio.sdk.PoltioWidgetResponse
 import java.lang.ref.WeakReference
@@ -115,9 +116,20 @@ internal object PoltioOverlayManager {
         if (currentPublicId == widget.publicId &&
             currentTriggerType == targetTriggerType &&
             activeTriggerView != null &&
-            activeTriggerView?.parent != null
+            activeTriggerView?.parent != null &&
+            activeTriggerView?.context === activity
         ) {
-            // Already active and visible for this exact widget and trigger type.
+            // Already active and visible for this exact widget and trigger type on the current
+            // Activity. Still a fresh impression from the caller's perspective (e.g. the same
+            // widget is configured for two screens), so report it even though nothing is rebuilt.
+            //
+            // The `context === activity` check matters because the trigger is attached to the
+            // current Activity's content view: without it, navigating to a *new* Activity (which
+            // only backstacks the old one rather than destroying it) that resolves the same widget
+            // would match on publicId/triggerType alone and return here — leaving the trigger
+            // attached to the paused, off-screen Activity underneath instead of the one actually
+            // visible now.
+            PoltioSDK.reportCtaView(widget)
             return
         }
 
@@ -148,6 +160,11 @@ internal object PoltioOverlayManager {
         showTriggerRetryCount = 0
 
         val contentRoot = activity.findViewById<ViewGroup>(android.R.id.content) ?: return
+
+        // The trigger is now guaranteed to actually render below — report the impression once
+        // here rather than at the top of the method, so retries while waiting for a resumed
+        // Activity (which re-enter this same method) don't double-report.
+        PoltioSDK.reportCtaView(widget)
         val container = FrameLayout(activity).apply {
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
             clipChildren = false

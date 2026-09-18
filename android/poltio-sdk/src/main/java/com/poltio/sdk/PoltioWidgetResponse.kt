@@ -14,6 +14,12 @@ data class PoltioWidgetResponse(
     val startsAt: String? = null,
     /** Optional scheduling end timestamp. */
     val endsAt: String? = null,
+    /**
+     * Numeric widget identifier, reported as `widget_id` when the trigger is displayed
+     * (`/sdk/mobile/v1/cta-view`). Distinct from [publicId]: under A/B testing, arms can share a
+     * `publicId`, so the backend needs this to attribute an impression to a specific arm.
+     */
+    val widgetId: Int? = null,
 ) {
     companion object {
         fun fromJson(json: JSONObject): PoltioWidgetResponse {
@@ -24,6 +30,7 @@ data class PoltioWidgetResponse(
                 overlayOptions = PoltioOverlayOptions.fromJson(overlayOptionsJson),
                 startsAt = json.optStringOrNull("starts_at"),
                 endsAt = json.optStringOrNull("ends_at"),
+                widgetId = json.optIntOrNull("id"),
             )
         }
     }
@@ -31,6 +38,17 @@ data class PoltioWidgetResponse(
 
 private fun JSONObject.optStringOrNull(key: String): String? =
     if (has(key) && !isNull(key)) getString(key) else null
+
+private fun JSONObject.optIntOrNull(key: String): Int? =
+    if (has(key) && !isNull(key)) {
+        when (val value = opt(key)) {
+            is Number -> value.toInt()
+            is String -> value.toIntOrNull()
+            else -> null
+        }
+    } else {
+        null
+    }
 
 /**
  * Overlay presentation and style options for native triggers.

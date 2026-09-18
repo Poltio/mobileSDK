@@ -25,6 +25,7 @@ internal class PoltioAPIClient(
         const val DEFAULT_BASE_URL = STAGE_BASE_URL
 
         const val WIDGET_ENDPOINT_PATH = "/sdk/mobile/v1/widget"
+        const val CTA_VIEW_ENDPOINT_PATH = "/sdk/mobile/v1/cta-view"
     }
 
     /** Exposes the resolved base URL. Used exclusively for unit testing. */
@@ -127,6 +128,54 @@ internal class PoltioAPIClient(
             override fun cancel() {
                 cancelled.set(true)
                 future.cancel(true)
+            }
+        }
+    }
+
+    /**
+     * Reports a widget impression ("cta-view") for a trigger that was actually displayed on
+     * screen. Fire-and-forget on a background thread: never blocks the caller, and suppresses/logs
+     * all errors instead of surfacing them — an impression report must never affect the trigger
+     * it's reporting on. The backend responds 204 and forwards the impression asynchronously, so
+     * there is nothing actionable to hand back to the caller either way.
+     *
+     * @param widgetId Optional numeric widget/arm identifier (omitted when not under A/B testing).
+     */
+    fun reportCtaView(
+        clientKey: String,
+        deviceId: String,
+        publicId: String,
+        widgetId: Int?,
+    ) {
+        PoltioExecutors.io.submit {
+            var connection: HttpURLConnection? = null
+            try {
+                val endpoint = URL("$baseURL$CTA_VIEW_ENDPOINT_PATH")
+                connection = (endpoint.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 15_000
+                    readTimeout = 15_000
+                    doOutput = true
+                    setRequestProperty("X-Poltio-SDK-Key", clientKey)
+                    setRequestProperty("Content-Type", "application/json")
+                }
+
+                val payload = JSONObject().apply {
+                    put("public_id", publicId)
+                    put("device_id", deviceId)
+                    if (widgetId != null) put("widget_id", widgetId)
+                }.toString()
+
+                connection.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
+
+                val statusCode = connection.responseCode
+                if (statusCode !in 200..299) {
+                    PoltioLogger.debug { "cta-view report for widget '$publicId' returned status $statusCode." }
+                }
+            } catch (error: Exception) {
+                PoltioLogger.debug { "cta-view report failed for widget '$publicId': ${error.message}" }
+            } finally {
+                connection?.disconnect()
             }
         }
     }
