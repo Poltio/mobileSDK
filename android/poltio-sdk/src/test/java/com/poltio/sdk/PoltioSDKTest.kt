@@ -136,6 +136,13 @@ class PoltioSDKTest {
     }
 
     @Test
+    fun `recordPurchase rejects a non-finite value`() {
+        PoltioSDK.configure(application, clientKey = "poltio_test_pk_123")
+        PoltioSDK.recordPurchase(orderId = "ORD-nan", value = Double.NaN, url = "myapp://checkout/complete")
+        PoltioSDK.recordPurchase(orderId = "ORD-infinite", value = Double.POSITIVE_INFINITY, url = "myapp://checkout/complete")
+    }
+
+    @Test
     fun `recordPurchase rejects a url without scheme and host`() {
         PoltioSDK.configure(application, clientKey = "poltio_test_pk_123")
         PoltioSDK.recordPurchase(orderId = "ORD-bad-url", value = 10.0, url = "checkout/complete")

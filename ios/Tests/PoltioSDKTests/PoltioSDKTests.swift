@@ -527,6 +527,18 @@ final class PoltioSDKTests: XCTestCase {
         sdk.recordPurchase(orderId: "ORD-negative", value: -5.0, url: "myapp://checkout/complete")
     }
 
+    func testSDKRecordPurchaseRejectsNonFiniteValue() {
+        MockURLProtocol.requestHandler = { _ in
+            XCTFail("No network request should be made for a non-finite value")
+            throw URLError(.badURL)
+        }
+
+        let sdk = PoltioSDK.shared
+        PoltioSDK.configure(clientKey: "pk_test_purchase_guard")
+        sdk.recordPurchase(orderId: "ORD-nan", value: .nan, url: "myapp://checkout/complete")
+        sdk.recordPurchase(orderId: "ORD-infinite", value: .infinity, url: "myapp://checkout/complete")
+    }
+
     func testSDKRecordPurchaseRejectsInvalidURL() {
         MockURLProtocol.requestHandler = { _ in
             XCTFail("No network request should be made for an invalid url")

@@ -410,8 +410,8 @@ public final class PoltioSDK {
             PoltioLogger.error("recordPurchase requires a non-empty orderId.")
             return
         }
-        guard value > 0 else {
-            PoltioLogger.error("recordPurchase requires a positive value (received \(value)).")
+        guard value > 0, value.isFinite else {
+            PoltioLogger.error("recordPurchase requires a positive, finite value (received \(value)).")
             return
         }
         let trimmedURL = url.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -243,7 +243,7 @@ final class PoltioAPIClient {
             payload["currency"] = currency
         }
         if let eventTime {
-            payload["event_time"] = Int(eventTime.timeIntervalSince1970)
+            payload["event_time"] = Int64(eventTime.timeIntervalSince1970)
         }
         if !items.isEmpty {
             payload["contents"] = items.map { item -> [String: Any] in

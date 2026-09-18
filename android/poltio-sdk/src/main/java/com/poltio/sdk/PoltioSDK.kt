@@ -333,8 +333,8 @@ object PoltioSDK {
             PoltioLogger.error { "recordPurchase requires a non-empty orderId." }
             return
         }
-        if (value <= 0) {
-            PoltioLogger.error { "recordPurchase requires a positive value (received $value)." }
+        if (value <= 0 || !value.isFinite()) {
+            PoltioLogger.error { "recordPurchase requires a positive, finite value (received $value)." }
             return
         }
         val trimmedURL = url.trim()
