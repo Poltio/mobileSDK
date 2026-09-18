@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import com.poltio.sdk.PoltioExecutors
 import com.poltio.sdk.PoltioLogger
+import com.poltio.sdk.PoltioSDK
 import com.poltio.sdk.PoltioTriggerDismissalStore
 import com.poltio.sdk.PoltioWidgetResponse
 import java.lang.ref.WeakReference
@@ -117,7 +118,10 @@ internal object PoltioOverlayManager {
             activeTriggerView != null &&
             activeTriggerView?.parent != null
         ) {
-            // Already active and visible for this exact widget and trigger type.
+            // Already active and visible for this exact widget and trigger type. Still a fresh
+            // impression from the caller's perspective (e.g. the same widget is configured for two
+            // screens), so report it even though nothing is rebuilt.
+            PoltioSDK.reportCtaView(widget)
             return
         }
 
@@ -146,6 +150,11 @@ internal object PoltioOverlayManager {
         }
 
         showTriggerRetryCount = 0
+
+        // The trigger is now guaranteed to actually render below — report the impression once
+        // here rather than at the top of the method, so retries while waiting for a resumed
+        // Activity (which re-enter this same method) don't double-report.
+        PoltioSDK.reportCtaView(widget)
 
         val contentRoot = activity.findViewById<ViewGroup>(android.R.id.content) ?: return
         val container = FrameLayout(activity).apply {

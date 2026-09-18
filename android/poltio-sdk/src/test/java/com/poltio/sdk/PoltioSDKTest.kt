@@ -92,4 +92,26 @@ class PoltioSDKTest {
         assertEquals(60.0, PoltioSDK.cacheTTL, 0.0)
         assertEquals(10, PoltioSDK.cacheLimit)
     }
+
+    @Test
+    fun `reportCtaView before configure is a no-op and does not throw`() {
+        val widget = PoltioWidgetResponse(
+            publicId = "widget-before-configure",
+            overlayOptions = PoltioOverlayOptions.fromJson(org.json.JSONObject()),
+        )
+        PoltioSDK.reportCtaView(widget)
+        // No assertion beyond "did not throw" — the SDK must never crash the host app, and must
+        // never attempt a network call before it has a client key to authenticate with.
+    }
+
+    @Test
+    fun `reportCtaView after configure does not throw`() {
+        PoltioSDK.configure(application, clientKey = "poltio_test_pk_123")
+        val widget = PoltioWidgetResponse(
+            publicId = "widget-after-configure",
+            overlayOptions = PoltioOverlayOptions.fromJson(org.json.JSONObject()),
+            widgetId = 42,
+        )
+        PoltioSDK.reportCtaView(widget)
+    }
 }

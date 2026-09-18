@@ -95,7 +95,10 @@
                    activeTriggerView != nil,
                    activeTriggerView?.superview != nil
                 {
-                    // Already active and visible for this exact widget and trigger type
+                    // Already active and visible for this exact widget and trigger type. Still a
+                    // fresh impression from the caller's perspective (e.g. the same widget is
+                    // configured for two screens), so report it even though nothing is rebuilt.
+                    PoltioSDK.shared.reportCtaView(widget: widget)
                     return
                 }
 
@@ -132,6 +135,11 @@
                 }
 
                 showTriggerRetryCount = 0
+
+                // The trigger is now guaranteed to actually render below — report the impression
+                // once here rather than at the top of the method, so retries while waiting for a
+                // `UIWindowScene` (which re-enter this same method) don't double-report.
+                PoltioSDK.shared.reportCtaView(widget: widget)
 
                 let window: PoltioPassthroughWindow
                 if #available(iOS 13.0, *) {

@@ -301,6 +301,24 @@ object PoltioSDK {
         }
     }
 
+    // MARK: - Internal Impression Reporting
+
+    /**
+     * Reports a widget impression ("cta-view") to the backend. Called exactly once by
+     * [PoltioOverlayManager] each time a floating trigger is actually displayed on screen
+     * (including when the widget came from cache) — never on resolution alone, and never for a
+     * trigger that's suppressed (`floating-hide-button`, within its close-remember window, or an
+     * unsupported type). Fire-and-forget and safe to call before configuration; never blocks or throws.
+     */
+    internal fun reportCtaView(widget: PoltioWidgetResponse) {
+        val key = clientKey
+        if (!isInitialized || key == null) {
+            PoltioLogger.debug { "reportCtaView skipped — SDK not configured." }
+            return
+        }
+        apiClient.reportCtaView(key, sdkId, widget.publicId, widget.widgetId)
+    }
+
     // MARK: - Public Widget Event Bridge
 
     /**

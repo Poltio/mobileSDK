@@ -284,9 +284,134 @@ final class PoltioSDKTests: XCTestCase {
         waitForExpectations(timeout: 2.0)
     }
 
+    func testReportCtaViewRequestFormattingWithWidgetId() {
+        let mockSession = createMockSession()
+        let client = PoltioAPIClient(session: mockSession)
+        let requestExpectation = expectation(description: "cta-view network request fired")
+
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-Poltio-SDK-Key"), "pk_test_cta")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+            XCTAssertEqual(request.url?.absoluteString, "https://sdk-stage.poltio.com/sdk/mobile/v1/cta-view")
+
+            if let bodyData = request.httpBody ?? request.httpBodyStreamData(),
+               let json = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+            {
+                XCTAssertEqual(json["public_id"] as? String, "widget_public_123")
+                XCTAssertEqual(json["device_id"] as? String, "device_cta_123")
+                XCTAssertEqual(json["widget_id"] as? Int, 8802)
+            } else {
+                XCTFail("Failed to parse request body")
+            }
+
+            let response = HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!
+            requestExpectation.fulfill()
+            return (response, nil)
+        }
+
+        client.reportCtaView(
+            clientKey: "pk_test_cta",
+            deviceId: "device_cta_123",
+            publicId: "widget_public_123",
+            widgetId: 8802
+        )
+
+        waitForExpectations(timeout: 2.0)
+    }
+
+    func testReportCtaViewOmitsWidgetIdWhenNil() {
+        let mockSession = createMockSession()
+        let client = PoltioAPIClient(session: mockSession)
+        let requestExpectation = expectation(description: "cta-view network request fired")
+
+        MockURLProtocol.requestHandler = { request in
+            if let bodyData = request.httpBody ?? request.httpBodyStreamData(),
+               let json = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+            {
+                XCTAssertEqual(json["public_id"] as? String, "widget_public_no_id")
+                XCTAssertEqual(json["device_id"] as? String, "device_cta_456")
+                XCTAssertNil(json["widget_id"], "widget_id should be omitted, not sent as null")
+            } else {
+                XCTFail("Failed to parse request body")
+            }
+
+            let response = HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!
+            requestExpectation.fulfill()
+            return (response, nil)
+        }
+
+        client.reportCtaView(
+            clientKey: "pk_test_cta",
+            deviceId: "device_cta_456",
+            publicId: "widget_public_no_id",
+            widgetId: nil
+        )
+
+        waitForExpectations(timeout: 2.0)
+    }
+
+    func testReportCtaViewDoesNotCrashOnServerError() {
+        let mockSession = createMockSession()
+        let client = PoltioAPIClient(session: mockSession)
+        let requestExpectation = expectation(description: "cta-view network request fired despite server error")
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!
+            requestExpectation.fulfill()
+            return (response, nil)
+        }
+
+        client.reportCtaView(clientKey: "pk_test_cta", deviceId: "device_cta_err", publicId: "widget_err", widgetId: nil)
+
+        waitForExpectations(timeout: 2.0)
+    }
+
+    func testSDKReportCtaViewSkipsNetworkCallWhenNotConfigured() {
+        let sdk = PoltioSDK()
+        MockURLProtocol.requestHandler = { _ in
+            XCTFail("No network request should be made before configuration")
+            throw URLError(.badURL)
+        }
+
+        let widget = PoltioWidgetResponse(publicId: "unconfigured_widget", overlayOptions: PoltioOverlayOptions())
+        sdk.reportCtaView(widget: widget)
+        // No expectation to wait on: assert synchronously that nothing was scheduled.
+    }
+
+    func testSDKReportCtaViewSendsWidgetIdWhenConfigured() {
+        let mockSession = createMockSession()
+        let sdk = PoltioSDK.shared
+        PoltioSDK.configure(clientKey: "pk_test_sdk_cta")
+        sdk.apiClient = PoltioAPIClient(session: mockSession)
+
+        let requestExpectation = expectation(description: "cta-view request reflects configured sdk_id/clientKey")
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-Poltio-SDK-Key"), "pk_test_sdk_cta")
+            if let bodyData = request.httpBody ?? request.httpBodyStreamData(),
+               let json = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+            {
+                XCTAssertEqual(json["public_id"] as? String, "sdk_widget_1")
+                XCTAssertEqual(json["device_id"] as? String, sdk.sdkId)
+                XCTAssertEqual(json["widget_id"] as? Int, 42)
+            } else {
+                XCTFail("Failed to parse request body")
+            }
+            let response = HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!
+            requestExpectation.fulfill()
+            return (response, nil)
+        }
+
+        let widget = PoltioWidgetResponse(publicId: "sdk_widget_1", overlayOptions: PoltioOverlayOptions(), widgetId: 42)
+        sdk.reportCtaView(widget: widget)
+
+        waitForExpectations(timeout: 2.0)
+    }
+
     func testPoltioWidgetResponseModelDecoding() throws {
         let json = """
         {
+          "id": 8801,
           "public_id": "test-uuid-12345",
           "overlay_options": {
             "trigger-type": "box",
@@ -304,6 +429,7 @@ final class PoltioSDKTests: XCTestCase {
         let decoded = try JSONDecoder().decode(PoltioWidgetResponse.self, from: data)
 
         XCTAssertEqual(decoded.publicId, "test-uuid-12345")
+        XCTAssertEqual(decoded.widgetId, 8801)
         XCTAssertEqual(decoded.overlayOptions.triggerType, "box")
         XCTAssertTrue(decoded.overlayOptions.isBoxTrigger)
         XCTAssertEqual(decoded.overlayOptions.floatingBoxTextFirst, "Mobile Quiz", "Mobile override should take precedence")
@@ -311,6 +437,19 @@ final class PoltioSDKTests: XCTestCase {
         XCTAssertEqual(decoded.overlayOptions.floatingImg, "https://cdn.poltio.com/banner.png")
         XCTAssertTrue(decoded.overlayOptions.isInitialActive)
         XCTAssertEqual(decoded.overlayOptions.resolvedImageUrl()?.absoluteString, "https://cdn.poltio.com/banner.png")
+    }
+
+    func testPoltioWidgetResponseModelDecodingWithoutIdLeavesWidgetIdNil() throws {
+        let json = """
+        {
+          "public_id": "test-uuid-no-id",
+          "overlay_options": {
+            "trigger-type": "pill"
+          }
+        }
+        """
+        let decoded = try JSONDecoder().decode(PoltioWidgetResponse.self, from: Data(json.utf8))
+        XCTAssertNil(decoded.widgetId)
     }
 
     func testResolvedImageUrlForRelativeAndAbsolutePaths() {
@@ -1325,6 +1464,32 @@ final class PoltioSDKTests: XCTestCase {
             let exp = expectation(description: "Wait for overlay manager async dispatch")
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 overlayManager.hideTrigger()
+                exp.fulfill()
+            }
+            wait(for: [exp], timeout: 1.0)
+        }
+
+        func testOverlayManagerDoesNotReportCtaViewForSuppressedTrigger() {
+            let mockSession = createMockSession()
+            let sdk = PoltioSDK.shared
+            PoltioSDK.configure(clientKey: "pk_test_overlay_cta_suppressed")
+            sdk.apiClient = PoltioAPIClient(session: mockSession)
+
+            MockURLProtocol.requestHandler = { _ in
+                XCTFail("cta-view must not be reported for a trigger suppressed via floating-hide-button")
+                throw URLError(.badURL)
+            }
+
+            let widget = PoltioWidgetResponse(
+                publicId: "suppressed_widget",
+                overlayOptions: PoltioOverlayOptions(triggerType: "pill", hideButton: "true")
+            )
+
+            let overlayManager = PoltioOverlayManager.shared
+            overlayManager.showTrigger(widget: widget, puid: nil)
+
+            let exp = expectation(description: "Wait for overlay manager async dispatch")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 exp.fulfill()
             }
             wait(for: [exp], timeout: 1.0)

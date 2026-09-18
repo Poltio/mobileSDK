@@ -15,6 +15,9 @@ final class PoltioAPIClient {
     /// Endpoint path for resolving mobile widgets.
     static let widgetEndpointPath = "/sdk/mobile/v1/widget"
 
+    /// Endpoint path for reporting a widget impression ("cta-view").
+    static let ctaViewEndpointPath = "/sdk/mobile/v1/cta-view"
+
     private let baseURL: String
     private let session: URLSession
 
@@ -134,5 +137,60 @@ final class PoltioAPIClient {
 
         task.resume()
         return task
+    }
+
+    /// Reports a widget impression ("cta-view") for a trigger that was actually displayed on screen.
+    /// Fire-and-forget: performs the request on a background queue, never blocks the caller, and
+    /// suppresses/logs all errors instead of surfacing them — an impression report must never affect
+    /// the trigger it's reporting on. The backend responds 204 and forwards the impression
+    /// asynchronously, so there is nothing actionable to hand back to the caller either way.
+    /// - Parameters:
+    ///   - clientKey: Publishable client key configured for the SDK session.
+    ///   - deviceId: Unique SDK device identifier (`sdk_id`).
+    ///   - publicId: Public identifier of the widget that was displayed.
+    ///   - widgetId: Optional numeric widget/arm identifier (omitted when not under A/B testing).
+    func reportCtaView(
+        clientKey: String,
+        deviceId: String,
+        publicId: String,
+        widgetId: Int?
+    ) {
+        let endpointString = "\(baseURL)\(PoltioAPIClient.ctaViewEndpointPath)"
+        guard let requestURL = URL(string: endpointString) else {
+            PoltioLogger.debug("Invalid cta-view endpoint URL '\(endpointString)'.")
+            return
+        }
+
+        var request = URLRequest(url: requestURL)
+        request.httpMethod = "POST"
+        request.setValue(clientKey, forHTTPHeaderField: "X-Poltio-SDK-Key")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        var payload: [String: Any] = [
+            "public_id": publicId,
+            "device_id": deviceId,
+        ]
+        if let widgetId {
+            payload["widget_id"] = widgetId
+        }
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
+        } catch {
+            PoltioLogger.debug("Failed to serialize cta-view payload: \(error.localizedDescription)")
+            return
+        }
+
+        session.dataTask(with: request) { _, response, error in
+            if let error {
+                if (error as? URLError)?.code != .cancelled, (error as NSError).code != NSURLErrorCancelled {
+                    PoltioLogger.debug("cta-view report failed for widget '\(publicId)': \(error.localizedDescription)")
+                }
+                return
+            }
+            if let httpResponse = response as? HTTPURLResponse, !(200 ... 299).contains(httpResponse.statusCode) {
+                PoltioLogger.debug("cta-view report for widget '\(publicId)' returned status \(httpResponse.statusCode).")
+            }
+        }.resume()
     }
 }

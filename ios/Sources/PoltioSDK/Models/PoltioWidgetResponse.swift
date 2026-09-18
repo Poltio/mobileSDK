@@ -8,6 +8,11 @@ public struct PoltioWidgetResponse: Codable, Equatable {
     /// The unique public identifier of the Poltio widget.
     public let publicId: String
 
+    /// Numeric widget identifier, reported as `widget_id` when the trigger is displayed
+    /// (`/sdk/mobile/v1/cta-view`). Distinct from `publicId`: under A/B testing, arms can share a
+    /// `publicId`, so the backend needs this to attribute an impression to a specific arm.
+    public let widgetId: Int?
+
     /// The overlay and trigger configuration options.
     public let overlayOptions: PoltioOverlayOptions
 
@@ -19,6 +24,7 @@ public struct PoltioWidgetResponse: Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case publicId = "public_id"
+        case widgetId = "id"
         case overlayOptions = "overlay_options"
         case startsAt = "starts_at"
         case endsAt = "ends_at"
@@ -28,12 +34,14 @@ public struct PoltioWidgetResponse: Codable, Equatable {
         publicId: String,
         overlayOptions: PoltioOverlayOptions,
         startsAt: String? = nil,
-        endsAt: String? = nil
+        endsAt: String? = nil,
+        widgetId: Int? = nil
     ) {
         self.publicId = publicId
         self.overlayOptions = overlayOptions
         self.startsAt = startsAt
         self.endsAt = endsAt
+        self.widgetId = widgetId
     }
 }
 
