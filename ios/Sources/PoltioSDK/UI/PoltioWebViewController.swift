@@ -20,6 +20,7 @@
     /// In-app browser modal presenting the interactive Poltio widget WebView.
     public final class PoltioWebViewController: UIViewController, WKNavigationDelegate, WKScriptMessageHandler, UIAdaptivePresentationControllerDelegate {
         private let publicId: String
+        private let widgetId: Int?
         private let puid: String?
         private let overlayOptions: PoltioOverlayOptions?
         private var webView: WKWebView!
@@ -35,8 +36,9 @@
         public var onWidgetEvent: ((_ event: String, _ data: [String: Any]?) -> Void)?
         private var isDismissHandled = false
 
-        public init(publicId: String, puid: String? = nil, overlayOptions: PoltioOverlayOptions? = nil, onDismiss: (() -> Void)? = nil) {
+        public init(publicId: String, widgetId: Int? = nil, puid: String? = nil, overlayOptions: PoltioOverlayOptions? = nil, onDismiss: (() -> Void)? = nil) {
             self.publicId = publicId
+            self.widgetId = widgetId
             self.puid = puid
             self.overlayOptions = overlayOptions
             self.onDismiss = onDismiss
@@ -137,6 +139,7 @@
         /// names verbatim as query keys, matching the existing `puid`/`disclaimer` convention.
         public static func buildWidgetURL(
             publicId: String,
+            widgetId: Int? = nil,
             puid: String?,
             disclaimer: String = "off",
             content: String? = nil,
@@ -156,6 +159,9 @@
                 queryItems.append(URLQueryItem(name: name, value: trimmed))
             }
 
+            if let widgetId {
+                queryItems.append(URLQueryItem(name: "widget_id", value: String(widgetId)))
+            }
             appendIfPresent("puid", puid)
             appendIfPresent("content", content)
             appendIfPresent("custom_id", customId)
@@ -171,6 +177,7 @@
             let resolvedDisclaimer = overlayOptions?.disclaimer?.trimmingCharacters(in: .whitespacesAndNewlines)
             let url = PoltioWebViewController.buildWidgetURL(
                 publicId: publicId,
+                widgetId: widgetId,
                 puid: puid,
                 disclaimer: (resolvedDisclaimer?.isEmpty == false ? resolvedDisclaimer : nil) ?? "off",
                 content: overlayOptions?.content,

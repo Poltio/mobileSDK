@@ -980,6 +980,14 @@ final class PoltioSDKTests: XCTestCase {
             XCTAssertEqual(urlWithPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?puid=usr_123&disclaimer=off")
         }
 
+        func testBuildWidgetURLWithWidgetId() {
+            let urlWithWidgetId = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", widgetId: 42, puid: nil)
+            XCTAssertEqual(urlWithWidgetId?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?widget_id=42&disclaimer=off")
+
+            let urlWithoutWidgetId = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", widgetId: nil, puid: nil)
+            XCTAssertEqual(urlWithoutWidgetId?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off")
+        }
+
         func testBuildWidgetURLWithPassThroughParams() {
             let url = PoltioWebViewController.buildWidgetURL(
                 publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3",

@@ -170,7 +170,7 @@
                 window.rootViewController = rootVC
 
                 let onOpenWidget: () -> Void = { [weak self] in
-                    self?.presentWidgetWebView(publicId: widget.publicId, puid: puid, overlayOptions: widget.overlayOptions)
+                    self?.presentWidgetWebView(publicId: widget.publicId, widgetId: widget.widgetId, puid: puid, overlayOptions: widget.overlayOptions)
                 }
                 let onDismissForever: (Double) -> Void = { [weak self] hours in
                     PoltioTriggerDismissalStore.recordDismissal(publicId: widget.publicId, hours: hours)
@@ -319,7 +319,7 @@
         }
 
         /// Presents the interactive widget modal WebView on top of the active view controller.
-        public func presentWidgetWebView(publicId: String, puid: String?, overlayOptions: PoltioOverlayOptions? = nil) {
+        public func presentWidgetWebView(publicId: String, widgetId: Int? = nil, puid: String?, overlayOptions: PoltioOverlayOptions? = nil) {
             DispatchQueue.main.async { [weak self] in
                 guard let self, let topVC = findTopmostHostViewController() else {
                     PoltioLogger.error("Unable to find topmost view controller to present widget.")
@@ -329,7 +329,7 @@
                 // Hide the floating trigger window while the webview is presented
                 overlayWindow?.isHidden = true
 
-                let webVC = PoltioWebViewController(publicId: publicId, puid: puid, overlayOptions: overlayOptions)
+                let webVC = PoltioWebViewController(publicId: publicId, widgetId: widgetId, puid: puid, overlayOptions: overlayOptions)
                 webVC.onWidgetEvent = { event, data in
                     PoltioSDK.onWidgetEvent?(event, data)
                 }

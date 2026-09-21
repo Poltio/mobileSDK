@@ -182,7 +182,7 @@ internal object PoltioOverlayManager {
         val zIndexElevationDp = (options.floatingZindex / 100.0 * 8.0).coerceIn(0.0, 24.0)
         androidx.core.view.ViewCompat.setElevation(container, activity.dp(zIndexElevationDp.toFloat()).toFloat())
 
-        val onOpenWidget: () -> Unit = { presentWidgetWebView(widget.publicId, puid, widget.overlayOptions) }
+        val onOpenWidget: () -> Unit = { presentWidgetWebView(widget.publicId, widget.widgetId, puid, widget.overlayOptions) }
         val onDismissForever: (Double) -> Unit = { hours ->
             resumedActivity?.get()?.let { PoltioTriggerDismissalStore.recordDismissal(it, widget.publicId, hours) }
             hideTriggerOnMain()
@@ -332,7 +332,7 @@ internal object PoltioOverlayManager {
     }
 
     /** Presents the interactive widget modal WebView on top of the resumed Activity. */
-    fun presentWidgetWebView(publicId: String, puid: String?, overlayOptions: com.poltio.sdk.PoltioOverlayOptions? = null) {
+    fun presentWidgetWebView(publicId: String, widgetId: Int? = null, puid: String?, overlayOptions: com.poltio.sdk.PoltioOverlayOptions? = null) {
         PoltioExecutors.runOnMain {
             val activity = resumedActivity?.get()
             if (activity == null) {
@@ -343,7 +343,7 @@ internal object PoltioOverlayManager {
             // Hide (but don't tear down) the floating trigger while the webview is presented.
             overlayContainer?.visibility = android.view.View.INVISIBLE
 
-            val intent = PoltioWebViewActivity.newIntent(activity, publicId, puid, overlayOptions)
+            val intent = PoltioWebViewActivity.newIntent(activity, publicId, widgetId, puid, overlayOptions)
             activity.startActivity(intent)
             // PoltioWebViewActivity drives its own slide-up/scrim-fade entrance animation against
             // its translucent theme; suppress the system's default activity-enter transition so
