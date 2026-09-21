@@ -51,6 +51,7 @@ import org.json.JSONObject
 class PoltioWebViewActivity : Activity() {
     companion object {
         private const val EXTRA_PUBLIC_ID = "com.poltio.sdk.extra.PUBLIC_ID"
+        private const val EXTRA_WIDGET_ID = "com.poltio.sdk.extra.WIDGET_ID"
         private const val EXTRA_PUID = "com.poltio.sdk.extra.PUID"
         private const val EXTRA_DISCLAIMER = "com.poltio.sdk.extra.DISCLAIMER"
         private const val EXTRA_CONTENT = "com.poltio.sdk.extra.CONTENT"
@@ -66,9 +67,10 @@ class PoltioWebViewActivity : Activity() {
         /** Fling velocity (px/s) that dismisses the sheet regardless of how far it's been dragged. */
         private const val DISMISS_FLING_VELOCITY = 1200f
 
-        fun newIntent(context: Context, publicId: String, puid: String?, overlayOptions: PoltioOverlayOptions?): Intent =
+        fun newIntent(context: Context, publicId: String, widgetId: Int?, puid: String?, overlayOptions: PoltioOverlayOptions?): Intent =
             Intent(context, PoltioWebViewActivity::class.java).apply {
                 putExtra(EXTRA_PUBLIC_ID, publicId)
+                putExtra(EXTRA_WIDGET_ID, widgetId?.toString())
                 putExtra(EXTRA_PUID, puid)
                 putExtra(EXTRA_DISCLAIMER, overlayOptions?.disclaimer?.trim()?.takeIf { it.isNotEmpty() } ?: "off")
                 putExtra(EXTRA_CONTENT, overlayOptions?.content)
@@ -81,6 +83,7 @@ class PoltioWebViewActivity : Activity() {
         /** Builds the widget WebView URL with pass-through query parameters. */
         fun buildWidgetUrl(
             publicId: String,
+            widgetId: Int? = null,
             puid: String?,
             disclaimer: String = "off",
             content: String? = null,
@@ -98,6 +101,7 @@ class PoltioWebViewActivity : Activity() {
                 if (!trimmed.isNullOrEmpty()) builder.appendQueryParameter(name, trimmed)
             }
 
+            if (widgetId != null) builder.appendQueryParameter("widget_id", widgetId.toString())
             appendIfPresent("puid", puid)
             appendIfPresent("content", content)
             appendIfPresent("custom_id", customId)
@@ -342,6 +346,7 @@ class PoltioWebViewActivity : Activity() {
 
         val url = buildWidgetUrl(
             publicId = publicId,
+            widgetId = intent.getStringExtra(EXTRA_WIDGET_ID)?.toIntOrNull(),
             puid = intent.getStringExtra(EXTRA_PUID),
             disclaimer = intent.getStringExtra(EXTRA_DISCLAIMER) ?: "off",
             content = intent.getStringExtra(EXTRA_CONTENT),
