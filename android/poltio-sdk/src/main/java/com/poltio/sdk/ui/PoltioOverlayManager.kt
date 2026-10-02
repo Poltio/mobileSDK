@@ -84,7 +84,11 @@ internal object PoltioOverlayManager {
      */
     fun seedCurrentActivity(activity: Activity) {
         PoltioExecutors.runOnMain {
-            if (resumedActivity?.get() == null && !activity.isFinishing && !activity.isDestroyed) {
+            // A weakly-held Activity that's already finishing/destroyed (but not yet collected) is
+            // as good as none — replace it rather than letting it block the new one.
+            val current = resumedActivity?.get()
+            val currentIsStale = current == null || current.isFinishing || current.isDestroyed
+            if (currentIsStale && !activity.isFinishing && !activity.isDestroyed) {
                 resumedActivity = WeakReference(activity)
             }
         }

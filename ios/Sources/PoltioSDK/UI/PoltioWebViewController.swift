@@ -245,7 +245,8 @@
             if url.absoluteString.lowercased() == "about:blank" {
                 return true
             }
-            guard scheme == "https" || scheme == "http", let host = url.host?.lowercased() else {
+            // HTTPS only: a cleartext page could be modified in transit to reach the bridge.
+            guard scheme == "https", let host = url.host?.lowercased() else {
                 return false
             }
             // Only accept plain DNS hostnames, so a parser differential between Foundation and

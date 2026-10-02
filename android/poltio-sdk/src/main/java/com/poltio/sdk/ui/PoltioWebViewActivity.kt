@@ -95,7 +95,8 @@ internal class PoltioWebViewActivity : Activity() {
             // `data:`/`blob:` documents are deliberately not trusted: they'd run arbitrary script
             // with access to the bridge. Only the inert `about:blank` is let through.
             if (url.toString().lowercase() == "about:blank") return true
-            if (scheme != "https" && scheme != "http") return false
+            // HTTPS only: a cleartext page could be modified in transit to reach the bridge.
+            if (scheme != "https") return false
             val host = url.host?.lowercase() ?: return false
             // Only accept plain DNS hostnames. `android.net.Uri` and Chromium don't parse authorities
             // identically (e.g. Chromium treats `\` as `/`), so a host like `evil.com\.poltio.com`

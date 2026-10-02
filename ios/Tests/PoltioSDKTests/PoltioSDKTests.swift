@@ -1033,6 +1033,7 @@ final class PoltioSDKTests: XCTestCase {
                 "data:text/html,<script>alert(1)</script>",
                 "blob:https://www.poltio.com/1234",
                 "about:srcdoc",
+                "http://www.poltio.com/widget/abc",
             ]
             for raw in untrusted {
                 XCTAssertFalse(try PoltioWebViewController.isTrustedWidgetURL(XCTUnwrap(URL(string: raw))), raw)
