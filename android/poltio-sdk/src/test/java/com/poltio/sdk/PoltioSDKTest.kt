@@ -42,6 +42,18 @@ class PoltioSDKTest {
     }
 
     @Test
+    fun `puid identified before configure is persisted once configured`() {
+        PoltioSDK.identify("early-user")
+        PoltioSDK.configure(application, clientKey = "poltio_test_pk_123")
+
+        PoltioExecutors.serial.submit {}.get(3, TimeUnit.SECONDS)
+        val persisted = application.getSharedPreferences("com.poltio.sdk.prefs", android.content.Context.MODE_PRIVATE)
+            .getString("puid", null)
+        assertEquals("early-user", persisted)
+        assertEquals("early-user", PoltioSDK.puid)
+    }
+
+    @Test
     fun `track view sends the widget request from a background thread`() {
         val (port, future) = startCapturingServer(responseStatusLine = "HTTP/1.1 404 Not Found")
         PoltioSDK.configure(application, clientKey = "poltio_test_pk_123")

@@ -40,6 +40,9 @@ class PoltioWebViewActivityTest {
             "myapp://checkout",
             "tel:+15555555555",
             "mailto:hello@example.com",
+            "data:text/html,<script>alert(1)</script>",
+            "blob:https://www.poltio.com/1234",
+            "about:srcdoc",
         ).forEach { assertFalse(it, PoltioWebViewActivity.isTrustedWidgetUrl(Uri.parse(it))) }
     }
 

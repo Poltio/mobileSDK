@@ -221,7 +221,17 @@ object PoltioSDK {
         // first track() call ever performs the initial SharedPreferences disk read on main.
         PoltioExecutors.serial.execute {
             val id = sdkId
-            puid
+            // If identify() ran before configure(), its value only lives in memory (there was no
+            // Context to persist against yet) — write it now, including a clear, so it neither gets
+            // lost nor lets a stale persisted PUID resurface on the next launch.
+            val (identifiedEarly, earlyPuid) = synchronized(lock) { _puidLoaded to _puid }
+            if (identifiedEarly) {
+                val editor = prefsFor(appContext).edit()
+                if (earlyPuid != null) editor.putString(PUID_KEY, earlyPuid) else editor.remove(PUID_KEY)
+                editor.apply()
+            } else {
+                puid
+            }
             PoltioLogger.debug { "SDK ID: $id" }
         }
 

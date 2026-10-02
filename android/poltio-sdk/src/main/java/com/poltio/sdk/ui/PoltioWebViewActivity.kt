@@ -92,7 +92,9 @@ internal class PoltioWebViewActivity : Activity() {
          */
         fun isTrustedWidgetUrl(url: Uri): Boolean {
             val scheme = url.scheme?.lowercase() ?: return false
-            if (scheme == "about" || scheme == "blob" || scheme == "data") return true
+            // `data:`/`blob:` documents are deliberately not trusted: they'd run arbitrary script
+            // with access to the bridge. Only the inert `about:blank` is let through.
+            if (url.toString().lowercase() == "about:blank") return true
             if (scheme != "https" && scheme != "http") return false
             val host = url.host?.lowercase() ?: return false
             return host == "poltio.com" || host.endsWith(".poltio.com")

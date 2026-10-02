@@ -176,7 +176,8 @@ internal class PoltioFloatingBoxTriggerView(
         }
         collapsedContainer.setOnClickListener {
             if (PoltioTriggerAccessibility.shouldSkipExpandStep(context)) {
-                expandedContainer.performClick()
+                PoltioExecutors.main.removeCallbacks(autoCollapseRunnable)
+                onOpenWidget()
             } else {
                 setState(TriggerState.EXPANDED, animated = true)
             }

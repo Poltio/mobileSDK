@@ -240,7 +240,9 @@
         /// handed to the system instead. Mirrors Android's `PoltioWebViewActivity.isTrustedWidgetUrl`.
         static func isTrustedWidgetURL(_ url: URL) -> Bool {
             guard let scheme = url.scheme?.lowercased() else { return false }
-            if scheme == "about" || scheme == "blob" || scheme == "data" {
+            // `data:`/`blob:` documents are deliberately not trusted: they'd run arbitrary script
+            // with access to the bridge. Only the inert `about:blank` is let through.
+            if url.absoluteString.lowercased() == "about:blank" {
                 return true
             }
             guard scheme == "https" || scheme == "http", let host = url.host?.lowercased() else {
