@@ -20,6 +20,10 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
+
+        // Exposed at runtime as `PoltioSDK.version` and sent as the `X-Poltio-SDK-Version` header,
+        // so it always matches the published Maven artifact version (`-PlibVersion`).
+        buildConfigField("String", "SDK_VERSION", "\"${project.version}\"")
     }
 
     buildTypes {

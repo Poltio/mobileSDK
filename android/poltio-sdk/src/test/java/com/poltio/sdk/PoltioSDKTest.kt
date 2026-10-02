@@ -2,6 +2,7 @@ package com.poltio.sdk
 
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
+import com.poltio.sdk.ui.findActivity
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -20,6 +21,59 @@ class PoltioSDKTest {
     @After
     fun tearDown() {
         PoltioSDK.reset()
+    }
+
+    @Test
+    fun `default log level is WARNING`() {
+        PoltioSDK.configure(application, clientKey = "poltio_test_pk_123")
+        assertEquals(PoltioLogLevel.WARNING, PoltioSDK.logLevel)
+    }
+
+    @Test
+    fun `identify keeps puid in memory immediately and persists it in the background`() {
+        PoltioSDK.configure(application, clientKey = "poltio_test_pk_123")
+        PoltioSDK.identify("  user-99  ")
+        assertEquals("user-99", PoltioSDK.puid)
+
+        // Wait for the serial state executor to flush the write, then check it hit disk.
+        PoltioExecutors.serial.submit {}.get(3, TimeUnit.SECONDS)
+        val persisted = application.getSharedPreferences("com.poltio.sdk.prefs", android.content.Context.MODE_PRIVATE)
+            .getString("puid", null)
+        assertEquals("user-99", persisted)
+    }
+
+    @Test
+    fun `puid identified before configure is persisted once configured`() {
+        PoltioSDK.identify("early-user")
+        PoltioSDK.configure(application, clientKey = "poltio_test_pk_123")
+
+        PoltioExecutors.serial.submit {}.get(3, TimeUnit.SECONDS)
+        val persisted = application.getSharedPreferences("com.poltio.sdk.prefs", android.content.Context.MODE_PRIVATE)
+            .getString("puid", null)
+        assertEquals("early-user", persisted)
+        assertEquals("early-user", PoltioSDK.puid)
+    }
+
+    @Test
+    fun `configure with a wrapped Activity context does not throw`() {
+        val activity = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
+        val wrapped = android.view.ContextThemeWrapper(activity, android.R.style.Theme_DeviceDefault)
+        PoltioSDK.configure(wrapped, clientKey = "poltio_test_pk_123")
+        assertEquals(activity, wrapped.findActivity())
+        assertTrue(PoltioSDK.isInitialized)
+    }
+
+    @Test
+    fun `track view sends the widget request from a background thread`() {
+        val (port, future) = startCapturingServer(responseStatusLine = "HTTP/1.1 404 Not Found")
+        PoltioSDK.configure(application, clientKey = "poltio_test_pk_123")
+        PoltioSDK.apiClient = PoltioAPIClient(baseURL = "http://127.0.0.1:$port")
+
+        PoltioSDK.track("view", mapOf("url" to "myapp://products/1"))
+
+        val request = future.get(3, TimeUnit.SECONDS)
+        assertEquals("/sdk/mobile/v1/widget", request.path)
+        assertEquals("myapp://products/1", JSONObject(request.body).getString("url"))
     }
 
     @Test

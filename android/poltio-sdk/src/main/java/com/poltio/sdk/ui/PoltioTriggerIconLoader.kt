@@ -1,7 +1,9 @@
 package com.poltio.sdk.ui
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
@@ -151,16 +153,33 @@ internal class PoltioTriggerIconLoader(private val container: ViewGroup, private
 
     private fun ensureSvgWebView(anchor: View): WebView {
         svgWebView?.let { return it }
-        val webView = WebView(container.context).apply {
+        val webView = PoltioNonInteractiveWebView(container.context).apply {
             setBackgroundColor(android.graphics.Color.TRANSPARENT)
             settings.javaScriptEnabled = false
             isVerticalScrollBarEnabled = false
             isHorizontalScrollBarEnabled = false
             isClickable = false
             isFocusable = false
+            // Purely decorative — the trigger it sits on already carries the spoken label.
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
         }
         container.addView(webView, overlayParamsMatching(anchor))
         svgWebView = webView
         return webView
     }
+}
+
+/**
+ * A `WebView` that never takes part in touch handling, used purely to paint an SVG icon. A plain
+ * `WebView` consumes every touch in `onTouchEvent` even with `isClickable = false`, so an icon
+ * rendered on top of a trigger (e.g. the collapsed pill, where it covers most of the tap target)
+ * would swallow the tap/swipe meant for the trigger. Reporting touches as unhandled lets them fall
+ * through to the trigger underneath — the Android analogue of iOS's `isUserInteractionEnabled = false`.
+ */
+internal class PoltioNonInteractiveWebView(context: Context) : WebView(context) {
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean = false
+
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
+    override fun onTouchEvent(event: MotionEvent): Boolean = false
 }

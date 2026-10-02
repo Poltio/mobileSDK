@@ -172,6 +172,14 @@ internal class PoltioFloatingPillTriggerView(
 
         isClickable = true
         setOnClickListener { handleTap() }
+        PoltioTriggerAccessibility.configureAsButton(
+            this,
+            PoltioTriggerAccessibility.label(
+                widget.overlayOptions.textFirst ?: "Try our",
+                widget.overlayOptions.textSecond ?: "PRODUCT",
+                widget.overlayOptions.textThird ?: "FINDER",
+            ),
+        )
         setupSwipeToCollapse()
 
         iconLoader.load(widget.overlayOptions, sparkleIcon) { sparkleIcon.visibility = View.GONE }
@@ -390,7 +398,7 @@ internal class PoltioFloatingPillTriggerView(
     }
 
     private fun handleTap() {
-        if (currentState == TriggerState.COLLAPSED) {
+        if (currentState == TriggerState.COLLAPSED && !PoltioTriggerAccessibility.shouldSkipExpandStep(context)) {
             setState(TriggerState.EXPANDED, animated = true)
         } else {
             onOpenWidget()

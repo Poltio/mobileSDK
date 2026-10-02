@@ -53,6 +53,19 @@ class PoltioAPIClientTest {
     }
 
     @Test
+    fun `every request carries the SDK version and platform headers`() {
+        val (port, future) = startCapturingServer()
+
+        PoltioAPIClient(baseURL = "http://127.0.0.1:$port")
+            .reportCtaView(clientKey = "pk_test_headers", deviceId = "device_h", publicId = "widget_h", widgetId = null)
+
+        val request = future.get(3, TimeUnit.SECONDS)
+        assertEquals(BuildConfig.SDK_VERSION, request.headers["X-Poltio-SDK-Version"])
+        assertEquals("android", request.headers["X-Poltio-SDK-Platform"])
+        assertEquals(PoltioSDK.version, request.headers["X-Poltio-SDK-Version"])
+    }
+
+    @Test
     fun `reportCtaView does not throw when the server returns an error`() {
         val (port, future) = startCapturingServer(responseStatusLine = "HTTP/1.1 500 Internal Server Error")
 

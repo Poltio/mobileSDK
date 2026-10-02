@@ -3,10 +3,10 @@
 
     /// Transparent overlay window that passes through touches except when interacting with the floating trigger.
     @available(iOSApplicationExtension, unavailable)
-    public final class PoltioPassthroughWindow: UIWindow {
+    final class PoltioPassthroughWindow: UIWindow {
         private var lastNotificationTime: TimeInterval = 0
 
-        override public func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
             guard let hitView = super.hitTest(point, with: event) else {
                 return nil
             }
@@ -39,8 +39,8 @@
 
     /// Manages attaching, presenting, and dismissing native Poltio floating triggers and interactive webviews.
     @available(iOSApplicationExtension, unavailable)
-    public final class PoltioOverlayManager {
-        public static let shared = PoltioOverlayManager()
+    final class PoltioOverlayManager {
+        static let shared = PoltioOverlayManager()
 
         /// Maximum number of times `showTrigger` will retry while waiting for a `UIWindowScene` to
         /// become available, before giving up. Caps retries at 10 * 0.2s = 2s so a host app that never
@@ -60,7 +60,7 @@
         /// - Parameters:
         ///   - widget: The resolved Poltio widget configuration.
         ///   - puid: Optional developer-provided user identifier.
-        public func showTrigger(
+        func showTrigger(
             widget: PoltioWidgetResponse,
             puid: String? = nil
         ) {
@@ -246,7 +246,7 @@
         }
 
         /// Hides and removes any currently displayed floating trigger view and its overlay window with animation.
-        public func hideTrigger() {
+        func hideTrigger() {
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 pendingShowWorkItem?.cancel()
@@ -319,7 +319,7 @@
         }
 
         /// Presents the interactive widget modal WebView on top of the active view controller.
-        public func presentWidgetWebView(publicId: String, widgetId: Int? = nil, puid: String?, overlayOptions: PoltioOverlayOptions? = nil) {
+        func presentWidgetWebView(publicId: String, widgetId: Int? = nil, puid: String?, overlayOptions: PoltioOverlayOptions? = nil) {
             DispatchQueue.main.async { [weak self] in
                 guard let self, let topVC = findTopmostHostViewController() else {
                     PoltioLogger.error("Unable to find topmost view controller to present widget.")

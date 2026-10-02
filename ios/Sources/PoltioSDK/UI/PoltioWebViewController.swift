@@ -18,7 +18,8 @@
     }
 
     /// In-app browser modal presenting the interactive Poltio widget WebView.
-    public final class PoltioWebViewController: UIViewController, WKNavigationDelegate, WKScriptMessageHandler, UIAdaptivePresentationControllerDelegate {
+    @available(iOSApplicationExtension, unavailable)
+    final class PoltioWebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, UIAdaptivePresentationControllerDelegate {
         private let publicId: String
         private let widgetId: Int?
         private let puid: String?
@@ -31,12 +32,12 @@
         private static let bridgeHandlerName = "poltioNative"
 
         /// Callback invoked when the modal is dismissed (via close button or swipe down).
-        public var onDismiss: (() -> Void)?
+        var onDismiss: (() -> Void)?
         /// Callback invoked when the widget page sends a bridge event (e.g. "close", "complete", "leadSubmit").
-        public var onWidgetEvent: ((_ event: String, _ data: [String: Any]?) -> Void)?
+        var onWidgetEvent: ((_ event: String, _ data: [String: Any]?) -> Void)?
         private var isDismissHandled = false
 
-        public init(publicId: String, widgetId: Int? = nil, puid: String? = nil, overlayOptions: PoltioOverlayOptions? = nil, onDismiss: (() -> Void)? = nil) {
+        init(publicId: String, widgetId: Int? = nil, puid: String? = nil, overlayOptions: PoltioOverlayOptions? = nil, onDismiss: (() -> Void)? = nil) {
             self.publicId = publicId
             self.widgetId = widgetId
             self.puid = puid
@@ -51,7 +52,7 @@
             fatalError("init(coder:) has not been implemented")
         }
 
-        override public func viewDidLoad() {
+        override func viewDidLoad() {
             super.viewDidLoad()
             presentationController?.delegate = self
             setupUI()
@@ -69,6 +70,7 @@
                 webViewToClean.stopLoading()
                 webViewToClean.configuration.userContentController.removeScriptMessageHandler(forName: handlerName)
                 webViewToClean.navigationDelegate = nil
+                webViewToClean.uiDelegate = nil
             }
         }
 
@@ -102,6 +104,7 @@
             webView = WKWebView(frame: .zero, configuration: config)
             webView.translatesAutoresizingMaskIntoConstraints = false
             webView.navigationDelegate = self
+            webView.uiDelegate = self
             webView.isOpaque = false
             webView.backgroundColor = .clear
             webView.scrollView.backgroundColor = panelBackgroundColor
@@ -137,7 +140,7 @@
         /// Helper that constructs the widget WebView URL with query parameters. Pass-through params
         /// (`content`, `custom_id`, `loc`, `resultfit`, `disclaimer`) reuse their `WidgetParams` key
         /// names verbatim as query keys, matching the existing `puid`/`disclaimer` convention.
-        public static func buildWidgetURL(
+        static func buildWidgetURL(
             publicId: String,
             widgetId: Int? = nil,
             puid: String?,
@@ -209,6 +212,7 @@
             webView.stopLoading()
             webView.configuration.userContentController.removeScriptMessageHandler(forName: Self.bridgeHandlerName)
             webView.navigationDelegate = nil
+            webView.uiDelegate = nil
         }
 
         @objc private func didTapClose() {
@@ -217,36 +221,123 @@
             }
         }
 
-        public func presentationControllerDidDismiss(_: UIPresentationController) {
+        func presentationControllerDidDismiss(_: UIPresentationController) {
             notifyDismiss()
         }
 
-        override public func viewDidDisappear(_ animated: Bool) {
+        override func viewDidDisappear(_ animated: Bool) {
             super.viewDidDisappear(animated)
             if isBeingDismissed || isMovingFromParent {
                 notifyDismiss()
             }
         }
 
+        // MARK: - Navigation Policy
+
+        /// Whether `url` may load inside the widget WebView. The JS bridge (`poltioNative`) is exposed
+        /// to whatever page is loaded, so main-frame navigation stays confined to Poltio's own domain;
+        /// anything else (product links, external sites, `tel:`/`mailto:`, host-app deep links) is
+        /// handed to the system instead. Mirrors Android's `PoltioWebViewActivity.isTrustedWidgetUrl`.
+        static func isTrustedWidgetURL(_ url: URL) -> Bool {
+            guard let scheme = url.scheme?.lowercased() else { return false }
+            // `data:`/`blob:` documents are deliberately not trusted: they'd run arbitrary script
+            // with access to the bridge. Only the inert `about:blank` is let through.
+            if url.absoluteString.lowercased() == "about:blank" {
+                return true
+            }
+            // HTTPS only: a cleartext page could be modified in transit to reach the bridge.
+            guard scheme == "https", let host = url.host?.lowercased() else {
+                return false
+            }
+            // Only accept plain DNS hostnames, so a parser differential between Foundation and
+            // WebKit (e.g. `\` handling) can never make a foreign host pass the suffix check below.
+            let allowedHostCharacters = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789.-")
+            guard host.unicodeScalars.allSatisfy({ allowedHostCharacters.contains($0) }) else {
+                return false
+            }
+            return host == "poltio.com" || host.hasSuffix(".poltio.com")
+        }
+
+        private func openExternally(_ url: URL) {
+            PoltioLogger.debug("Opening external URL outside the widget: \(url.absoluteString)")
+            UIApplication.shared.open(url, options: [:]) { success in
+                if !success {
+                    PoltioLogger.warning("No app could open external URL '\(url.absoluteString)'.")
+                }
+            }
+        }
+
+        func webView(
+            _: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            guard let url = navigationAction.request.url else {
+                decisionHandler(.cancel)
+                return
+            }
+
+            // Sub-frame loads (e.g. embedded media inside the widget) never replace the widget page
+            // itself, so they're allowed as-is — matching Android, where shouldOverrideUrlLoading
+            // only intercepts main-frame navigations.
+            if let targetFrame = navigationAction.targetFrame, !targetFrame.isMainFrame {
+                decisionHandler(.allow)
+                return
+            }
+
+            // A nil target frame means a new-window request (`target="_blank"` / `window.open`),
+            // which WKWebView would otherwise silently drop.
+            if navigationAction.targetFrame != nil, Self.isTrustedWidgetURL(url) {
+                decisionHandler(.allow)
+                return
+            }
+
+            decisionHandler(.cancel)
+            openExternally(url)
+        }
+
+        // MARK: - WKUIDelegate
+
+        func webView(
+            _: WKWebView,
+            createWebViewWith _: WKWebViewConfiguration,
+            for navigationAction: WKNavigationAction,
+            windowFeatures _: WKWindowFeatures
+        ) -> WKWebView? {
+            // Fallback for new-window requests that bypass the navigation policy above; never open a
+            // second in-app WebView.
+            if let url = navigationAction.request.url {
+                openExternally(url)
+            }
+            return nil
+        }
+
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            // The web content process was killed (e.g. memory pressure) — reload rather than leaving
+            // a blank sheet. Never affects the host app's own process.
+            PoltioLogger.warning("Widget WebView content process terminated; reloading.")
+            webView.reload()
+        }
+
         // MARK: - WKNavigationDelegate
 
-        public func webView(_: WKWebView, didFinish _: WKNavigation!) {
+        func webView(_: WKWebView, didFinish _: WKNavigation!) {
             activityIndicator.stopAnimating()
         }
 
-        public func webView(_: WKWebView, didFail _: WKNavigation!, withError error: Error) {
+        func webView(_: WKWebView, didFail _: WKNavigation!, withError error: Error) {
             activityIndicator.stopAnimating()
             PoltioLogger.error("Webview navigation failed: \(error.localizedDescription)")
         }
 
-        public func webView(_: WKWebView, didFailProvisionalNavigation _: WKNavigation!, withError error: Error) {
+        func webView(_: WKWebView, didFailProvisionalNavigation _: WKNavigation!, withError error: Error) {
             activityIndicator.stopAnimating()
             PoltioLogger.error("Webview provisional navigation failed: \(error.localizedDescription)")
         }
 
         // MARK: - WKScriptMessageHandler
 
-        public func userContentController(_: WKUserContentController, didReceive message: WKScriptMessage) {
+        func userContentController(_: WKUserContentController, didReceive message: WKScriptMessage) {
             guard message.name == Self.bridgeHandlerName else { return }
 
             guard let body = message.body as? [String: Any], let event = body["event"] as? String else {

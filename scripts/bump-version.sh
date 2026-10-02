@@ -14,10 +14,19 @@ NEW_VERSION="${NEW_VERSION#v}"
 echo "==> Bumping SDK version to ${NEW_VERSION} across platforms..."
 
 # 1. iOS CocoaPods podspec
-if [ -f "ios/PoltioSDK.podspec" ]; then
-    sed -i.bak -E "s/^([[:space:]]*)s\.version[[:space:]]*=[[:space:]]*['\"][^'\"]+['\"]/\\1s.version          = '${NEW_VERSION}'/" ios/PoltioSDK.podspec
-    rm -f ios/PoltioSDK.podspec.bak
-    echo "  ✅ Updated ios/PoltioSDK.podspec -> ${NEW_VERSION}"
+if [ -f "PoltioSDK.podspec" ]; then
+    sed -i.bak -E "s/^([[:space:]]*)s\.version[[:space:]]*=[[:space:]]*['\"][^'\"]+['\"]/\\1s.version          = '${NEW_VERSION}'/" PoltioSDK.podspec
+    rm -f PoltioSDK.podspec.bak
+    echo "  ✅ Updated PoltioSDK.podspec -> ${NEW_VERSION}"
+fi
+
+# 1b. iOS runtime version constant (sent to the API as X-Poltio-SDK-Version and exposed as
+# PoltioSDK.version). Swift Package Manager consumers build straight from the tagged source, so this
+# must be committed with the correct value *before* the release tag is cut.
+if [ -f "ios/Sources/PoltioSDK/PoltioSDKInfo.swift" ]; then
+    sed -i.bak -E "s/(static let version = \")[^\"]+(\")/\1${NEW_VERSION}\2/" ios/Sources/PoltioSDK/PoltioSDKInfo.swift
+    rm -f ios/Sources/PoltioSDK/PoltioSDKInfo.swift.bak
+    echo "  ✅ Updated ios/Sources/PoltioSDK/PoltioSDKInfo.swift -> ${NEW_VERSION}"
 fi
 
 # 2. Android Gradle manifest — intentionally not touched here. The published

@@ -76,8 +76,7 @@ final class PoltioAPIClient {
 
         var request = URLRequest(url: requestURL)
         request.httpMethod = "POST"
-        request.setValue(clientKey, forHTTPHeaderField: "X-Poltio-SDK-Key")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        applyStandardHeaders(to: &request, clientKey: clientKey)
 
         let payload: [String: String] = [
             "url": targetURL,
@@ -166,8 +165,7 @@ final class PoltioAPIClient {
 
         var request = URLRequest(url: requestURL)
         request.httpMethod = "POST"
-        request.setValue(clientKey, forHTTPHeaderField: "X-Poltio-SDK-Key")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        applyStandardHeaders(to: &request, clientKey: clientKey)
 
         var payload: [String: Any] = [
             "public_id": publicId,
@@ -230,8 +228,7 @@ final class PoltioAPIClient {
 
         var request = URLRequest(url: requestURL)
         request.httpMethod = "POST"
-        request.setValue(clientKey, forHTTPHeaderField: "X-Poltio-SDK-Key")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        applyStandardHeaders(to: &request, clientKey: clientKey)
 
         var payload: [String: Any] = [
             "url": url,
@@ -289,5 +286,14 @@ final class PoltioAPIClient {
                 PoltioLogger.warning("recordPurchase for order '\(orderId)' returned status \(httpResponse.statusCode).")
             }
         }.resume()
+    }
+
+    /// Sets the headers every SDK request carries: the client key, JSON content type, and the SDK
+    /// version/platform so the backend can distinguish SDK releases.
+    private func applyStandardHeaders(to request: inout URLRequest, clientKey: String) {
+        request.setValue(clientKey, forHTTPHeaderField: "X-Poltio-SDK-Key")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(PoltioSDKInfo.version, forHTTPHeaderField: "X-Poltio-SDK-Version")
+        request.setValue(PoltioSDKInfo.platform, forHTTPHeaderField: "X-Poltio-SDK-Platform")
     }
 }

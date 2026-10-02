@@ -2,9 +2,9 @@
     import UIKit
 
     /// Native floating box trigger view supporting collapsed and expanded states matching Poltio design specs.
-    public final class PoltioFloatingBoxTriggerView: UIView, PoltioTriggerPresentable {
+    final class PoltioFloatingBoxTriggerView: UIView, PoltioTriggerPresentable {
         /// Visual states of the floating trigger.
-        public enum TriggerState {
+        enum TriggerState {
             case collapsed
             case expanded
         }
@@ -15,7 +15,7 @@
         /// `boxCloseRememberDuration`-hour dismissal and fully hides the trigger (not just a collapse).
         private let onDismissForever: (Double) -> Void
 
-        public private(set) var currentState: TriggerState
+        private(set) var currentState: TriggerState
 
         /// Uniform scale factor applied to every dimension below, from `boxResize` (clamped to a sane
         /// range so bad API data can't produce a degenerate or oversized trigger).
@@ -81,7 +81,7 @@
             195 * scale
         }
 
-        public init(
+        init(
             widget: PoltioWidgetResponse,
             onOpenWidget: @escaping () -> Void,
             onDismissForever: @escaping (Double) -> Void = { _ in }
@@ -146,6 +146,35 @@
             let swipeToCollapse = UISwipeGestureRecognizer(target: self, action: #selector(handleSwipeRight))
             swipeToCollapse.direction = .right
             expandedContainer.addGestureRecognizer(swipeToCollapse)
+
+            setupAccessibility()
+        }
+
+        private func setupAccessibility() {
+            let options = widget.overlayOptions
+            PoltioTriggerAccessibility.configure(
+                collapsedContainer,
+                label: PoltioTriggerAccessibility.label(from: [options.floatingBoxTextFirst ?? "Product Finder"])
+            )
+
+            var expandedActions = [
+                PoltioTriggerAccessibility.action(PoltioTriggerAccessibility.collapseActionName) { [weak self] in
+                    self?.handleSwipeRight()
+                },
+            ]
+            if options.boxShowCloseButton {
+                expandedActions.append(PoltioTriggerAccessibility.action(PoltioTriggerAccessibility.closeActionName) { [weak self] in
+                    self?.handleCloseTap()
+                })
+            }
+            PoltioTriggerAccessibility.configure(
+                expandedContainer,
+                label: PoltioTriggerAccessibility.label(from: [
+                    options.floatingBoxTextFirst ?? "Product Finder",
+                    options.floatingBoxTextSecond ?? "Product Finder",
+                ]),
+                actions: expandedActions
+            )
         }
 
         // MARK: - Collapsed View Setup
@@ -511,13 +540,13 @@
 
         // MARK: - State Handling & Actions
 
-        public func setState(_ state: TriggerState, animated: Bool = true) {
+        func setState(_ state: TriggerState, animated: Bool = true) {
             guard currentState != state else { return }
             currentState = state
             applyState(state, animated: animated)
         }
 
-        public func resetToCollapsed(animated: Bool = true) {
+        func resetToCollapsed(animated: Bool = true) {
             setState(.collapsed, animated: animated)
         }
 
@@ -580,6 +609,10 @@
         }
 
         @objc private func handleCollapsedTap() {
+            guard !PoltioTriggerAccessibility.shouldSkipExpandStep else {
+                handleExpandedTap()
+                return
+            }
             setState(.expanded, animated: true)
         }
 

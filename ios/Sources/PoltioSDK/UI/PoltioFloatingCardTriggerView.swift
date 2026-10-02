@@ -3,9 +3,9 @@
 
     /// Native floating card trigger view supporting collapsed (rounded edge tab with sparkle & chevron)
     /// and expanded (floating rounded card with close button, title, description, and action button) states.
-    public final class PoltioFloatingCardTriggerView: UIView, PoltioTriggerPresentable {
+    final class PoltioFloatingCardTriggerView: UIView, PoltioTriggerPresentable {
         /// Visual states of the floating card trigger.
-        public enum TriggerState {
+        enum TriggerState {
             case collapsed
             case expanded
         }
@@ -13,7 +13,7 @@
         private let widget: PoltioWidgetResponse
         private let onOpenWidget: () -> Void
 
-        public private(set) var currentState: TriggerState
+        private(set) var currentState: TriggerState
 
         // Container views
         private let collapsedContainer = UIView()
@@ -117,7 +117,7 @@
             static let closeAccessibilityLabel = "Close Poltio Widget Card"
         }
 
-        public init(
+        init(
             widget: PoltioWidgetResponse,
             onOpenWidget: @escaping () -> Void
         ) {
@@ -171,6 +171,25 @@
             let swipeToCollapse = UISwipeGestureRecognizer(target: self, action: #selector(handleSwipeRight))
             swipeToCollapse.direction = .right
             expandedContainer.addGestureRecognizer(swipeToCollapse)
+
+            setupAccessibility()
+        }
+
+        private func setupAccessibility() {
+            let titleLabelText = titleLabel.text
+            PoltioTriggerAccessibility.configure(
+                collapsedContainer,
+                label: PoltioTriggerAccessibility.label(from: [titleLabelText])
+            )
+            PoltioTriggerAccessibility.configure(
+                expandedContainer,
+                label: PoltioTriggerAccessibility.label(from: [titleLabelText, descLabel.text, widget.overlayOptions.floatingButtonText ?? DefaultStrings.actionButton]),
+                actions: [
+                    PoltioTriggerAccessibility.action(PoltioTriggerAccessibility.collapseActionName) { [weak self] in
+                        self?.handleCloseTap()
+                    },
+                ]
+            )
         }
 
         // MARK: - Collapsed View Setup
@@ -396,13 +415,13 @@
 
         // MARK: - State Management
 
-        public func setState(_ state: TriggerState, animated: Bool) {
+        func setState(_ state: TriggerState, animated: Bool) {
             guard currentState != state else { return }
             currentState = state
             applyState(state, animated: animated)
         }
 
-        public func resetToCollapsed(animated: Bool) {
+        func resetToCollapsed(animated: Bool) {
             setState(.collapsed, animated: animated)
         }
 
@@ -479,6 +498,10 @@
         // MARK: - Actions
 
         @objc private func handleCollapsedTap() {
+            guard !PoltioTriggerAccessibility.shouldSkipExpandStep else {
+                handleExpandedTap()
+                return
+            }
             setState(.expanded, animated: true)
         }
 
