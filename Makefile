@@ -219,6 +219,10 @@ run-example-android: build-example-android
 	@ADB_BIN=$$(command -v adb 2>/dev/null || echo "$$HOME/Library/Android/sdk/platform-tools/adb"); \
 	EMU_BIN=$$(command -v emulator 2>/dev/null || echo "$$HOME/Library/Android/sdk/emulator/emulator"); \
 	if $$ADB_BIN devices 2>/dev/null | grep -q "device$$"; then \
+		if pgrep -f "qemu-system.*-headless" >/dev/null 2>&1 || pgrep -f "emulator.*-no-window" >/dev/null 2>&1; then \
+			echo "Warning: the running emulator is headless (-no-window), so the app will launch without a visible window."; \
+			echo "         Restart it with a window: adb emu kill && emulator -avd <name> &"; \
+		fi; \
 		echo "==> Installing & launching on running Android device/emulator..."; \
 		$$ADB_BIN install -r example/android/app/build/outputs/apk/debug/app-debug.apk && \
 		$$ADB_BIN shell am start -n com.poltio.exampleapp/.MainActivity; \
