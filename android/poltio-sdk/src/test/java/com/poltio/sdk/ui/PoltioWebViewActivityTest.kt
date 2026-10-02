@@ -49,6 +49,18 @@ class PoltioWebViewActivityTest {
     }
 
     @Test
+    fun `navigation policy is locale-invariant`() {
+        val original = java.util.Locale.getDefault()
+        try {
+            // Turkish lowercases 'I' to dotless 'ı' under locale-sensitive APIs.
+            java.util.Locale.setDefault(java.util.Locale.forLanguageTag("tr-TR"))
+            assertTrue(PoltioWebViewActivity.isTrustedWidgetUrl(Uri.parse("https://WWW.POLTIO.COM/widget/abc")))
+        } finally {
+            java.util.Locale.setDefault(original)
+        }
+    }
+
+    @Test
     fun `trigger accessibility labels join visible text and fall back when empty`() {
         assertEquals("Try our PRODUCT FINDER", PoltioTriggerAccessibility.label("Try our", " PRODUCT\n", "FINDER"))
         assertEquals(PoltioTriggerAccessibility.FALLBACK_LABEL, PoltioTriggerAccessibility.label(null, "  "))

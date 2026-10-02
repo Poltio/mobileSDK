@@ -220,7 +220,7 @@ internal class PoltioWebViewActivity : Activity() {
             // (the WebView) stops above whichever is taller: the nav bar or the soft keyboard.
             val navigationBarInset = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
             val imeInset = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
-            sheet.setPadding(0, 0, 0, maxOf(navigationBarInset, imeInset))
+            sheet.setPadding(sheet.paddingLeft, sheet.paddingTop, sheet.paddingRight, maxOf(navigationBarInset, imeInset))
             insets
         }
 
