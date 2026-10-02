@@ -113,7 +113,7 @@ struct SDKStatusView: View {
                     }
 
                     Button(role: .destructive, action: {
-                        PoltioOverlayManager.shared.hideTrigger()
+                        PoltioSDK.hideTrigger()
                         eventStatusMessage = "Hidden Active Trigger Overlay"
                     }) {
                         HStack {
@@ -129,9 +129,16 @@ struct SDKStatusView: View {
                         eventStatusMessage = "Tracked 'view' event for 'example://manual_track'"
                     }
 
-                    Button("Track Conversion Event") {
-                        PoltioSDK.track(event: "TrackConversion", params: ["value": 99.99, "currency": "USD"])
-                        eventStatusMessage = "Tracked 'TrackConversion' event"
+                    Button("Record Purchase") {
+                        let orderId = "order_\(UUID().uuidString.prefix(8))"
+                        PoltioSDK.recordPurchase(
+                            orderId: orderId,
+                            value: 99.99,
+                            url: "example://checkout/complete",
+                            currency: "USD",
+                            items: [PoltioPurchaseItem(id: "sku_123", name: "Wireless Headphones", quantity: 1, value: 99.99)]
+                        )
+                        eventStatusMessage = "Recorded purchase '\(orderId)'"
                     }
                 }
 

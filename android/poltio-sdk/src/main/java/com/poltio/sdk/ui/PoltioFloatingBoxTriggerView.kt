@@ -174,7 +174,17 @@ internal class PoltioFloatingBoxTriggerView(
             }
             true
         }
-        collapsedContainer.setOnClickListener { setState(TriggerState.EXPANDED, animated = true) }
+        collapsedContainer.setOnClickListener {
+            if (PoltioTriggerAccessibility.shouldSkipExpandStep(context)) {
+                expandedContainer.performClick()
+            } else {
+                setState(TriggerState.EXPANDED, animated = true)
+            }
+        }
+        PoltioTriggerAccessibility.configureAsButton(
+            collapsedContainer,
+            PoltioTriggerAccessibility.label(widget.overlayOptions.floatingBoxTextFirst ?: "Product Finder"),
+        )
     }
 
     private fun setupExpandedContainer() {
@@ -315,6 +325,13 @@ internal class PoltioFloatingBoxTriggerView(
             }
             true
         }
+        PoltioTriggerAccessibility.configureAsButton(
+            expandedContainer,
+            PoltioTriggerAccessibility.label(
+                widget.overlayOptions.floatingBoxTextFirst ?: "Product Finder",
+                widget.overlayOptions.floatingBoxTextSecond ?: "Product Finder",
+            ),
+        )
         expandedContainer.setOnClickListener {
             PoltioExecutors.main.removeCallbacks(autoCollapseRunnable)
             onOpenWidget()

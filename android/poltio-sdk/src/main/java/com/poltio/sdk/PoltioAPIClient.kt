@@ -63,14 +63,7 @@ internal class PoltioAPIClient(
             var connection: HttpURLConnection? = null
             try {
                 val endpoint = URL("$baseURL$WIDGET_ENDPOINT_PATH")
-                connection = (endpoint.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "POST"
-                    connectTimeout = 15_000
-                    readTimeout = 15_000
-                    doOutput = true
-                    setRequestProperty("X-Poltio-SDK-Key", clientKey)
-                    setRequestProperty("Content-Type", "application/json")
-                }
+                connection = openPostConnection(endpoint, clientKey)
 
                 val payload = JSONObject().apply {
                     put("url", targetURL)
@@ -156,14 +149,7 @@ internal class PoltioAPIClient(
             var connection: HttpURLConnection? = null
             try {
                 val endpoint = URL("$baseURL$CTA_VIEW_ENDPOINT_PATH")
-                connection = (endpoint.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "POST"
-                    connectTimeout = 15_000
-                    readTimeout = 15_000
-                    doOutput = true
-                    setRequestProperty("X-Poltio-SDK-Key", clientKey)
-                    setRequestProperty("Content-Type", "application/json")
-                }
+                connection = openPostConnection(endpoint, clientKey)
 
                 val payload = JSONObject().apply {
                     put("public_id", publicId)
@@ -214,14 +200,7 @@ internal class PoltioAPIClient(
             var connection: HttpURLConnection? = null
             try {
                 val endpoint = URL("$baseURL$PURCHASE_ENDPOINT_PATH")
-                connection = (endpoint.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "POST"
-                    connectTimeout = 15_000
-                    readTimeout = 15_000
-                    doOutput = true
-                    setRequestProperty("X-Poltio-SDK-Key", clientKey)
-                    setRequestProperty("Content-Type", "application/json")
-                }
+                connection = openPostConnection(endpoint, clientKey)
 
                 val payload = JSONObject().apply {
                     put("url", url)
@@ -267,4 +246,20 @@ internal class PoltioAPIClient(
             }
         }
     }
+
+    /**
+     * Opens a JSON `POST` connection carrying the headers every SDK request sends: the client key,
+     * content type, and the SDK version/platform so the backend can distinguish SDK releases.
+     */
+    private fun openPostConnection(endpoint: URL, clientKey: String): HttpURLConnection =
+        (endpoint.openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 15_000
+            readTimeout = 15_000
+            doOutput = true
+            setRequestProperty("X-Poltio-SDK-Key", clientKey)
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("X-Poltio-SDK-Version", BuildConfig.SDK_VERSION)
+            setRequestProperty("X-Poltio-SDK-Platform", "android")
+        }
 }

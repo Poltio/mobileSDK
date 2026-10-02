@@ -203,7 +203,19 @@ internal class PoltioFloatingCardTriggerView(
             }
             true
         }
-        collapsedContainer.setOnClickListener { setState(TriggerState.EXPANDED, animated = true) }
+        collapsedContainer.setOnClickListener {
+            if (PoltioTriggerAccessibility.shouldSkipExpandStep(context)) {
+                onOpenWidget()
+            } else {
+                setState(TriggerState.EXPANDED, animated = true)
+            }
+        }
+        PoltioTriggerAccessibility.configureAsButton(
+            collapsedContainer,
+            PoltioTriggerAccessibility.label(
+                widget.overlayOptions.floatingTitle ?: widget.overlayOptions.floatingBoxTextFirst ?: DefaultStrings.TITLE.value,
+            ),
+        )
     }
 
     private fun setupExpandedContainer() {
@@ -310,6 +322,14 @@ internal class PoltioFloatingCardTriggerView(
             true
         }
         expandedContainer.setOnClickListener { onOpenWidget() }
+        PoltioTriggerAccessibility.configureAsButton(
+            expandedContainer,
+            PoltioTriggerAccessibility.label(
+                widget.overlayOptions.floatingTitle ?: widget.overlayOptions.floatingBoxTextFirst ?: DefaultStrings.TITLE.value,
+                widget.overlayOptions.floatingDesc ?: widget.overlayOptions.floatingBoxTextSecond ?: DefaultStrings.DESCRIPTION.value,
+                widget.overlayOptions.floatingButtonText ?: DefaultStrings.ACTION_BUTTON.value,
+            ),
+        )
     }
 
     /** Small "Poltio" wordmark row shown at the bottom of the expanded card, gated by `showLogo`. */

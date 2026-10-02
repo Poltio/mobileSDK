@@ -6,17 +6,18 @@
 DEVELOPER_DIR ?= $(shell xcode-select -p 2>/dev/null)
 export DEVELOPER_DIR
 
-.PHONY: all help check build build-ios build-android build-rn test test-ios test-android test-rn format format-ios lint lint-ios lint-android lint-pod lint-actions zizmor run-example-ios run-example-android run-example-rn version submit-version publish-cocoapods publish-maven clean
+.PHONY: all help check build build-ios build-android build-rn test test-ios test-ios-macos test-android test-rn format format-ios lint lint-ios lint-android lint-pod lint-actions zizmor run-example-ios run-example-android run-example-rn version submit-version publish-cocoapods publish-maven clean
 
 help:
 	@echo "Poltio Mobile SDK - Monorepo Makefile Commands:"
 	@echo "  make check               - Check developer toolchain & platform requirements"
 	@echo "  make build               - Build all SDKs (iOS, Android, React Native)"
-	@echo "  make build-ios           - Build iOS Swift SDK"
+	@echo "  make build-ios           - Build iOS Swift SDK (macOS host + iOS Simulator SDK)"
 	@echo "  make build-android       - Build Android Kotlin SDK"
 	@echo "  make build-rn            - Build React Native SDK"
 	@echo "  make test                - Run all test suites"
-	@echo "  make test-ios            - Run iOS unit tests"
+	@echo "  make test-ios            - Run iOS unit tests on an iOS Simulator (full suite)"
+	@echo "  make test-ios-macos      - Run iOS unit tests on the macOS host (UIKit tests skipped)"
 	@echo "  make test-android        - Run Android unit tests"
 	@echo "  make test-rn             - Run React Native tests & linter"
 	@echo "  make format              - Format code across all platforms"
@@ -79,9 +80,9 @@ lint-android:
 lint-pod:
 	@echo "==> Linting CocoaPods podspec..."
 	@if command -v pod >/dev/null 2>&1; then \
-		pod spec lint ios/PoltioSDK.podspec --allow-warnings --quick; \
+		pod lib lint PoltioSDK.podspec --allow-warnings; \
 	elif [ -f "/opt/homebrew/bin/pod" ]; then \
-		/opt/homebrew/bin/pod spec lint ios/PoltioSDK.podspec --allow-warnings --quick; \
+		/opt/homebrew/bin/pod lib lint PoltioSDK.podspec --allow-warnings; \
 	else \
 		echo "Error: CocoaPods is not installed. Install via: brew install cocoapods or sudo gem install cocoapods"; \
 		exit 1; \
@@ -107,10 +108,14 @@ all: build test
 # ------------------------------------------------------------------------------
 build: build-ios build-android build-rn
 
+# `swift build` alone runs against the host macOS SDK, where every `#if canImport(UIKit)` file (the
+# overlay manager, WebView, and all trigger views) is compiled out — so build for the iOS Simulator
+# SDK too, otherwise the UI layer is never compiled at all.
 build-ios:
-	@echo "==> Building iOS Swift SDK..."
+	@echo "==> Building iOS Swift SDK (macOS host + iOS Simulator SDK)..."
 	@if [ -f "Package.swift" ]; then \
-		xcrun swift build; \
+		xcrun swift build && \
+		xcodebuild build -scheme PoltioSDK -destination 'generic/platform=iOS Simulator' -derivedDataPath .build/xcode -quiet; \
 	else \
 		echo "iOS SDK Package.swift manifest not found."; \
 	fi
@@ -136,8 +141,19 @@ build-rn:
 # ------------------------------------------------------------------------------
 test: test-ios test-android test-rn
 
+# Runs the full suite on an iOS Simulator, including the UIKit-only tests that `swift test` on the
+# macOS host silently skips. `test-ios-macos` is the faster host-only subset.
 test-ios:
-	@echo "==> Testing iOS Swift SDK..."
+	@echo "==> Testing iOS Swift SDK on iOS Simulator..."
+	@if [ -f "Package.swift" ]; then \
+		SIM_ID="$$(./scripts/ios-simulator-id.sh)" && \
+		xcodebuild test -scheme PoltioSDK -destination "id=$$SIM_ID" -derivedDataPath .build/xcode -quiet; \
+	else \
+		echo "iOS SDK Package.swift manifest not found."; \
+	fi
+
+test-ios-macos:
+	@echo "==> Testing iOS Swift SDK on macOS host (UIKit tests skipped)..."
 	@if [ -f "Package.swift" ]; then \
 		xcrun swift test; \
 	else \
@@ -246,9 +262,9 @@ submit-version:
 publish-cocoapods:
 	@echo "==> Pushing PoltioSDK to CocoaPods Trunk..."
 	@if command -v pod >/dev/null 2>&1; then \
-		pod trunk push ios/PoltioSDK.podspec --allow-warnings; \
+		pod trunk push PoltioSDK.podspec --allow-warnings; \
 	elif [ -f "/opt/homebrew/bin/pod" ]; then \
-		/opt/homebrew/bin/pod trunk push ios/PoltioSDK.podspec --allow-warnings; \
+		/opt/homebrew/bin/pod trunk push PoltioSDK.podspec --allow-warnings; \
 	else \
 		echo "Error: CocoaPods is not installed. Install via: brew install cocoapods or sudo gem install cocoapods"; \
 		exit 1; \

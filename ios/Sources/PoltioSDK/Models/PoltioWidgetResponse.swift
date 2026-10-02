@@ -4,23 +4,23 @@ import Foundation
 #endif
 
 /// Represents the response payload from `/sdk/mobile/v1/widget`.
-public struct PoltioWidgetResponse: Codable, Equatable {
+struct PoltioWidgetResponse: Codable, Equatable {
     /// The unique public identifier of the Poltio widget.
-    public let publicId: String
+    let publicId: String
 
     /// Numeric widget identifier, reported as `widget_id` when the trigger is displayed
     /// (`/sdk/mobile/v1/cta-view`). Distinct from `publicId`: under A/B testing, arms can share a
     /// `publicId`, so the backend needs this to attribute an impression to a specific arm.
-    public let widgetId: Int?
+    let widgetId: Int?
 
     /// The overlay and trigger configuration options.
-    public let overlayOptions: PoltioOverlayOptions
+    let overlayOptions: PoltioOverlayOptions
 
     /// Optional scheduling start timestamp.
-    public let startsAt: String?
+    let startsAt: String?
 
     /// Optional scheduling end timestamp.
-    public let endsAt: String?
+    let endsAt: String?
 
     enum CodingKeys: String, CodingKey {
         case publicId = "public_id"
@@ -30,7 +30,7 @@ public struct PoltioWidgetResponse: Codable, Equatable {
         case endsAt = "ends_at"
     }
 
-    public init(
+    init(
         publicId: String,
         overlayOptions: PoltioOverlayOptions,
         startsAt: String? = nil,
@@ -53,7 +53,7 @@ public struct PoltioWidgetResponse: Codable, Equatable {
 /// duplicated mobile-override lookup logic doesn't scale. Every key (top-level and inside the
 /// `mobile` override object) is normalized to kebab-case (`_` → `-`) and merged into one dictionary,
 /// with `mobile` entries winning — that merge happens once at decode time instead of on every access.
-public struct PoltioOverlayOptions: Codable, Equatable {
+struct PoltioOverlayOptions: Codable, Equatable {
     /// Normalized (kebab-case), merged raw fields: top-level `overlay_options` keys with any
     /// matching `mobile` override applied on top. All lookups go through `field(_:)`.
     private let fields: [String: String]
@@ -81,7 +81,7 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         return nil
     }
 
-    private static func stringify(_ any: AnyCodable) -> String? {
+    private static func stringify(_ any: PoltioAnyCodable) -> String? {
         switch any.value {
         case let s as String: s
         case let i as Int: String(i)
@@ -107,14 +107,14 @@ public struct PoltioOverlayOptions: Codable, Equatable {
 
     /// Merges the top-level object and its nested `mobile` override object (mobile wins) into one
     /// normalized-key dictionary.
-    private static func buildFields(from raw: [String: AnyCodable]) -> [String: String] {
+    private static func buildFields(from raw: [String: PoltioAnyCodable]) -> [String: String] {
         var result: [String: String] = [:]
         for (key, value) in raw where key != "mobile" {
             if let str = stringify(value) {
                 result[normalizeKey(key)] = str
             }
         }
-        if let mobileAny = raw["mobile"], let mobileDict = mobileAny.value as? [String: AnyCodable] {
+        if let mobileAny = raw["mobile"], let mobileDict = mobileAny.value as? [String: PoltioAnyCodable] {
             for (key, value) in mobileDict {
                 if let str = stringify(value) {
                     result[normalizeKey(key)] = str
@@ -133,7 +133,7 @@ public struct PoltioOverlayOptions: Codable, Equatable {
     }
 
     /// The resolved trigger type (e.g. "box", "pill", "card"), respecting mobile overrides if present.
-    public var triggerType: String? {
+    var triggerType: String? {
         if let raw = rawTriggerType {
             return raw
         }
@@ -141,17 +141,17 @@ public struct PoltioOverlayOptions: Codable, Equatable {
     }
 
     /// Convenience check for box trigger type.
-    public var isBoxTrigger: Bool {
+    var isBoxTrigger: Bool {
         rawTriggerType == "box"
     }
 
     /// Convenience check for pill trigger type.
-    public var isPillTrigger: Bool {
+    var isPillTrigger: Bool {
         rawTriggerType == "pill"
     }
 
     /// Convenience check for card trigger type (rounded slideover/card trigger).
-    public var isCardTrigger: Bool {
+    var isCardTrigger: Bool {
         if isBoxTrigger || isPillTrigger {
             return false
         }
@@ -173,13 +173,13 @@ public struct PoltioOverlayOptions: Codable, Equatable {
     }
 
     /// Convenience check whether initial state should be active (auto-expand then auto-collapse).
-    public var isInitialActive: Bool {
+    var isInitialActive: Bool {
         floatingInitialPosition?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "active"
     }
 
     /// Convenience check whether the trigger should start in its expanded state at all
     /// (`active`, which also auto-collapses, or `expanded`, which stays open).
-    public var isInitialExpanded: Bool {
+    var isInitialExpanded: Bool {
         let value = floatingInitialPosition?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return value == "active" || value == "expanded"
     }
@@ -187,352 +187,352 @@ public struct PoltioOverlayOptions: Codable, Equatable {
     // MARK: - identity / iframe query params (passed through to the WebView URL)
 
     /// Free-form content identifier passed to the widget page, respecting mobile overrides.
-    public var content: String? {
+    var content: String? {
         field("widget-content")
     }
 
     /// Custom identifier passed to the widget page, respecting mobile overrides.
-    public var customId: String? {
+    var customId: String? {
         field("widget-custom-id")
     }
 
     /// Location/placement identifier passed to the widget page, respecting mobile overrides.
-    public var loc: String? {
+    var loc: String? {
         field("widget-loc")
     }
 
     /// Result-fit display mode (`off`/`sc`/`fit`/`vf`) passed to the widget page.
-    public var resultfit: String? {
+    var resultfit: String? {
         field("widget-resultfit")
     }
 
     /// Disclaimer display mode (`on`/`off`) passed to the widget page.
-    public var disclaimer: String? {
+    var disclaimer: String? {
         field("widget-disclaimer")
     }
 
     // MARK: - common
 
     /// Design type version identifier (e.g. "2025-01"), respecting mobile overrides.
-    public var floatingDesignType: String? {
+    var floatingDesignType: String? {
         field("floating-design-type")
     }
 
     /// Display type identifier (e.g. "slideover", "modal"), respecting mobile overrides.
-    public var floatingDisplayType: String? {
+    var floatingDisplayType: String? {
         field("floating-display-type")
     }
 
     /// Floating background color string (e.g. "rgb(174, 174, 209)" or "#00A3FF"), respecting mobile overrides.
-    public var floatingBgColor: String? {
+    var floatingBgColor: String? {
         field("floating-bgcolor", "floating-bg-color")
     }
 
     /// Background color for the expanded panel's content surface, respecting mobile overrides.
-    public var widgetBg: String? {
+    var widgetBg: String? {
         field("widget-bgcolor")
     }
 
     /// Background image URL for the expanded panel, respecting mobile overrides.
-    public var widgetBgImage: String? {
+    var widgetBgImage: String? {
         field("widget-bg-image")
     }
 
     /// Title for card trigger, respecting mobile overrides if present.
-    public var floatingTitle: String? {
+    var floatingTitle: String? {
         field("floating-title")
     }
 
     /// Description text for card trigger, respecting mobile overrides if present.
-    public var floatingDesc: String? {
+    var floatingDesc: String? {
         field("floating-desc")
     }
 
     /// Raw z-index string, respecting mobile overrides. Prefer `floatingZindex` for numeric use.
-    public var floatingZindexRaw: String? {
+    var floatingZindexRaw: String? {
         field("floating-zindex")
     }
 
     /// Parsed z-index value (default 100, matching the documented default).
-    public var floatingZindex: Double {
+    var floatingZindex: Double {
         Self.numericValue(floatingZindexRaw) ?? 100
     }
 
     /// Custom font family name, respecting mobile overrides. Falls back to the system font if the
     /// named font isn't registered in the host app.
-    public var floatingFontFamily: String? {
+    var floatingFontFamily: String? {
         field("floating-font-family")
     }
 
     /// Border radius specification, respecting mobile overrides.
-    public var floatingMobileTopBorderRadius: String? {
+    var floatingMobileTopBorderRadius: String? {
         field("floating-mobile-top-border-radius")
     }
 
     /// Whether the entire floating trigger should be suppressed, respecting mobile overrides.
-    public var hideButton: Bool {
+    var hideButton: Bool {
         Self.boolValue(field("floating-hide-button"), default: false)
     }
 
     /// Screen dock position (e.g. "bottom-right"), respecting mobile overrides.
-    public var floatingPosition: String? {
+    var floatingPosition: String? {
         field("floating-position")
     }
 
     /// Vertical component of `floatingPosition` (`top`/`center`/`bottom`), default `bottom`.
-    public var verticalPosition: String {
+    var verticalPosition: String {
         String((floatingPosition ?? "bottom-right").split(separator: "-", maxSplits: 1).first ?? "bottom")
     }
 
     /// Horizontal component of `floatingPosition` (`left`/`right`), default `right`.
-    public var horizontalPosition: String {
+    var horizontalPosition: String {
         let parts = (floatingPosition ?? "bottom-right").split(separator: "-", maxSplits: 1)
         return parts.count > 1 ? String(parts[1]) : "right"
     }
 
     /// Initial trigger position / state (e.g. "active", "collapsed", "expanded"), respecting mobile overrides.
-    public var floatingInitialPosition: String? {
+    var floatingInitialPosition: String? {
         field("floating-initial-position")
     }
 
     /// Scroll offset (px) at which the JS SDK reveals the trigger. No native equivalent (there's no
     /// generic host-scroll hook); decoded for parity only.
-    public var floatingScrollThreshold: Double {
+    var floatingScrollThreshold: Double {
         Self.numericValue(field("floating-scroll-threshold")) ?? 300
     }
 
     /// SVG asset path or URL for floating trigger, respecting mobile overrides if present.
-    public var floatingSvg: String? {
+    var floatingSvg: String? {
         field("floating-svg")
     }
 
     /// Whether the product-card variant is enabled. No native product_card trigger exists yet;
     /// decoded for parity only.
-    public var productCardEnabled: Bool {
+    var productCardEnabled: Bool {
         Self.boolValue(field("floating-product-card-enabled"), default: false)
     }
 
     // MARK: - card
 
     /// Action button label for card trigger, respecting mobile overrides if present.
-    public var floatingButtonText: String? {
+    var floatingButtonText: String? {
         field("floating-buttontext", "floating-button-text", "floating-bar-text-button")
     }
 
     /// Floating text color string (e.g. "white" or "#FFFFFF"), respecting mobile overrides.
-    public var floatingTextColor: String? {
+    var floatingTextColor: String? {
         field("floating-textcolor", "floating-text-color")
     }
 
     /// Floating icon color string (e.g. "#1E3D54"), respecting mobile overrides.
-    public var floatingIconColor: String? {
+    var floatingIconColor: String? {
         field("floating-icon-color", "floating-widget-icon-color")
     }
 
     /// Whether the Poltio branding mark is shown in the expanded card (default true), respecting mobile overrides.
-    public var showLogo: Bool {
+    var showLogo: Bool {
         Self.boolValue(field("floating-show-logo"), default: true)
     }
 
     // MARK: - pill
 
     /// First pill text segment (e.g. "Try our"), respecting mobile overrides.
-    public var textFirst: String? {
+    var textFirst: String? {
         field("floating-text-first")
     }
 
     /// Second pill text segment (e.g. "PRODUCT"), respecting mobile overrides.
-    public var textSecond: String? {
+    var textSecond: String? {
         field("floating-text-second")
     }
 
     /// Third pill text segment (e.g. "FINDER"), respecting mobile overrides.
-    public var textThird: String? {
+    var textThird: String? {
         field("floating-text-third")
     }
 
     /// Color for `textFirst`, respecting mobile overrides.
-    public var textColorFirst: String? {
+    var textColorFirst: String? {
         field("floating-text-color-first")
     }
 
     /// Color for `textSecond`, respecting mobile overrides.
-    public var textColorSecond: String? {
+    var textColorSecond: String? {
         field("floating-text-color-second")
     }
 
     /// Color for `textThird`, respecting mobile overrides.
-    public var textColorThird: String? {
+    var textColorThird: String? {
         field("floating-text-color-third")
     }
 
     /// Pulsate ring color, respecting mobile overrides.
-    public var pulsateColor: String? {
+    var pulsateColor: String? {
         field("floating-pulsate-color")
     }
 
     /// Whether the pulsate animation is shown (default true), respecting mobile overrides.
-    public var showPulsate: Bool {
+    var showPulsate: Bool {
         Self.boolValue(field("floating-show-pulsate"), default: true)
     }
 
     /// Initial pill state (`closed`/`open`), respecting mobile overrides.
-    public var pillStartMode: String? {
+    var pillStartMode: String? {
         field("floating-pill-start-mode")
     }
 
     /// Whether the pill shows an explicit close button (default false), respecting mobile overrides.
-    public var pillShowCloseButton: Bool {
+    var pillShowCloseButton: Bool {
         Self.boolValue(field("floating-pill-show-close-button"), default: false)
     }
 
     /// Hours to suppress the trigger after an explicit close (default 48), respecting mobile overrides.
-    public var pillCloseRememberDuration: Double {
+    var pillCloseRememberDuration: Double {
         Self.numericValue(field("floating-pill-close-remember-duration")) ?? 48
     }
 
     // MARK: - box
 
     /// Image path or URL for floating trigger, respecting mobile overrides if present.
-    public var floatingImg: String? {
+    var floatingImg: String? {
         field("floating-img")
     }
 
     /// First header text line for floating box trigger, respecting mobile overrides if present.
-    public var floatingBoxTextFirst: String? {
+    var floatingBoxTextFirst: String? {
         field("floating-box-text-first")
     }
 
     /// Second footer text line for floating box trigger, respecting mobile overrides if present.
-    public var floatingBoxTextSecond: String? {
+    var floatingBoxTextSecond: String? {
         field("floating-box-text-second")
     }
 
     /// Color for the box header text, respecting mobile overrides.
-    public var boxTextColorFirst: String? {
+    var boxTextColorFirst: String? {
         field("floating-box-text-color-first")
     }
 
     /// Color for the box footer text, respecting mobile overrides.
-    public var boxTextColorSecond: String? {
+    var boxTextColorSecond: String? {
         field("floating-box-text-color-second")
     }
 
     /// Background color for the box's outer chrome, respecting mobile overrides.
-    public var boxBgColorFirst: String? {
+    var boxBgColorFirst: String? {
         field("floating-box-bg-color-first")
     }
 
     /// Background color for the box's inner content surface, respecting mobile overrides.
-    public var boxBgColorSecond: String? {
+    var boxBgColorSecond: String? {
         field("floating-box-bg-color-second")
     }
 
     /// Raw CSS font size for the box header text (e.g. "1rem"), respecting mobile overrides.
-    public var boxTextFirstFontSizeRaw: String? {
+    var boxTextFirstFontSizeRaw: String? {
         field("floating-box-text-first-font-size")
     }
 
     /// Raw CSS font weight for the box header text (e.g. "700"), respecting mobile overrides.
-    public var boxTextFirstFontWeightRaw: String? {
+    var boxTextFirstFontWeightRaw: String? {
         field("floating-box-text-first-font-weight")
     }
 
     /// Raw CSS font size for the box footer text (e.g. "1.25rem"), respecting mobile overrides.
-    public var boxTextSecondFontSizeRaw: String? {
+    var boxTextSecondFontSizeRaw: String? {
         field("floating-box-text-second-font-size")
     }
 
     /// Raw CSS font weight for the box footer text (e.g. "700"), respecting mobile overrides.
-    public var boxTextSecondFontWeightRaw: String? {
+    var boxTextSecondFontWeightRaw: String? {
         field("floating-box-text-second-font-weight")
     }
 
     /// Raw CSS text alignment for the box header text (`flex-start`/`center`/`flex-end`), respecting mobile overrides.
-    public var boxTextAlignFirstRaw: String? {
+    var boxTextAlignFirstRaw: String? {
         field("floating-box-text-align-first")
     }
 
     /// Raw CSS text alignment for the box footer text, respecting mobile overrides.
-    public var boxTextAlignSecondRaw: String? {
+    var boxTextAlignSecondRaw: String? {
         field("floating-box-text-align-second")
     }
 
     /// Initial box state (`closed`/`open`), respecting mobile overrides.
-    public var boxStartMode: String? {
+    var boxStartMode: String? {
         field("floating-box-start-mode")
     }
 
     /// Whether the box should auto-expand on host scroll (default true). No generic host-scroll hook
     /// is available natively; decoded for parity only.
-    public var boxOpenOnScroll: Bool {
+    var boxOpenOnScroll: Bool {
         Self.boolValue(field("floating-box-open-on-scroll"), default: true)
     }
 
     /// Milliseconds after which the box auto-expands once, if set. `nil` disables auto-expand.
-    public var boxOpenOnTime: Double? {
+    var boxOpenOnTime: Double? {
         Self.numericValue(field("floating-box-open-on-time"))
     }
 
     /// Whether the box shows an explicit close button (default false), respecting mobile overrides.
-    public var boxShowCloseButton: Bool {
+    var boxShowCloseButton: Bool {
         Self.boolValue(field("floating-box-show-close-button"), default: false)
     }
 
     /// Hours to suppress the trigger after an explicit close (default 48), respecting mobile overrides.
-    public var boxCloseRememberDuration: Double {
+    var boxCloseRememberDuration: Double {
         Self.numericValue(field("floating-box-close-remember-duration")) ?? 48
     }
 
     /// Uniform scale factor applied to the box trigger's dimensions (default 1), respecting mobile overrides.
-    public var boxResize: Double {
+    var boxResize: Double {
         Self.numericValue(field("floating-box-resize")) ?? 1
     }
 
     /// Whether the banner image should fill the entire expanded card (default false), respecting mobile overrides.
-    public var boxFullImageMode: Bool {
+    var boxFullImageMode: Bool {
         Self.boolValue(field("floating-box-full-image-mode"), default: false)
     }
 
     // MARK: - product_card (decoded for parity; no native product_card trigger exists yet)
 
-    public var productParent: String? {
+    var productParent: String? {
         field("floating-product-parent")
     }
 
-    public var productParentNumber: String? {
+    var productParentNumber: String? {
         field("floating-product-parent-number")
     }
 
-    public var productSibling: String? {
+    var productSibling: String? {
         field("floating-product-sibling")
     }
 
-    public var productChildNumber: String? {
+    var productChildNumber: String? {
         field("floating-product-child-number")
     }
 
-    public var productImage: String? {
+    var productImage: String? {
         field("floating-product-image")
     }
 
     // MARK: - iframe (decoded for parity; DOM-embedding only, no native equivalent)
 
-    public var parentId: String? {
+    var parentId: String? {
         field("floating-parent-id")
     }
 
-    public var parentClassName: String? {
+    var parentClassName: String? {
         field("floating-parent-class-name")
     }
 
-    public var parentHeight: String? {
+    var parentHeight: String? {
         field("floating-parent-height")
     }
 
     #if canImport(UIKit)
         /// Resolved background color with fallback to Poltio vibrant blue (`#00A3FF`).
-        public var resolvedBgColor: UIColor {
+        var resolvedBgColor: UIColor {
             if let colorStr = floatingBgColor, let color = PoltioColorParser.parse(colorStr) {
                 return color
             }
@@ -540,7 +540,7 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         }
 
         /// Resolved text color with fallback to white.
-        public var resolvedTextColor: UIColor {
+        var resolvedTextColor: UIColor {
             if let colorStr = floatingTextColor, let color = PoltioColorParser.parse(colorStr) {
                 return color
             }
@@ -548,7 +548,7 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         }
 
         /// Resolved icon/accent color with fallback to deep navy (`#1E3D54`).
-        public var resolvedIconColor: UIColor {
+        var resolvedIconColor: UIColor {
             if let colorStr = floatingIconColor, let color = PoltioColorParser.parse(colorStr) {
                 return color
             }
@@ -556,7 +556,7 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         }
 
         /// Resolved widget/panel background color with fallback to white.
-        public var resolvedWidgetBgColor: UIColor {
+        var resolvedWidgetBgColor: UIColor {
             if let colorStr = widgetBg, let color = PoltioColorParser.parse(colorStr) {
                 return color
             }
@@ -564,7 +564,7 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         }
 
         /// Resolves a raw color string against `PoltioColorParser`, falling back to a caller-provided default.
-        public static func resolvedColor(_ raw: String?, fallback: UIColor) -> UIColor {
+        static func resolvedColor(_ raw: String?, fallback: UIColor) -> UIColor {
             guard let raw, let color = PoltioColorParser.parse(raw) else {
                 return fallback
             }
@@ -575,7 +575,7 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         /// if the named font isn't registered in the host app (custom fonts can't be downloaded natively).
         /// Also recognizes CSS generic family keywords (`serif`, `monospace`, ...) the same way
         /// Android's `Typeface.create` does natively, since `UIFont(name:)` doesn't understand them.
-        public func resolvedFont(size: CGFloat, weight: UIFont.Weight = .regular) -> UIFont {
+        func resolvedFont(size: CGFloat, weight: UIFont.Weight = .regular) -> UIFont {
             let base = UIFont.systemFont(ofSize: size, weight: weight)
             guard let family = floatingFontFamily?.trimmingCharacters(in: .whitespacesAndNewlines), !family.isEmpty else {
                 return base
@@ -601,7 +601,7 @@ public struct PoltioOverlayOptions: Codable, Equatable {
 
         /// Parses a CSS length string (`"1.75em"`, `"1rem"`, `"16px"`, `"16"`) into points.
         /// `em`/`rem` are resolved against a 16pt base, matching typical browser defaults.
-        public static func cssLength(_ raw: String?, default defaultValue: CGFloat) -> CGFloat {
+        static func cssLength(_ raw: String?, default defaultValue: CGFloat) -> CGFloat {
             guard let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !trimmed.isEmpty else {
                 return defaultValue
             }
@@ -618,7 +618,7 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         }
 
         /// Maps a CSS numeric font-weight string (`"400"`…`"900"`) to `UIFont.Weight`.
-        public static func fontWeight(_ raw: String?, default defaultValue: UIFont.Weight) -> UIFont.Weight {
+        static func fontWeight(_ raw: String?, default defaultValue: UIFont.Weight) -> UIFont.Weight {
             guard let value = numericValue(raw) else { return defaultValue }
             switch value {
             case ..<250: return .ultraLight
@@ -634,7 +634,7 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         }
 
         /// Maps a CSS flexbox alignment keyword (`flex-start`/`center`/`flex-end`, or `left`/`right`) to `NSTextAlignment`.
-        public static func textAlignment(_ raw: String?, default defaultValue: NSTextAlignment) -> NSTextAlignment {
+        static func textAlignment(_ raw: String?, default defaultValue: NSTextAlignment) -> NSTextAlignment {
             guard let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !value.isEmpty else {
                 return defaultValue
             }
@@ -647,37 +647,37 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         }
 
         /// Parsed box header font size (default 16pt / "1rem").
-        public var boxTextFirstFontSize: CGFloat {
+        var boxTextFirstFontSize: CGFloat {
             Self.cssLength(boxTextFirstFontSizeRaw, default: 16)
         }
 
         /// Parsed box header font weight (default bold / "700").
-        public var boxTextFirstFontWeight: UIFont.Weight {
+        var boxTextFirstFontWeight: UIFont.Weight {
             Self.fontWeight(boxTextFirstFontWeightRaw, default: .bold)
         }
 
         /// Parsed box footer font size (default 20pt / "1.25rem").
-        public var boxTextSecondFontSize: CGFloat {
+        var boxTextSecondFontSize: CGFloat {
             Self.cssLength(boxTextSecondFontSizeRaw, default: 20)
         }
 
         /// Parsed box footer font weight (default bold / "700").
-        public var boxTextSecondFontWeight: UIFont.Weight {
+        var boxTextSecondFontWeight: UIFont.Weight {
             Self.fontWeight(boxTextSecondFontWeightRaw, default: .bold)
         }
 
         /// Parsed box header text alignment (default `.left` / "flex-start").
-        public var boxTextAlignFirst: NSTextAlignment {
+        var boxTextAlignFirst: NSTextAlignment {
             Self.textAlignment(boxTextAlignFirstRaw, default: .left)
         }
 
         /// Parsed box footer text alignment (default `.left` / "flex-start").
-        public var boxTextAlignSecond: NSTextAlignment {
+        var boxTextAlignSecond: NSTextAlignment {
             Self.textAlignment(boxTextAlignSecondRaw, default: .left)
         }
 
         /// Parsed top-corner radius (default 28pt / "1.75em").
-        public var resolvedMobileTopBorderRadius: CGFloat {
+        var resolvedMobileTopBorderRadius: CGFloat {
             Self.cssLength(floatingMobileTopBorderRadius, default: 28)
         }
     #endif
@@ -687,7 +687,7 @@ public struct PoltioOverlayOptions: Codable, Equatable {
     /// If it is a relative path (e.g. `widget/1787042301.079.svg`), it is resolved using the CDN prefix:
     /// - For pill triggers / `floatingSvg`: `https://cdn.poltio.com/40x40/`
     /// - For box triggers: `https://cdn.poltio.com/240x120/`
-    public func resolvedImageUrl(cdnPrefix: String? = nil) -> URL? {
+    func resolvedImageUrl(cdnPrefix: String? = nil) -> URL? {
         let rawImgPath = [floatingSvg, floatingImg]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .first { !$0.isEmpty }
@@ -716,7 +716,7 @@ public struct PoltioOverlayOptions: Codable, Equatable {
 
     /// Memberwise initializer for manual construction (e.g. unit tests). Every parameter maps to its
     /// documented API field; pass `mobile` to simulate per-platform overrides.
-    public init(
+    init(
         triggerType: String? = nil,
         floatingBoxTextFirst: String? = nil,
         floatingBoxTextSecond: String? = nil,
@@ -782,7 +782,7 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         parentId: String? = nil,
         parentClassName: String? = nil,
         parentHeight: String? = nil,
-        mobile: [String: AnyCodable]? = nil
+        mobile: [String: PoltioAnyCodable]? = nil
     ) {
         var built: [String: String] = [:]
         func set(_ key: String, _ value: String?) {
@@ -867,12 +867,12 @@ public struct PoltioOverlayOptions: Codable, Equatable {
         fields = built
     }
 
-    public init(from decoder: Decoder) throws {
-        let raw = try [String: AnyCodable](from: decoder)
+    init(from decoder: Decoder) throws {
+        let raw = try [String: PoltioAnyCodable](from: decoder)
         fields = Self.buildFields(from: raw)
     }
 
-    public func encode(to encoder: Encoder) throws {
+    func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: DynamicCodingKeys.self)
         for (key, value) in fields.sorted(by: { $0.key < $1.key }) {
             guard let codingKey = DynamicCodingKeys(stringValue: key) else { continue }
@@ -991,18 +991,18 @@ struct DynamicCodingKeys: CodingKey {
 }
 
 /// Type-erased Codable value container for arbitrary JSON values.
-public struct AnyCodable: Codable, Equatable {
-    public let value: Any
+struct PoltioAnyCodable: Codable, Equatable {
+    let value: Any
 
-    public var stringValue: String? {
+    var stringValue: String? {
         value as? String
     }
 
-    public init(_ value: Any) {
+    init(_ value: Any) {
         self.value = value
     }
 
-    public init(from decoder: Decoder) throws {
+    init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         if let str = try? container.decode(String.self) {
             value = str
@@ -1012,16 +1012,16 @@ public struct AnyCodable: Codable, Equatable {
             value = doubleVal
         } else if let boolVal = try? container.decode(Bool.self) {
             value = boolVal
-        } else if let dict = try? container.decode([String: AnyCodable].self) {
+        } else if let dict = try? container.decode([String: PoltioAnyCodable].self) {
             value = dict
-        } else if let array = try? container.decode([AnyCodable].self) {
+        } else if let array = try? container.decode([PoltioAnyCodable].self) {
             value = array
         } else {
             value = ""
         }
     }
 
-    public func encode(to encoder: Encoder) throws {
+    func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         if let str = value as? String {
             try container.encode(str)
@@ -1031,16 +1031,16 @@ public struct AnyCodable: Codable, Equatable {
             try container.encode(doubleVal)
         } else if let boolVal = value as? Bool {
             try container.encode(boolVal)
-        } else if let dict = value as? [String: AnyCodable] {
+        } else if let dict = value as? [String: PoltioAnyCodable] {
             try container.encode(dict)
-        } else if let array = value as? [AnyCodable] {
+        } else if let array = value as? [PoltioAnyCodable] {
             try container.encode(array)
         } else {
             try container.encode("\(value)")
         }
     }
 
-    public static func == (lhs: AnyCodable, rhs: AnyCodable) -> Bool {
+    static func == (lhs: PoltioAnyCodable, rhs: PoltioAnyCodable) -> Bool {
         if let lhsStr = lhs.value as? String, let rhsStr = rhs.value as? String {
             return lhsStr == rhsStr
         } else if let lhsInt = lhs.value as? Int, let rhsInt = rhs.value as? Int {
@@ -1049,9 +1049,9 @@ public struct AnyCodable: Codable, Equatable {
             return lhsDouble == rhsDouble
         } else if let lhsBool = lhs.value as? Bool, let rhsBool = rhs.value as? Bool {
             return lhsBool == rhsBool
-        } else if let lhsDict = lhs.value as? [String: AnyCodable], let rhsDict = rhs.value as? [String: AnyCodable] {
+        } else if let lhsDict = lhs.value as? [String: PoltioAnyCodable], let rhsDict = rhs.value as? [String: PoltioAnyCodable] {
             return lhsDict == rhsDict
-        } else if let lhsArray = lhs.value as? [AnyCodable], let rhsArray = rhs.value as? [AnyCodable] {
+        } else if let lhsArray = lhs.value as? [PoltioAnyCodable], let rhsArray = rhs.value as? [PoltioAnyCodable] {
             return lhsArray == rhsArray
         }
         return false

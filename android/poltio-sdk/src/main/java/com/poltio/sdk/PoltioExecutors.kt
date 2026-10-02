@@ -2,6 +2,7 @@ package com.poltio.sdk
 
 import android.os.Handler
 import android.os.Looper
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.atomic.AtomicInteger
@@ -21,6 +22,16 @@ internal object PoltioExecutors {
             }
         },
     )
+
+    /**
+     * Single-threaded queue for SDK state work that must not run on the caller's (usually main)
+     * thread — `SharedPreferences` reads/writes and the per-screen widget-resolution bookkeeping.
+     * Serial, so `track()` calls are processed in the order they were made: a fast A→B navigation
+     * always resolves B last, exactly as if it had run inline.
+     */
+    val serial: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "PoltioSDK-State").apply { isDaemon = true }
+    }
 
     val main: Handler by lazy { Handler(Looper.getMainLooper()) }
 

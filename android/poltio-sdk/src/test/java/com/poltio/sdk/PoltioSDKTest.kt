@@ -23,6 +23,38 @@ class PoltioSDKTest {
     }
 
     @Test
+    fun `default log level is WARNING`() {
+        PoltioSDK.configure(application, clientKey = "poltio_test_pk_123")
+        assertEquals(PoltioLogLevel.WARNING, PoltioSDK.logLevel)
+    }
+
+    @Test
+    fun `identify keeps puid in memory immediately and persists it in the background`() {
+        PoltioSDK.configure(application, clientKey = "poltio_test_pk_123")
+        PoltioSDK.identify("  user-99  ")
+        assertEquals("user-99", PoltioSDK.puid)
+
+        // Wait for the serial state executor to flush the write, then check it hit disk.
+        PoltioExecutors.serial.submit {}.get(3, TimeUnit.SECONDS)
+        val persisted = application.getSharedPreferences("com.poltio.sdk.prefs", android.content.Context.MODE_PRIVATE)
+            .getString("puid", null)
+        assertEquals("user-99", persisted)
+    }
+
+    @Test
+    fun `track view sends the widget request from a background thread`() {
+        val (port, future) = startCapturingServer(responseStatusLine = "HTTP/1.1 404 Not Found")
+        PoltioSDK.configure(application, clientKey = "poltio_test_pk_123")
+        PoltioSDK.apiClient = PoltioAPIClient(baseURL = "http://127.0.0.1:$port")
+
+        PoltioSDK.track("view", mapOf("url" to "myapp://products/1"))
+
+        val request = future.get(3, TimeUnit.SECONDS)
+        assertEquals("/sdk/mobile/v1/widget", request.path)
+        assertEquals("myapp://products/1", JSONObject(request.body).getString("url"))
+    }
+
+    @Test
     fun `not initialized before configure`() {
         assertFalse(PoltioSDK.isInitialized)
         assertNull(PoltioSDK.clientKey)

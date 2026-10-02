@@ -16,7 +16,9 @@ import android.view.ViewGroup
 import android.view.ViewOutlineProvider
 import android.view.animation.AccelerateInterpolator
 import android.view.animation.DecelerateInterpolator
+import android.view.WindowManager
 import android.webkit.JavascriptInterface
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -24,6 +26,7 @@ import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.ProgressBar
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import com.poltio.sdk.PoltioExecutors
 import com.poltio.sdk.PoltioLogger
@@ -48,7 +51,7 @@ import org.json.JSONObject
  * `window.PoltioNativeBridge.postMessage(JSON.stringify({ event, data }))` — the Android-side name
  * for the same bridge iOS exposes as `window.webkit.messageHandlers.poltioNative`.
  */
-class PoltioWebViewActivity : Activity() {
+internal class PoltioWebViewActivity : Activity() {
     companion object {
         private const val EXTRA_PUBLIC_ID = "com.poltio.sdk.extra.PUBLIC_ID"
         private const val EXTRA_WIDGET_ID = "com.poltio.sdk.extra.WIDGET_ID"
@@ -79,6 +82,21 @@ class PoltioWebViewActivity : Activity() {
                 putExtra(EXTRA_RESULTFIT, overlayOptions?.resultfit)
                 putExtra(EXTRA_WIDGET_BG_COLOR, overlayOptions?.resolvedWidgetBgColor ?: Color.WHITE)
             }
+
+        /**
+         * Whether [url] may load inside the widget WebView. The JS bridge
+         * (`window.PoltioNativeBridge`) is exposed to whatever page is loaded, so main-frame
+         * navigation stays confined to Poltio's own domain; anything else (product links, external
+         * sites, `tel:`/`mailto:`, host-app deep links) is handed to the system instead. Mirrors iOS's
+         * `PoltioWebViewController.isTrustedWidgetURL`.
+         */
+        fun isTrustedWidgetUrl(url: Uri): Boolean {
+            val scheme = url.scheme?.lowercase() ?: return false
+            if (scheme == "about" || scheme == "blob" || scheme == "data") return true
+            if (scheme != "https" && scheme != "http") return false
+            val host = url.host?.lowercase() ?: return false
+            return host == "poltio.com" || host.endsWith(".poltio.com")
+        }
 
         /** Builds the widget WebView URL with pass-through query parameters. */
         fun buildWidgetUrl(
@@ -139,7 +157,7 @@ class PoltioWebViewActivity : Activity() {
 
             PoltioExecutors.runOnMain {
                 PoltioLogger.debug { "Received widget bridge event '$event'." }
-                PoltioSDK.onWidgetEvent?.invoke(event, data)
+                PoltioSDK.onWidgetEvent?.onWidgetEvent(event, data)
                 if (event == "close") dismissWithAnimation()
             }
         }
@@ -152,6 +170,13 @@ class PoltioWebViewActivity : Activity() {
     }
 
     private fun setupUI() {
+        // Lay out edge-to-edge on every API level and apply system-bar/keyboard insets ourselves
+        // (below), so behaviour matches what Android 15+ enforces for apps targeting SDK 35 — and
+        // so the sheet shrinks above the soft keyboard instead of hiding lead-form inputs behind it.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        @Suppress("DEPRECATION")
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+
         val root = FrameLayout(this)
 
         scrim = View(this).apply {
@@ -184,6 +209,12 @@ class PoltioWebViewActivity : Activity() {
             val statusBarInset = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
             sheetParams.topMargin = statusBarInset + dp(24f)
             sheet.layoutParams = sheetParams
+
+            // The sheet's background keeps running behind the navigation bar, but its content
+            // (the WebView) stops above whichever is taller: the nav bar or the soft keyboard.
+            val navigationBarInset = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            val imeInset = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+            sheet.setPadding(0, 0, 0, maxOf(navigationBarInset, imeInset))
             insets
         }
 
@@ -233,15 +264,29 @@ class PoltioWebViewActivity : Activity() {
                 // system browser instead of letting the WebView follow it.
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                     val url = request?.url ?: return false
-                    val host = url.host
-                    if (host != null && (host == "poltio.com" || host.endsWith(".poltio.com"))) {
-                        return false
-                    }
+                    if (isTrustedWidgetUrl(url)) return false
                     try {
                         view?.context?.startActivity(Intent(Intent.ACTION_VIEW, url))
                     } catch (error: Exception) {
                         PoltioLogger.error { "Failed to open external URL: ${error.message}" }
                     }
+                    return true
+                }
+
+                // Without this override, a crashed or OOM-killed WebView renderer process takes the
+                // whole host app down with it (API 26+). Tear the sheet down instead and report the
+                // event as handled, so only the widget is lost — never the host app.
+                override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                    val crashed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) detail?.didCrash() == true else false
+                    PoltioLogger.warning { "Widget WebView renderer process gone (crashed: $crashed); closing the widget." }
+                    view?.let { gone ->
+                        (gone.parent as? ViewGroup)?.removeView(gone)
+                        gone.destroy()
+                    }
+                    if (this@PoltioWebViewActivity.webView === view) {
+                        this@PoltioWebViewActivity.webView = null
+                    }
+                    if (!isFinishing) finish()
                     return true
                 }
             }

@@ -5,7 +5,7 @@
     #endif
 
     /// Common protocol for all Poltio floating trigger views (box, pill, etc.).
-    public protocol PoltioTriggerPresentable: UIView {
+    protocol PoltioTriggerPresentable: UIView {
         /// Resets the trigger to its collapsed state.
         func resetToCollapsed(animated: Bool)
     }
@@ -97,9 +97,9 @@
     }
 
     /// Native floating pill trigger view supporting collapsed (circular bouncing) and expanded (pill capsule) states.
-    public final class PoltioFloatingPillTriggerView: UIView, PoltioTriggerPresentable {
+    final class PoltioFloatingPillTriggerView: UIView, PoltioTriggerPresentable {
         /// Visual states of the floating pill trigger.
-        public enum TriggerState {
+        enum TriggerState {
             case collapsed
             case expanded
         }
@@ -110,7 +110,7 @@
         /// `pillCloseRememberDuration`-hour dismissal and fully hides the trigger (not just a collapse).
         private let onDismissForever: (Double) -> Void
 
-        public private(set) var currentState: TriggerState
+        private(set) var currentState: TriggerState
 
         // UI Components
         private let cardContainer = UIView()
@@ -155,7 +155,7 @@
         /// Pulsate Animation Key
         private static let pulsateAnimationKey = "poltio.pill.pulsate"
 
-        public init(
+        init(
             widget: PoltioWidgetResponse,
             onOpenWidget: @escaping () -> Void,
             onDismissForever: @escaping (Double) -> Void = { _ in }
@@ -364,9 +364,26 @@
             let swipeLeft = UISwipeGestureRecognizer(target: self, action: #selector(handleSwipe))
             swipeLeft.direction = .left
             cardContainer.addGestureRecognizer(swipeLeft)
+
+            let options = widget.overlayOptions
+            var actions: [UIAccessibilityCustomAction] = []
+            if options.pillShowCloseButton {
+                actions.append(PoltioTriggerAccessibility.action(PoltioTriggerAccessibility.closeActionName) { [weak self] in
+                    self?.handleCloseTap()
+                })
+            }
+            PoltioTriggerAccessibility.configure(
+                cardContainer,
+                label: PoltioTriggerAccessibility.label(from: [
+                    options.textFirst ?? "Try our",
+                    options.textSecond ?? "PRODUCT",
+                    options.textThird ?? "FINDER",
+                ]),
+                actions: actions
+            )
         }
 
-        override public func layoutSubviews() {
+        override func layoutSubviews() {
             super.layoutSubviews()
             // The collapsed puck always occupies the trailing 56x56 region regardless of the view's
             // current (possibly expanded) width, since the trailing edge is what's pinned by the overlay.
@@ -384,13 +401,13 @@
 
         // MARK: - State Management
 
-        public func setState(_ state: TriggerState, animated: Bool = true) {
+        func setState(_ state: TriggerState, animated: Bool = true) {
             guard currentState != state else { return }
             currentState = state
             applyState(state, animated: animated)
         }
 
-        public func resetToCollapsed(animated: Bool) {
+        func resetToCollapsed(animated: Bool) {
             autoCollapseTimer?.invalidate()
             autoCollapseTimer = nil
             setState(.collapsed, animated: animated)
@@ -531,7 +548,7 @@
         }
 
         /// Notification posted when the host app scrolls or receives user touches outside the trigger.
-        public static let didScrollNotification = Notification.Name("PoltioSDK.hostDidScroll")
+        static let didScrollNotification = Notification.Name("PoltioSDK.hostDidScroll")
 
         private func setupScrollObserver() {
             scrollObserver = NotificationCenter.default.addObserver(
@@ -678,7 +695,7 @@
         // MARK: - Actions
 
         @objc private func handleTap() {
-            if currentState == .collapsed {
+            if currentState == .collapsed, !PoltioTriggerAccessibility.shouldSkipExpandStep {
                 setState(.expanded, animated: true)
             } else {
                 onOpenWidget()

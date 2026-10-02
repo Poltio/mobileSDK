@@ -20,6 +20,12 @@ public final class PoltioSDK {
     private static let sdkIdStorageKey = "com.poltio.sdk.sdk_id"
     private static let puidStorageKey = "com.poltio.sdk.puid"
 
+    /// The semantic version of this SDK build (e.g. "1.0.0"). Also sent to the Poltio API with
+    /// every request so the backend can tell SDK releases apart.
+    public static var version: String {
+        PoltioSDKInfo.version
+    }
+
     /// The active log level for the SDK.
     public static var logLevel: PoltioLogLevel {
         get { PoltioLogger.logLevel }
@@ -33,7 +39,7 @@ public final class PoltioSDK {
     }
 
     /// Instance property for cache TTL.
-    public var cacheTTL: TimeInterval {
+    var cacheTTL: TimeInterval {
         get { _widgetCache.defaultTTL }
         set { _widgetCache.defaultTTL = newValue }
     }
@@ -45,7 +51,7 @@ public final class PoltioSDK {
     }
 
     /// Instance property for cache item limit.
-    public var cacheLimit: Int {
+    var cacheLimit: Int {
         get { _widgetCache.countLimit }
         set { _widgetCache.countLimit = newValue }
     }
@@ -56,7 +62,7 @@ public final class PoltioSDK {
     }
 
     /// Instance method to clear the in-memory widget cache.
-    public func clearCache() {
+    func clearCache() {
         _widgetCache.clear()
     }
 
@@ -163,7 +169,7 @@ public final class PoltioSDK {
                 UserDefaults.standard.removeObject(forKey: PoltioSDK.sdkIdStorageKey)
                 UserDefaults.standard.removeObject(forKey: PoltioSDK.puidStorageKey)
             }
-            PoltioLogger.logLevel = .info
+            PoltioLogger.logLevel = .warning
         }
     #endif
 
@@ -176,13 +182,14 @@ public final class PoltioSDK {
     ///     which auto-detects the environment from the app's build configuration: Debug builds resolve
     ///     to stage, Release builds (including TestFlight/App Store) resolve to production. Pass an
     ///     explicit value to override this detection.
-    ///   - logLevel: Verbosity level of console logging (defaults to `.info`).
+    ///   - logLevel: Verbosity level of console logging (defaults to `.warning`). Use `.debug` during
+    ///     integration to inspect requests, responses, and identifiers.
     /// - Returns: The configured shared instance.
     @discardableResult
     public static func configure(
         clientKey: String,
         useStage: Bool? = nil,
-        logLevel: PoltioLogLevel = .info
+        logLevel: PoltioLogLevel = .warning
     ) -> PoltioSDK {
         shared.configure(clientKey: clientKey, useStage: useStage, logLevel: logLevel)
     }
@@ -192,7 +199,7 @@ public final class PoltioSDK {
     func configure(
         clientKey: String,
         useStage: Bool? = nil,
-        logLevel: PoltioLogLevel = .info
+        logLevel: PoltioLogLevel = .warning
     ) -> PoltioSDK {
         let trimmedKey = clientKey.trimmingCharacters(in: .whitespacesAndNewlines)
         PoltioLogger.logLevel = logLevel
@@ -214,7 +221,8 @@ public final class PoltioSDK {
             PoltioLogger.info("Using STAGE API endpoint (\(environment.baseURL)). Pass useStage: false to configure(clientKey:) once you're ready to point at production.")
         }
 
-        PoltioLogger.info("Configured successfully (SDK ID: \(sdkId)).")
+        PoltioLogger.info("Configured successfully (SDK version \(PoltioSDKInfo.version)).")
+        PoltioLogger.debug("SDK ID: \(sdkId)")
         return self
     }
 
@@ -234,11 +242,11 @@ public final class PoltioSDK {
             if let validPuid = trimmedPuid, !validPuid.isEmpty {
                 self._puid = validPuid
                 UserDefaults.standard.set(validPuid, forKey: PoltioSDK.puidStorageKey)
-                PoltioLogger.info("Identified user with PUID: '\(validPuid)'.")
+                PoltioLogger.debug("Identified user with PUID: '\(validPuid)'.")
             } else {
                 self._puid = nil
                 UserDefaults.standard.removeObject(forKey: PoltioSDK.puidStorageKey)
-                PoltioLogger.info("Cleared PUID.")
+                PoltioLogger.debug("Cleared PUID.")
             }
             self._puidLoaded = true
         }
@@ -247,11 +255,15 @@ public final class PoltioSDK {
     // MARK: - Public Event Tracking API
 
     /// Tracks an in-app event with optional parameters.
-    /// Automatically attaches `sdk_id` and `puid` (when available) to the event parameters.
-    /// For `view` events, triggers backend widget resolution via `/sdk/mobile/v1/widget`.
+    ///
+    /// Screen views (`"view"`, `"viewContent"`, `"view_content"`, case-insensitive) are the events
+    /// that drive the SDK: each one resolves the widget configured for the screen's `url` (or
+    /// `screen`/`page`) param via `/sdk/mobile/v1/widget` and shows or hides its floating trigger.
+    /// Other event names are currently accepted and logged locally only — they are **not** sent to
+    /// the Poltio API. To report a purchase for conversion attribution, use `recordPurchase(...)`.
     /// - Parameters:
-    ///   - event: The event name (e.g. "view", "TrackConversion")
-    ///   - params: Dictionary of event properties (e.g. ["url": "https://www.poltio.com/pdp"])
+    ///   - event: The event name (e.g. "view").
+    ///   - params: Dictionary of event properties (e.g. ["url": "myapp://products/123"]).
     public static func track(event: String, params: [String: Any]? = nil) {
         shared.track(event: event, params: params)
     }
@@ -276,7 +288,7 @@ public final class PoltioSDK {
             enrichedParams["puid"] = currentPuid
         }
 
-        PoltioLogger.info("Event tracked: '\(trimmedEvent)', params: \(enrichedParams)")
+        PoltioLogger.debug("Event tracked: '\(trimmedEvent)', params: \(enrichedParams)")
 
         if isViewEvent(trimmedEvent) {
             let rawUrl: String = if let value = params?["url"] ?? params?["screen"] ?? params?["page"] {
@@ -310,14 +322,15 @@ public final class PoltioSDK {
                 return
             }
 
-            // Cancel any in-flight widget resolution task for previous screen
-            queue.sync(flags: .barrier) {
+            // Cancel any in-flight widget resolution task for previous screen. The new request id is
+            // captured inside the same barrier that increments it, so two concurrent `track` calls
+            // can never end up sharing an id.
+            let thisRequestId: UInt64 = queue.sync(flags: .barrier) {
                 self._activeWidgetTask?.cancel()
                 self._activeWidgetTask = nil
                 self._currentViewRequestId &+= 1
+                return self._currentViewRequestId
             }
-
-            let thisRequestId: UInt64 = queue.sync { self._currentViewRequestId }
 
             let task = apiClient.resolveMobileWidget(
                 clientKey: key,
@@ -426,8 +439,8 @@ public final class PoltioSDK {
 
         let validItems = items.filter { item in
             let hasValidId = !item.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            let hasValidValue = item.value == nil || (item.value!.isFinite && item.value! >= 0)
-            let hasValidQuantity = item.quantity == nil || item.quantity! > 0
+            let hasValidValue = item.value.map { $0.isFinite && $0 >= 0 } ?? true
+            let hasValidQuantity = item.quantity.map { $0 > 0 } ?? true
             let isValid = hasValidId && hasValidValue && hasValidQuantity
             if !isValid {
                 PoltioLogger.warning("recordPurchase ignoring invalid item '\(item.id)' for order '\(trimmedOrderId)'.")
@@ -460,6 +473,16 @@ public final class PoltioSDK {
             return
         }
         apiClient.reportCtaView(clientKey: key, deviceId: sdkId, publicId: widget.publicId, widgetId: widget.widgetId)
+    }
+
+    // MARK: - Public Trigger Control
+
+    /// Hides the floating trigger currently on screen, if any (e.g. while the host app shows its own
+    /// full-screen flow). The next `track(event: "view", ...)` resolves and shows triggers as usual.
+    public static func hideTrigger() {
+        #if canImport(UIKit)
+            PoltioOverlayManager.shared.hideTrigger()
+        #endif
     }
 
     // MARK: - Public Widget Event Bridge

@@ -30,7 +30,7 @@ All builds, tests, and example apps are run via the universal root `Makefile`:
 | :--- | :--- | :--- |
 | **Check Env** | `make check` | Validates Xcode, Swift compiler, and iOS Simulator. |
 | **Build SDK** | `make build-ios` | Compiles the Swift package SDK (`swift build`). |
-| **Test SDK** | `make test-ios` | Runs Swift PM unit test suite (`swift test`). |
+| **Test SDK** | `make test-ios` | Runs the full unit test suite on an iOS Simulator (`xcodebuild test`); `make test-ios-macos` runs the host-only subset (`swift test`). |
 | **Lint Podspec** | `make lint-pod` | Validates CocoaPods podspec (`pod lib lint`). |
 | **Publish Pod** | `make publish-cocoapods` | Pushes podspec to CocoaPods Trunk (`pod trunk push`). |
 | **Build Example** | `make build-example-ios` | Compiles `ExampleApp.app` bundle via `xcodebuild`. |
@@ -45,8 +45,8 @@ All builds, tests, and example apps are run via the universal root `Makefile`:
 poltio-mobile-sdk/
 ├── LICENSE             # MIT License
 ├── Package.swift       # Swift Package Manager Manifest (root entrypoint)
+├── PoltioSDK.podspec   # CocoaPods spec (root, so `pod lib lint` resolves source paths)
 ├── ios/                # Poltio Core iOS Library (Swift)
-│   ├── PoltioSDK.podspec
 │   └── Sources/PoltioSDK/
 │       ├── Resources/PrivacyInfo.xcprivacy
 │       └── ...
@@ -136,7 +136,7 @@ make publish-cocoapods
 import PoltioSDK
 
 // 1. Configure in AppDelegate / App initialization
-PoltioSDK.configure(clientKey: "YOUR_CLIENT_KEY", logLevel: .info)
+PoltioSDK.configure(clientKey: "YOUR_CLIENT_KEY") // logLevel defaults to .warning; pass .debug while integrating
 
 // By default the SDK auto-detects the API environment from your app's build configuration:
 // Debug builds use https://sdk-stage.poltio.com, Release builds (incl. TestFlight/App Store)
@@ -155,3 +155,20 @@ PoltioSDK.track(event: "view", params: ["url": "https://app.poltio.com/home"])
 // PoltioSDK.cacheLimit = 100   // Default: 100 entries max
 // PoltioSDK.clearCache()       // Clear cache manually
 ```
+
+---
+
+## Privacy Manifest
+
+The SDK ships a `PrivacyInfo.xcprivacy` that Xcode merges into your app's privacy report:
+
+| Declaration | Value | Why |
+| :--- | :--- | :--- |
+| Required-reason API | `UserDefaults` (`CA92.1`) | Persists `sdk_id`, `puid`, and trigger-dismissal windows, read only by the SDK. |
+| Device ID | Not linked, not tracking | SDK-generated per-install `sdk_id`, used for widget resolution and attribution. |
+| User ID | Linked, not tracking | Only when you call `PoltioSDK.identify(puid:)`. |
+| Purchase History | Not linked, not tracking | Only when you call `PoltioSDK.recordPurchase(...)`. |
+| Product Interaction | Not linked, not tracking | Screen views and widget impressions. |
+
+`NSPrivacyTracking` is `false`. Review these against your own data practices when you fill in your
+App Store privacy labels.

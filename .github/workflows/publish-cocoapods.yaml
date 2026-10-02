@@ -42,4 +42,4 @@ jobs:
         env:
           COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
         run: |
-          pod trunk push ios/PoltioSDK.podspec --allow-warnings
+          pod trunk push PoltioSDK.podspec --allow-warnings
