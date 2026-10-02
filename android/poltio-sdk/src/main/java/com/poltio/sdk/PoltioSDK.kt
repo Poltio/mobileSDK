@@ -1,11 +1,11 @@
 package com.poltio.sdk
 
-import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.annotation.VisibleForTesting
 import com.poltio.sdk.ui.PoltioOverlayManager
+import com.poltio.sdk.ui.findActivity
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
@@ -237,7 +237,8 @@ object PoltioSDK {
 
         (appContext as? Application)?.let { PoltioOverlayManager.attach(it) }
             ?: PoltioLogger.warning { "configure() was not given an Application context — floating triggers cannot be attached to host activities." }
-        (context as? Activity)?.let { PoltioOverlayManager.seedCurrentActivity(it) }
+        // Unwraps ContextThemeWrapper/DI wrappers too, not just a bare Activity.
+        context.findActivity()?.let { PoltioOverlayManager.seedCurrentActivity(it) }
 
         if (environment == PoltioEnvironment.STAGE) {
             PoltioLogger.info {

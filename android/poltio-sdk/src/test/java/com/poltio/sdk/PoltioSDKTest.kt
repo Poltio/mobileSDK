@@ -2,6 +2,7 @@ package com.poltio.sdk
 
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
+import com.poltio.sdk.ui.findActivity
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -51,6 +52,15 @@ class PoltioSDKTest {
             .getString("puid", null)
         assertEquals("early-user", persisted)
         assertEquals("early-user", PoltioSDK.puid)
+    }
+
+    @Test
+    fun `configure with a wrapped Activity context does not throw`() {
+        val activity = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
+        val wrapped = android.view.ContextThemeWrapper(activity, android.R.style.Theme_DeviceDefault)
+        PoltioSDK.configure(wrapped, clientKey = "poltio_test_pk_123")
+        assertEquals(activity, wrapped.findActivity())
+        assertTrue(PoltioSDK.isInitialized)
     }
 
     @Test

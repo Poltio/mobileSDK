@@ -118,7 +118,7 @@ internal object PoltioOverlayManager {
         }
 
         val activity = resumedActivity?.get()
-        val storeContext = application ?: activity
+        val storeContext = application ?: activity?.applicationContext
         if (storeContext != null && PoltioTriggerDismissalStore.isDismissed(storeContext, widget.publicId)) {
             PoltioLogger.debug { "Floating trigger suppressed for widget '${widget.publicId}' (still within its close-remember window)." }
             hideTriggerOnMain()
