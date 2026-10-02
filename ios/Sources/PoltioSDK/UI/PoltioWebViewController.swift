@@ -248,6 +248,12 @@
             guard scheme == "https" || scheme == "http", let host = url.host?.lowercased() else {
                 return false
             }
+            // Only accept plain DNS hostnames, so a parser differential between Foundation and
+            // WebKit (e.g. `\` handling) can never make a foreign host pass the suffix check below.
+            let allowedHostCharacters = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789.-")
+            guard host.unicodeScalars.allSatisfy({ allowedHostCharacters.contains($0) }) else {
+                return false
+            }
             return host == "poltio.com" || host.hasSuffix(".poltio.com")
         }
 

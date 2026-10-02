@@ -43,6 +43,8 @@ class PoltioWebViewActivityTest {
             "data:text/html,<script>alert(1)</script>",
             "blob:https://www.poltio.com/1234",
             "about:srcdoc",
+            "https://evil.com\\.poltio.com/",
+            "https://evil.com%5C.poltio.com/",
         ).forEach { assertFalse(it, PoltioWebViewActivity.isTrustedWidgetUrl(Uri.parse(it))) }
     }
 

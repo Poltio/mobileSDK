@@ -97,6 +97,10 @@ internal class PoltioWebViewActivity : Activity() {
             if (url.toString().lowercase() == "about:blank") return true
             if (scheme != "https" && scheme != "http") return false
             val host = url.host?.lowercase() ?: return false
+            // Only accept plain DNS hostnames. `android.net.Uri` and Chromium don't parse authorities
+            // identically (e.g. Chromium treats `\` as `/`), so a host like `evil.com\.poltio.com`
+            // would pass the suffix check here yet load `evil.com` — reject anything unusual outright.
+            if (!host.all { it in 'a'..'z' || it in '0'..'9' || it == '.' || it == '-' }) return false
             return host == "poltio.com" || host.endsWith(".poltio.com")
         }
 

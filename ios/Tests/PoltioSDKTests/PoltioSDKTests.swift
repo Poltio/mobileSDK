@@ -1037,6 +1037,15 @@ final class PoltioSDKTests: XCTestCase {
             for raw in untrusted {
                 XCTAssertFalse(try PoltioWebViewController.isTrustedWidgetURL(XCTUnwrap(URL(string: raw))), raw)
             }
+
+            // Hosts with characters outside plain DNS names are rejected even when they end in
+            // ".poltio.com" (guards against Foundation/WebKit parser differentials). Foundation may
+            // refuse to parse some of these at all, which is equally safe.
+            for raw in ["https://evil.com\\.poltio.com/", "https://evil.com%5C.poltio.com/"] {
+                if let url = URL(string: raw) {
+                    XCTAssertFalse(PoltioWebViewController.isTrustedWidgetURL(url), raw)
+                }
+            }
         }
 
         func testBuildWidgetURLWithWidgetId() {
