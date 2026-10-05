@@ -76,8 +76,9 @@ AI agents MUST use and maintain the root `Makefile` targets for executing builds
 | Target | Description |
 | :--- | :--- |
 | `make build` | Builds all SDKs (iOS, Android, React Native). |
-| `make build-ios` | Builds the Swift iOS SDK package. |
-| `make test-ios` | Runs iOS unit tests (`swift test`). |
+| `make build-ios` | Builds the Swift iOS SDK package for the macOS host and the iOS Simulator SDK (the latter compiles the UIKit layer). |
+| `make test-ios` | Runs the full iOS unit test suite on an iOS Simulator (`xcodebuild test`). |
+| `make test-ios-macos` | Runs the faster host-only subset (`swift test`; UIKit tests are skipped). |
 | `make format` | Formats code across all platforms. |
 | `make format-ios` | Formats all Swift files using `swiftformat`. |
 | `make lint` | Runs all linters across the codebase (Swift, CocoaPods, GitHub Actions). |

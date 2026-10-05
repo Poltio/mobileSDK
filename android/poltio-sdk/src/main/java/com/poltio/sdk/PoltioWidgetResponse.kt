@@ -5,7 +5,7 @@ import androidx.annotation.ColorInt
 import org.json.JSONObject
 
 /** Represents the response payload from `/sdk/mobile/v1/widget`. */
-data class PoltioWidgetResponse(
+internal data class PoltioWidgetResponse(
     /** The unique public identifier of the Poltio widget. */
     val publicId: String,
     /** The overlay and trigger configuration options. */
@@ -60,7 +60,7 @@ private fun JSONObject.optIntOrNull(key: String): Int? =
  * `mobile` override object) is normalized to kebab-case (`_` -> `-`) and merged into one map, with
  * `mobile` entries winning — that merge happens once at parse time instead of on every access.
  */
-class PoltioOverlayOptions private constructor(private val fields: Map<String, String>) {
+internal class PoltioOverlayOptions private constructor(private val fields: Map<String, String>) {
 
     override fun equals(other: Any?): Boolean = other is PoltioOverlayOptions && other.fields == fields
     override fun hashCode(): Int = fields.hashCode()

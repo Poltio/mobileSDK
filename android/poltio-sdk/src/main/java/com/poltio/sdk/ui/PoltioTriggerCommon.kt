@@ -109,3 +109,48 @@ internal class PoltioSparkleIconView(context: Context) : View(context) {
         path.close()
     }
 }
+
+/**
+ * Shared TalkBack configuration for the floating triggers: each tappable trigger container is
+ * announced as a button labelled with its visible text. Nested close/collapse controls keep their
+ * own `contentDescription` and stay separately focusable, since they're clickable themselves.
+ */
+internal object PoltioTriggerAccessibility {
+    /** Fallback label when a trigger has no visible text (e.g. an icon-only collapsed tab). */
+    const val FALLBACK_LABEL = "Poltio widget"
+
+    /** Joins the non-blank [parts] (whitespace/newlines collapsed) into a single spoken label. */
+    fun label(vararg parts: String?): String {
+        val words = parts.filterNotNull()
+            .joinToString(" ")
+            .split(Regex("\\s+"))
+            .filter { it.isNotEmpty() }
+        return if (words.isEmpty()) FALLBACK_LABEL else words.joinToString(" ")
+    }
+
+    fun configureAsButton(view: android.view.View, label: String) {
+        view.contentDescription = label
+        androidx.core.view.ViewCompat.setAccessibilityDelegate(
+            view,
+            object : androidx.core.view.AccessibilityDelegateCompat() {
+                override fun onInitializeAccessibilityNodeInfo(
+                    host: android.view.View,
+                    info: androidx.core.view.accessibility.AccessibilityNodeInfoCompat,
+                ) {
+                    super.onInitializeAccessibilityNodeInfo(host, info)
+                    info.className = android.widget.Button::class.java.name
+                }
+            },
+        )
+    }
+
+    /**
+     * The collapsed → expanded step is a purely visual teaser; with TalkBack (touch exploration)
+     * on, activating a collapsed trigger opens the widget directly instead of requiring a second
+     * activation.
+     */
+    fun shouldSkipExpandStep(context: Context): Boolean {
+        val manager = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? android.view.accessibility.AccessibilityManager
+        return manager?.isEnabled == true && manager.isTouchExplorationEnabled
+    }
+}

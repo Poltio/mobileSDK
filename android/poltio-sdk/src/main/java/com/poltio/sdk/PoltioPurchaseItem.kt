@@ -1,7 +1,7 @@
 package com.poltio.sdk
 
 /** A single line item included in a purchase reported via [PoltioSDK.recordPurchase]. */
-data class PoltioPurchaseItem(
+data class PoltioPurchaseItem @JvmOverloads constructor(
     /** Product/SKU identifier. */
     val id: String,
     /** Product display name. */

@@ -10,10 +10,10 @@ enum class PoltioLogLevel(val rawValue: Int) : Comparable<PoltioLogLevel> {
     /** Logs only critical errors and failures. */
     ERROR(1),
 
-    /** Logs warnings and critical errors. */
+    /** Logs warnings and critical errors (default). */
     WARNING(2),
 
-    /** Logs informational events, state changes, and errors (default). */
+    /** Logs informational events, state changes, warnings, and errors. */
     INFO(3),
 
     /** Logs detailed debug traces, network payloads, and internal transitions. */
@@ -24,11 +24,11 @@ enum class PoltioLogLevel(val rawValue: Int) : Comparable<PoltioLogLevel> {
  * Internal thread-safe logger for the Poltio SDK. This is the single sanctioned sink for SDK
  * output — no other SDK source file should call `Log.*`/`println` directly.
  */
-object PoltioLogger {
+internal object PoltioLogger {
     private const val TAG = "PoltioSDK"
 
     @Volatile
-    var logLevel: PoltioLogLevel = PoltioLogLevel.INFO
+    var logLevel: PoltioLogLevel = PoltioLogLevel.WARNING
 
     /** Logs a debug message if the active log level is `.DEBUG`. Message is lazily built. */
     fun debug(message: () -> String) = log(PoltioLogLevel.DEBUG, message)

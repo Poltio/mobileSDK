@@ -84,7 +84,7 @@ same thing:
    ("not available right now, use screenshot instead") — no accessibility-tree lookups; get tap
    coordinates by reading screenshots directly and remember the tool's point-space is **402×874**,
    not the screenshot's pixel dimensions (divide screenshot-pixel coords by ~2.29 for this device).
-6. `print()`-based `PoltioLogger` output is **not visible** via `xcrun simctl spawn <udid> log show`
+6. *(Historical — `PoltioLogger` now logs via `os_log`, subsystem `com.poltio.sdk`, which **is** visible to `log show`/`log stream`.)* `print()`-based `PoltioLogger` output was **not visible** via `xcrun simctl spawn <udid> log show`
    for a plain `simctl launch`-ed app (unified logging doesn't seem to capture this app's stdout in
    this setup), and `simctl launch --console`/`--console-pty` didn't stream anything either when
    tried backgrounded. If SDK-side logging needs inspecting again, try running via Xcode directly

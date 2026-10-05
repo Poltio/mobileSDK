@@ -57,3 +57,9 @@ internal fun startCapturingServer(
     }.apply { isDaemon = true }.start()
     return serverSocket.localPort to future
 }
+
+/** Java-callable bridge to internal test hooks (Kotlin mangles `internal` member names for Java). */
+object PoltioTestSupport {
+    @JvmStatic
+    fun resetSdk() = PoltioSDK.reset()
+}

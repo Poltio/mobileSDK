@@ -31,8 +31,22 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+      # Runs on an iOS Simulator (not the macOS host), so the UIKit layer — overlay manager,
+      # WebView, and trigger views — is actually compiled and its tests executed.
       - name: Run iOS Tests
         run: make test-ios
+  lint-pod:
+    name: Lint CocoaPods Podspec
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Run pod lib lint
+        run: make lint-pod
   lint-android:
     name: Lint Android SDK
     runs-on: ubuntu-latest

@@ -165,10 +165,49 @@ PoltioSDK.recordPurchase(
 )
 ```
 
-> **Note:** Call `configure()` once at app startup — e.g. from a custom `Application` subclass, as
-> shown above — and pass it an `Application` context so the SDK can attach the floating trigger
-> overlay to whichever Activity is on screen. Passing an `Activity` (or other) context is safe too,
-> since only `applicationContext` is retained, but the overlay won't attach without one.
+> **Note:** Call `configure()` once at app startup, ideally from `Application.onCreate()` as shown
+> above. It does no disk or network I/O on the calling thread. If you configure later, pass the
+> current `Activity` as `context` so the first screen's trigger can attach to it right away.
+> Passing an `Activity` is safe: only its `applicationContext` is retained.
+
+### Android (Java)
+
+Every public member of `PoltioSDK` is `@JvmStatic`, and functions with Kotlin default arguments
+have Java overloads:
+
+```java
+PoltioSDK.configure(this, "poltio_test_pk_12345");
+PoltioSDK.identify("user_12345");
+PoltioSDK.track("view", Collections.singletonMap("url", "myapp://products/123"));
+PoltioSDK.recordPurchase("ORD-90211", 249.90, "myapp://checkout/complete", "USD",
+        Collections.singletonList(new PoltioPurchaseItem("SKU-1")));
+```
+
+### Widget events, trigger control & logging
+
+```swift
+// iOS
+PoltioSDK.onWidgetEvent = { event, data in /* "close", "complete", "leadSubmit", ... */ }
+PoltioSDK.hideTrigger()          // hide the floating trigger currently on screen
+PoltioSDK.logLevel = .debug      // default: .warning
+print(PoltioSDK.version)         // e.g. "1.0.0"
+```
+
+```kotlin
+// Android
+PoltioSDK.onWidgetEvent = PoltioWidgetEventListener { event, data -> /* ... */ }
+PoltioSDK.hideTrigger()
+PoltioSDK.logLevel = PoltioLogLevel.DEBUG   // default: WARNING
+Log.d("App", PoltioSDK.version)
+```
+
+> `track()` drives widget resolution only for screen views (`"view"`, `"viewContent"`,
+> `"view_content"`). Other event names are accepted but only logged locally; they are **not** sent
+> to the Poltio API. Use `recordPurchase(...)` for conversions.
+>
+> The default log level is `warning`. Identifiers (`sdk_id`, `puid`) and event params are only
+> logged at `debug`. iOS logs go through the unified logging system (subsystem `com.poltio.sdk`), so
+> you can filter them in Console.app.
 
 ---
 
@@ -220,7 +259,7 @@ deduplication slot on a malformed request.
 | `make build-android` | Build Android Kotlin SDK |
 | `make build-rn` | Build React Native SDK |
 | `make test` | Run test suites across all platforms |
-| `make test-ios` | Run iOS unit tests |
+| `make test-ios` | Run iOS unit tests on an iOS Simulator (full suite) |
 | `make test-android` | Run Android unit tests |
 | `make lint-ios` | Lint Swift source files with swiftformat |
 | `make lint-pod` | Lint CocoaPods podspec |

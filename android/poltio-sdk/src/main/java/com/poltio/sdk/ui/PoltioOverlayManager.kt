@@ -77,6 +77,23 @@ internal object PoltioOverlayManager {
         })
     }
 
+    /**
+     * Seeds the "current Activity" when [PoltioSDK.configure] is called with an `Activity` after
+     * that Activity already resumed — lifecycle callbacks registered in [attach] only observe
+     * *future* `onResume`s, so without this the first screen would never get a trigger.
+     */
+    fun seedCurrentActivity(activity: Activity) {
+        PoltioExecutors.runOnMain {
+            // A weakly-held Activity that's already finishing/destroyed (but not yet collected) is
+            // as good as none — replace it rather than letting it block the new one.
+            val current = resumedActivity?.get()
+            val currentIsStale = current == null || current.isFinishing || current.isDestroyed
+            if (currentIsStale && !activity.isFinishing && !activity.isDestroyed) {
+                resumedActivity = WeakReference(activity)
+            }
+        }
+    }
+
     /** Displays the floating trigger for the resolved widget on the current Activity, on the main thread. */
     fun showTrigger(widget: PoltioWidgetResponse, puid: String?) {
         PoltioExecutors.runOnMain { showTriggerOnMain(widget, puid) }
@@ -105,7 +122,8 @@ internal object PoltioOverlayManager {
         }
 
         val activity = resumedActivity?.get()
-        if (activity != null && PoltioTriggerDismissalStore.isDismissed(activity, widget.publicId)) {
+        val storeContext = application ?: activity?.applicationContext
+        if (storeContext != null && PoltioTriggerDismissalStore.isDismissed(storeContext, widget.publicId)) {
             PoltioLogger.debug { "Floating trigger suppressed for widget '${widget.publicId}' (still within its close-remember window)." }
             hideTriggerOnMain()
             return
@@ -183,8 +201,11 @@ internal object PoltioOverlayManager {
         androidx.core.view.ViewCompat.setElevation(container, activity.dp(zIndexElevationDp.toFloat()).toFloat())
 
         val onOpenWidget: () -> Unit = { presentWidgetWebView(widget.publicId, widget.widgetId, puid, widget.overlayOptions) }
+        // Persist against the application context, not whichever Activity happens to be resumed —
+        // the dismissal must be recorded even if no Activity is resumed at that exact moment.
+        val dismissalContext = activity.applicationContext
         val onDismissForever: (Double) -> Unit = { hours ->
-            resumedActivity?.get()?.let { PoltioTriggerDismissalStore.recordDismissal(it, widget.publicId, hours) }
+            PoltioTriggerDismissalStore.recordDismissal(dismissalContext, widget.publicId, hours)
             hideTriggerOnMain()
         }
 

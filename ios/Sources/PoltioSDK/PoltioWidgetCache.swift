@@ -1,7 +1,7 @@
 import Foundation
 
 /// Cached outcome of a widget resolution request for a target URL.
-public enum CachedWidgetResult: Equatable {
+enum CachedWidgetResult: Equatable {
     /// Successfully resolved widget metadata.
     case widget(PoltioWidgetResponse)
     /// Explicitly verified that no widget is configured for this URL (404 Not Found).

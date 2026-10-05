@@ -819,6 +819,38 @@ final class PoltioSDKTests: XCTestCase {
         )
     }
 
+    func testRequestsCarrySDKVersionAndPlatformHeaders() {
+        let mockSession = createMockSession()
+        let client = PoltioAPIClient(session: mockSession)
+        let requestExpectation = expectation(description: "Widget request captured")
+        var capturedHeaders: [String: String] = [:]
+
+        MockURLProtocol.requestHandler = { request in
+            capturedHeaders = request.allHTTPHeaderFields ?? [:]
+            requestExpectation.fulfill()
+            let response = HTTPURLResponse(url: request.url ?? URL(fileURLWithPath: "/"), statusCode: 404, httpVersion: nil, headerFields: nil)
+            return (response ?? HTTPURLResponse(), Data())
+        }
+
+        client.resolveMobileWidget(clientKey: "pk_headers", deviceId: "device-1", targetURL: "example://headers")
+        wait(for: [requestExpectation], timeout: 5.0)
+
+        XCTAssertEqual(capturedHeaders["X-Poltio-SDK-Key"], "pk_headers")
+        XCTAssertEqual(capturedHeaders["X-Poltio-SDK-Version"], PoltioSDK.version)
+        XCTAssertEqual(capturedHeaders["X-Poltio-SDK-Platform"], "ios")
+    }
+
+    func testSDKVersionIsSemantic() {
+        let parts = PoltioSDK.version.split(separator: ".")
+        XCTAssertEqual(parts.count, 3)
+        XCTAssertTrue(parts.allSatisfy { Int($0) != nil })
+    }
+
+    func testDefaultLogLevelIsWarning() {
+        PoltioSDK.configure(clientKey: "pk_default_log_level")
+        XCTAssertEqual(PoltioSDK.logLevel, .warning)
+    }
+
     func testDynamicWidgetResolutionWithMockSession() {
         let mockSession = createMockSession()
         let client = PoltioAPIClient(session: mockSession)
@@ -978,6 +1010,43 @@ final class PoltioSDKTests: XCTestCase {
 
             let urlWithPuid = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", puid: "usr_123")
             XCTAssertEqual(urlWithPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?puid=usr_123&disclaimer=off")
+        }
+
+        func testWidgetNavigationPolicyTrustsOnlyPoltioDomains() throws {
+            let trusted = [
+                "https://www.poltio.com/widget/abc",
+                "https://poltio.com/x",
+                "https://cdn.POLTIO.com/img.png",
+                "about:blank",
+            ]
+            for raw in trusted {
+                XCTAssertTrue(try PoltioWebViewController.isTrustedWidgetURL(XCTUnwrap(URL(string: raw))), raw)
+            }
+
+            let untrusted = [
+                "https://shop.example.com/product/1",
+                "https://poltio.com.evil.example/phish",
+                "https://evilpoltio.com/",
+                "myapp://checkout",
+                "tel:+15555555555",
+                "mailto:hello@example.com",
+                "data:text/html,<script>alert(1)</script>",
+                "blob:https://www.poltio.com/1234",
+                "about:srcdoc",
+                "http://www.poltio.com/widget/abc",
+            ]
+            for raw in untrusted {
+                XCTAssertFalse(try PoltioWebViewController.isTrustedWidgetURL(XCTUnwrap(URL(string: raw))), raw)
+            }
+
+            // Hosts with characters outside plain DNS names are rejected even when they end in
+            // ".poltio.com" (guards against Foundation/WebKit parser differentials). Foundation may
+            // refuse to parse some of these at all, which is equally safe.
+            for raw in ["https://evil.com\\.poltio.com/", "https://evil.com%5C.poltio.com/"] {
+                if let url = URL(string: raw) {
+                    XCTAssertFalse(PoltioWebViewController.isTrustedWidgetURL(url), raw)
+                }
+            }
         }
 
         func testBuildWidgetURLWithWidgetId() {
