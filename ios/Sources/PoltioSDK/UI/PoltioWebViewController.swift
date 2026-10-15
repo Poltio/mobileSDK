@@ -258,7 +258,35 @@
             return host == "poltio.com" || host.hasSuffix(".poltio.com")
         }
 
+        /// Hands a URL leaving the widget to the host app's `onOpenURL`, or else to the system.
         private func openExternally(_ url: URL) {
+            guard let onOpenURL = PoltioSDK.onOpenURL else {
+                Self.openWithSystem(url)
+                return
+            }
+            let route = {
+                if onOpenURL(url) {
+                    // Host navigated away: drop the old trigger. Synchronous, so it beats the restore
+                    // `notifyDismiss()` queued but not a trigger the host's own `track()` queued.
+                    PoltioOverlayManager.shared.teardownOverlaySynchronously()
+                } else {
+                    Self.openWithSystem(url)
+                }
+            }
+            guard let presenter = presentingViewController else {
+                route()
+                return
+            }
+            // Close first: UIKit can't present the host's screen over this sheet, and dismissing later
+            // would dismiss whatever the host presented on top of it instead.
+            PoltioLogger.debug("Closing the widget to hand URL '\(url.absoluteString)' to the host app.")
+            presenter.dismiss(animated: true) { [weak self] in
+                self?.notifyDismiss()
+                route()
+            }
+        }
+
+        private static func openWithSystem(_ url: URL) {
             PoltioLogger.debug("Opening external URL outside the widget: \(url.absoluteString)")
             UIApplication.shared.open(url, options: [:]) { success in
                 if !success {

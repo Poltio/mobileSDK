@@ -3,6 +3,7 @@ package com.poltio.sdk
 import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
+import android.net.Uri
 import androidx.annotation.VisibleForTesting
 import com.poltio.sdk.ui.PoltioOverlayManager
 import com.poltio.sdk.ui.findActivity
@@ -20,6 +21,18 @@ fun interface PoltioWidgetEventListener {
      * @param data The event payload, converted to plain `Map`/`List` values, or `null` if none.
      */
     fun onWidgetEvent(event: String, data: Map<String, Any?>?)
+}
+
+/** Gets first refusal on links leaving the widget; see [PoltioSDK.onOpenUrl]. */
+fun interface PoltioUrlHandler {
+    /**
+     * Called on the main thread as the widget closes.
+     *
+     * @param url The link the user is leaving the widget for.
+     * @return `true` if your app handled [url], or `false` to let the SDK hand it to the system as
+     * usual (`Intent.ACTION_VIEW`).
+     */
+    fun onOpenUrl(url: Uri): Boolean
 }
 
 /**
@@ -167,6 +180,8 @@ object PoltioSDK {
             widgetCache.defaultTTL = 300.0
             widgetCache.countLimit = 100
         }
+        onWidgetEvent = null
+        onOpenUrl = null
         PoltioLogger.logLevel = PoltioLogLevel.WARNING
     }
 
@@ -511,6 +526,20 @@ object PoltioSDK {
     @JvmStatic
     @Volatile
     var onWidgetEvent: PoltioWidgetEventListener? = null
+
+    /**
+     * Optional handler for links the widget would otherwise open outside the app — e.g. the product
+     * link on a result page. When set, the widget closes and the link is passed here on the main
+     * thread: return `true` if you routed it to your own screen, or `false` to fall back to
+     * `Intent.ACTION_VIEW`:
+     *
+     * ```kotlin
+     * PoltioSDK.onOpenUrl = PoltioUrlHandler { url -> router.openProduct(url) }
+     * ```
+     */
+    @JvmStatic
+    @Volatile
+    var onOpenUrl: PoltioUrlHandler? = null
 
     // MARK: - Internal Helpers
 

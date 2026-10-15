@@ -25,6 +25,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.ProgressBar
+import androidx.annotation.VisibleForTesting
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -137,7 +138,8 @@ internal class PoltioWebViewActivity : Activity() {
         }
     }
 
-    private var webView: WebView? = null
+    @VisibleForTesting
+    internal var webView: WebView? = null
     private var isDismissHandled = false
     private var isDismissing = false
 
@@ -267,15 +269,23 @@ internal class PoltioWebViewActivity : Activity() {
                 // The JS bridge (`window.PoltioNativeBridge`) is exposed to whatever page is
                 // currently loaded — an untrusted external site reached via a redirect or a
                 // tapped link inside the widget would otherwise gain the same access. Keep
-                // navigation confined to Poltio's own domain and hand anything else to the
-                // system browser instead of letting the WebView follow it.
+                // navigation confined to Poltio's own domain and hand anything else to the host
+                // app (`PoltioSDK.onOpenUrl`) or the system instead of letting the WebView follow it.
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                     val url = request?.url ?: return false
                     if (isTrustedWidgetUrl(url)) return false
-                    try {
-                        view?.context?.startActivity(Intent(Intent.ACTION_VIEW, url))
-                    } catch (error: Exception) {
-                        PoltioLogger.error { "Failed to open external URL: ${error.message}" }
+                    // Like iOS: close first, then hand over, so the host's UI lands on its own Activity.
+                    // Sub-frames (e.g. an embedded player's custom scheme) never close the widget.
+                    val handler = PoltioSDK.onOpenUrl
+                    if (handler != null && request.isForMainFrame) {
+                        PoltioLogger.debug { "Closing the widget to hand URL '$url' to the host app." }
+                        dismissWithAnimation {
+                            // Host navigated away: drop the old trigger (inline, before anything its
+                            // own off-thread `track()` resolves).
+                            if (handler.onOpenUrl(url)) PoltioOverlayManager.hideTrigger() else openWithSystem(url)
+                        }
+                    } else {
+                        openWithSystem(url)
                     }
                     return true
                 }
@@ -370,8 +380,20 @@ internal class PoltioWebViewActivity : Activity() {
         scrim.animate().alpha(1f).setDuration(200).start()
     }
 
-    /** Slides the sheet down and fades the scrim before finishing — the single path every dismiss goes through. */
-    private fun dismissWithAnimation() {
+    private fun openWithSystem(url: Uri) {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, url))
+        } catch (error: Exception) {
+            PoltioLogger.error { "Failed to open external URL: ${error.message}" }
+        }
+    }
+
+    /**
+     * Slides the sheet down and fades the scrim before finishing — the single path every dismiss
+     * goes through. [onFinished] runs right after `finish()`; it is dropped if a dismiss is
+     * already underway.
+     */
+    private fun dismissWithAnimation(onFinished: (() -> Unit)? = null) {
         if (isDismissing || isFinishing) return
         isDismissing = true
 
@@ -383,6 +405,7 @@ internal class PoltioWebViewActivity : Activity() {
             .withEndAction {
                 finish()
                 overridePendingTransition(0, 0)
+                onFinished?.invoke()
             }
             .start()
         scrim.animate().alpha(0f).setDuration(220).start()

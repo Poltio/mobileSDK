@@ -271,8 +271,8 @@
             }
         }
 
-        /// Synchronously tears down any existing overlay window/view.
-        private func teardownOverlaySynchronously() {
+        /// Synchronously tears down any existing overlay window/view. Main thread only.
+        func teardownOverlaySynchronously() {
             pendingShowWorkItem?.cancel()
             pendingShowWorkItem = nil
             currentPublicId = nil

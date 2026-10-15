@@ -49,6 +49,7 @@ public class PoltioSDKJavaInteropTest {
                 Collections.singletonList(new PoltioPurchaseItem("SKU-1")));
 
         PoltioSDK.setOnWidgetEvent((event, data) -> { });
+        PoltioSDK.setOnOpenUrl(url -> false);
         PoltioSDK.setCacheTTL(60.0);
         PoltioSDK.clearCache();
         PoltioSDK.hideTrigger();
