@@ -1073,7 +1073,7 @@ final class PoltioSDKTests: XCTestCase {
             let productURL = try XCTUnwrap(URL(string: "https://shop.example.com/product/1"))
             let controller = PoltioWebViewController(publicId: "abc")
             var handledURLs: [URL] = []
-            controller.onOpenURL = { url in
+            PoltioSDK.onOpenURL = { url in
                 handledURLs.append(url)
                 return true
             }

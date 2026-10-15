@@ -168,6 +168,8 @@ public final class PoltioSDK {
                 self._widgetCache.countLimit = 100
                 UserDefaults.standard.removeObject(forKey: PoltioSDK.sdkIdStorageKey)
                 UserDefaults.standard.removeObject(forKey: PoltioSDK.puidStorageKey)
+                PoltioSDK.onWidgetEvent = nil
+                PoltioSDK.onOpenURL = nil
             }
             PoltioLogger.logLevel = .warning
         }

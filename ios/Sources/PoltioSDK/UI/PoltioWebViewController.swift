@@ -35,9 +35,6 @@
         var onDismiss: (() -> Void)?
         /// Callback invoked when the widget page sends a bridge event (e.g. "close", "complete", "leadSubmit").
         var onWidgetEvent: ((_ event: String, _ data: [String: Any]?) -> Void)?
-        /// Gives the host app first refusal on a URL leaving the widget, once the widget has closed;
-        /// returns whether it handled it.
-        var onOpenURL: ((_ url: URL) -> Bool)?
         private var isDismissHandled = false
 
         init(publicId: String, widgetId: Int? = nil, puid: String? = nil, overlayOptions: PoltioOverlayOptions? = nil, onDismiss: (() -> Void)? = nil) {
@@ -263,24 +260,27 @@
 
         /// Hands a URL leaving the widget to the host app's `onOpenURL`, or else to the system.
         private func openExternally(_ url: URL) {
-            guard let onOpenURL else {
+            guard let onOpenURL = PoltioSDK.onOpenURL else {
                 Self.openWithSystem(url)
                 return
             }
             let route = {
-                if !onOpenURL(url) {
+                if onOpenURL(url) {
+                    // Host navigated away: drop the old trigger. Synchronous, so it beats the restore
+                    // `notifyDismiss()` queued but not a trigger the host's own `track()` queued.
+                    PoltioOverlayManager.shared.teardownOverlaySynchronously()
+                } else {
                     Self.openWithSystem(url)
                 }
             }
-            guard presentingViewController != nil else {
+            guard let presenter = presentingViewController else {
                 route()
                 return
             }
-            // Close the widget before the host navigates: UIKit can't present the host's screen while
-            // this sheet is still up, and dismissing afterwards would instead dismiss whatever the host
-            // presented on top of it.
+            // Close first: UIKit can't present the host's screen over this sheet, and dismissing later
+            // would dismiss whatever the host presented on top of it instead.
             PoltioLogger.debug("Closing the widget to hand URL '\(url.absoluteString)' to the host app.")
-            dismiss(animated: true) { [weak self] in
+            presenter.dismiss(animated: true) { [weak self] in
                 self?.notifyDismiss()
                 route()
             }

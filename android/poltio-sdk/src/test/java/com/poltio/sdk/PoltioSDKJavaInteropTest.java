@@ -22,8 +22,6 @@ public class PoltioSDKJavaInteropTest {
 
     @After
     public void tearDown() {
-        PoltioSDK.setOnWidgetEvent(null);
-        PoltioSDK.setOnOpenUrl(null);
         PoltioTestSupport.resetSdk();
     }
 

@@ -271,8 +271,8 @@
             }
         }
 
-        /// Synchronously tears down any existing overlay window/view.
-        private func teardownOverlaySynchronously() {
+        /// Synchronously tears down any existing overlay window/view. Main thread only.
+        func teardownOverlaySynchronously() {
             pendingShowWorkItem?.cancel()
             pendingShowWorkItem = nil
             currentPublicId = nil
@@ -332,9 +332,6 @@
                 let webVC = PoltioWebViewController(publicId: publicId, widgetId: widgetId, puid: puid, overlayOptions: overlayOptions)
                 webVC.onWidgetEvent = { event, data in
                     PoltioSDK.onWidgetEvent?(event, data)
-                }
-                webVC.onOpenURL = { url in
-                    PoltioSDK.onOpenURL?(url) ?? false
                 }
                 webVC.onDismiss = { [weak self] in
                     DispatchQueue.main.async {

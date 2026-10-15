@@ -3,10 +3,7 @@ package com.poltio.sdk.ui
 import android.content.Intent
 import android.net.Uri
 import android.os.Looper
-import android.view.View
-import android.view.ViewGroup
 import android.webkit.WebResourceRequest
-import android.webkit.WebView
 import androidx.test.core.app.ApplicationProvider
 import com.poltio.sdk.PoltioSDK
 import com.poltio.sdk.PoltioUrlHandler
@@ -27,20 +24,14 @@ import org.robolectric.Shadows.shadowOf
 class PoltioWebViewActivityTest {
     @After
     fun tearDown() {
-        PoltioSDK.onOpenUrl = null
-    }
-
-    private fun findWebView(view: View): WebView? = when (view) {
-        is WebView -> view
-        is ViewGroup -> (0 until view.childCount).firstNotNullOfOrNull { findWebView(view.getChildAt(it)) }
-        else -> null
+        PoltioSDK.reset()
     }
 
     /** Simulates the user tapping [url] inside the widget; returns the Activity under test. */
     private fun tapLink(url: Uri): PoltioWebViewActivity {
         val intent = PoltioWebViewActivity.newIntent(ApplicationProvider.getApplicationContext(), "abc", null, null, null)
         val activity = Robolectric.buildActivity(PoltioWebViewActivity::class.java, intent).setup().get()
-        val webView = findWebView(activity.window.decorView)!!
+        val webView = activity.webView!!
         val request = object : WebResourceRequest {
             override fun getUrl() = url
             override fun isForMainFrame() = true

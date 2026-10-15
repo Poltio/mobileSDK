@@ -23,10 +23,7 @@ fun interface PoltioWidgetEventListener {
     fun onWidgetEvent(event: String, data: Map<String, Any?>?)
 }
 
-/**
- * Gets first refusal on links the widget would otherwise open outside the app — e.g. the product
- * link on a result page. A `fun interface`, like [PoltioWidgetEventListener].
- */
+/** Gets first refusal on links leaving the widget; see [PoltioSDK.onOpenUrl]. */
 fun interface PoltioUrlHandler {
     /**
      * Called on the main thread as the widget closes.
@@ -183,6 +180,8 @@ object PoltioSDK {
             widgetCache.defaultTTL = 300.0
             widgetCache.countLimit = 100
         }
+        onWidgetEvent = null
+        onOpenUrl = null
         PoltioLogger.logLevel = PoltioLogLevel.WARNING
     }
 

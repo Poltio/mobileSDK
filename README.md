@@ -219,8 +219,10 @@ Links come back.
 
 Set a URL handler to route those links to your own screens instead. When a handler is set, the
 widget closes first and the link is then passed to your handler on the main thread, so you're free
-to push, switch tabs, or present a screen modally. Return `true` if you handled the link, or `false`
-to have the SDK open it with the system as above. Non-web links such as `tel:` and `mailto:` arrive
+to push, switch tabs, or present a screen modally. Return `true` if you handled the link (the
+current screen's floating trigger is removed too, so it doesn't reappear over your new screen; the
+next `track` view call shows whatever that screen resolves to), or `false` to have the SDK open it
+with the system as above. Non-web links such as `tel:` and `mailto:` arrive
 here too, so return `false` for anything you don't recognize. Without a handler, nothing changes:
 the link opens with the system and the widget stays open.
 
