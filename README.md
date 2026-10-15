@@ -209,6 +209,44 @@ Log.d("App", PoltioSDK.version)
 > logged at `debug`. iOS logs go through the unified logging system (subsystem `com.poltio.sdk`), so
 > you can filter them in Console.app.
 
+### Opening product links in your app (`onOpenURL` / `onOpenUrl`)
+
+The widget only ever navigates within Poltio's own pages. Every other link the user taps — e.g. the
+recommended product on a result page — leaves the widget. By default the SDK hands it to the system
+(`UIApplication.open` / `Intent.ACTION_VIEW`), which usually means the browser: **iOS never routes
+an app's own Universal Links back into the app that opens them**, and on Android only verified App
+Links come back.
+
+Set a URL handler to route those links to your own screens instead. When a handler is set, the
+widget closes first and the link is then passed to your handler on the main thread, so you're free
+to push, switch tabs, or present a screen modally. Return `true` if you handled the link, or `false`
+to have the SDK open it with the system as above. Non-web links such as `tel:` and `mailto:` arrive
+here too, so return `false` for anything you don't recognize. Without a handler, nothing changes:
+the link opens with the system and the widget stays open.
+
+```swift
+// iOS
+PoltioSDK.onOpenURL = { url in
+    guard url.host == "shop.example.com", let productId = url.pathComponents.last else { return false }
+    router.showProduct(id: productId)
+    return true
+}
+```
+
+```kotlin
+// Android
+PoltioSDK.onOpenUrl = PoltioUrlHandler { url ->
+    if (url.host != "shop.example.com") return@PoltioUrlHandler false
+    router.showProduct(url.lastPathSegment)
+    true
+}
+```
+
+```java
+// Android (Java)
+PoltioSDK.setOnOpenUrl(url -> router.handle(url));
+```
+
 ---
 
 ## 💰 Conversion Tracking (`recordPurchase`)

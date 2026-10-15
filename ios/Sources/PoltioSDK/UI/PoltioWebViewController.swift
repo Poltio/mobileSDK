@@ -35,6 +35,9 @@
         var onDismiss: (() -> Void)?
         /// Callback invoked when the widget page sends a bridge event (e.g. "close", "complete", "leadSubmit").
         var onWidgetEvent: ((_ event: String, _ data: [String: Any]?) -> Void)?
+        /// Gives the host app first refusal on a URL leaving the widget, once the widget has closed;
+        /// returns whether it handled it.
+        var onOpenURL: ((_ url: URL) -> Bool)?
         private var isDismissHandled = false
 
         init(publicId: String, widgetId: Int? = nil, puid: String? = nil, overlayOptions: PoltioOverlayOptions? = nil, onDismiss: (() -> Void)? = nil) {
@@ -258,7 +261,32 @@
             return host == "poltio.com" || host.hasSuffix(".poltio.com")
         }
 
+        /// Hands a URL leaving the widget to the host app's `onOpenURL`, or else to the system.
         private func openExternally(_ url: URL) {
+            guard let onOpenURL else {
+                Self.openWithSystem(url)
+                return
+            }
+            let route = {
+                if !onOpenURL(url) {
+                    Self.openWithSystem(url)
+                }
+            }
+            guard presentingViewController != nil else {
+                route()
+                return
+            }
+            // Close the widget before the host navigates: UIKit can't present the host's screen while
+            // this sheet is still up, and dismissing afterwards would instead dismiss whatever the host
+            // presented on top of it.
+            PoltioLogger.debug("Closing the widget to hand URL '\(url.absoluteString)' to the host app.")
+            dismiss(animated: true) { [weak self] in
+                self?.notifyDismiss()
+                route()
+            }
+        }
+
+        private static func openWithSystem(_ url: URL) {
             PoltioLogger.debug("Opening external URL outside the widget: \(url.absoluteString)")
             UIApplication.shared.open(url, options: [:]) { success in
                 if !success {

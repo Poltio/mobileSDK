@@ -1,5 +1,8 @@
 @testable import PoltioSDK
 import XCTest
+#if canImport(UIKit)
+    import WebKit
+#endif
 
 /// Helper mock URLProtocol for testing network requests without hitting live servers.
 final class MockURLProtocol: URLProtocol {
@@ -1047,6 +1050,39 @@ final class PoltioSDKTests: XCTestCase {
                     XCTAssertFalse(PoltioWebViewController.isTrustedWidgetURL(url), raw)
                 }
             }
+        }
+
+        func testExternalURLIsOfferedToHostHandlerFirst() throws {
+            // A new-window request (`target="_blank"`): `targetFrame` is nil.
+            final class NewWindowAction: WKNavigationAction {
+                let stubRequest: URLRequest
+                init(url: URL) {
+                    stubRequest = URLRequest(url: url)
+                    super.init()
+                }
+
+                override var request: URLRequest {
+                    stubRequest
+                }
+
+                override var targetFrame: WKFrameInfo? {
+                    nil
+                }
+            }
+
+            let productURL = try XCTUnwrap(URL(string: "https://shop.example.com/product/1"))
+            let controller = PoltioWebViewController(publicId: "abc")
+            var handledURLs: [URL] = []
+            controller.onOpenURL = { url in
+                handledURLs.append(url)
+                return true
+            }
+
+            var policy: WKNavigationActionPolicy?
+            controller.webView(WKWebView(), decidePolicyFor: NewWindowAction(url: productURL)) { policy = $0 }
+
+            XCTAssertEqual(policy, .cancel)
+            XCTAssertEqual(handledURLs, [productURL])
         }
 
         func testBuildWidgetURLWithWidgetId() {

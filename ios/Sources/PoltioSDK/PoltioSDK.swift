@@ -493,6 +493,14 @@ public final class PoltioSDK {
     /// Delivered on the main thread. Set this once, e.g. alongside `configure(clientKey:)`.
     public static var onWidgetEvent: ((_ event: String, _ data: [String: Any]?) -> Void)?
 
+    /// Optional handler for links the widget would otherwise open outside the app — e.g. the product
+    /// link on a result page. When set, the widget closes first, then this is called on the main
+    /// thread: return `true` if your app handled `url`, or `false` to let the SDK hand it to the
+    /// system as usual (Safari, or whichever app owns it). iOS never routes an app's own Universal
+    /// Links back into it when the app opens them itself, so this is how product links land on your
+    /// own screens.
+    public static var onOpenURL: ((_ url: URL) -> Bool)?
+
     // MARK: - Internal Helpers
 
     /// Checks whether an event name corresponds to a view event.

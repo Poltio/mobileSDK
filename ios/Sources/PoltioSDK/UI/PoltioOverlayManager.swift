@@ -333,6 +333,9 @@
                 webVC.onWidgetEvent = { event, data in
                     PoltioSDK.onWidgetEvent?(event, data)
                 }
+                webVC.onOpenURL = { url in
+                    PoltioSDK.onOpenURL?(url) ?? false
+                }
                 webVC.onDismiss = { [weak self] in
                     DispatchQueue.main.async {
                         guard let self, let window = self.overlayWindow, let trigger = self.activeTriggerView else {

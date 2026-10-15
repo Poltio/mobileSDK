@@ -267,11 +267,19 @@ internal class PoltioWebViewActivity : Activity() {
                 // The JS bridge (`window.PoltioNativeBridge`) is exposed to whatever page is
                 // currently loaded — an untrusted external site reached via a redirect or a
                 // tapped link inside the widget would otherwise gain the same access. Keep
-                // navigation confined to Poltio's own domain and hand anything else to the
-                // system browser instead of letting the WebView follow it.
+                // navigation confined to Poltio's own domain and hand anything else to the host
+                // app's `PoltioSDK.onOpenUrl` handler, or else the system, instead of letting the
+                // WebView follow it.
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                     val url = request?.url ?: return false
                     if (isTrustedWidgetUrl(url)) return false
+                    // Same contract as iOS: with a handler set, the widget closes either way.
+                    val handler = PoltioSDK.onOpenUrl
+                    if (handler != null) {
+                        PoltioLogger.debug { "Closing the widget to hand URL '$url' to the host app." }
+                        dismissWithAnimation()
+                        if (handler.onOpenUrl(url)) return true
+                    }
                     try {
                         view?.context?.startActivity(Intent(Intent.ACTION_VIEW, url))
                     } catch (error: Exception) {
