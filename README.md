@@ -283,6 +283,26 @@ deduplication slot on a malformed request.
 
 ---
 
+## 🚀 Releasing
+
+Releases are fully automated by GitHub Actions. Nothing is tagged or published from a laptop.
+
+1. **Merge a PR into `main`.** `release.yaml` (`poltio/action-release`) creates the next tag and
+   GitHub release: a patch bump by default, or a minor/major bump if the PR has a `minor`/`major`
+   label.
+2. **The published release triggers the publish workflows**, which take the version from the tag:
+   - `publish-maven.yaml` publishes `com.poltio:poltio-sdk` to Maven Central (`-PlibVersion=<tag>`).
+     Central usually takes 10–30 minutes to serve a new version after the workflow finishes.
+   - `publish-cocoapods.yaml` syncs `PoltioSDK.podspec` to the tag (`scripts/bump-version.sh`) and
+     runs `pod trunk push`. Trunk can report "Calling the GitHub commit API timed out" even though
+     the push went through, so check `https://trunk.cocoapods.org/api/v1/pods/PoltioSDK` before
+     re-running (a re-run of an accepted version fails with "duplicate entry").
+3. **Swift Package Manager** resolves the tag directly; there's nothing to publish.
+
+Don't bump versions, tag, or publish locally.
+
+---
+
 ## 📚 Documentation & Platform Setup Guides
 - 📖 [**Android Setup Guide** (`docs/ANDROID.md`)](docs/ANDROID.md) - JDK 17, Android Studio, and AVD Emulator setup.
 - 📖 [**iOS Setup Guide** (`docs/IOS.md`)](docs/IOS.md) - Xcode, Swift Package Manager, and iOS Simulator setup.
@@ -307,6 +327,5 @@ deduplication slot on a malformed request.
 | `make run-example-ios` | Launch iOS Example App in simulator |
 | `make run-example-android` | Launch Android Example App in emulator |
 | `make run-example-rn` | Launch React Native Example App |
-| `make version` | Bump version across all SDK manifests |
-| `make submit-version` | Tag release and trigger publishing |
-| `make publish-cocoapods` | Publish iOS SDK to CocoaPods Trunk |
+| `make version` | Sync manifests to a version; the CocoaPods workflow does this from the tag (see [Releasing](#-releasing)) |
+| `make publish-cocoapods` | Manual fallback for the CocoaPods publish workflow |

@@ -6,7 +6,7 @@
 DEVELOPER_DIR ?= $(shell xcode-select -p 2>/dev/null)
 export DEVELOPER_DIR
 
-.PHONY: all help check build build-ios build-android build-rn test test-ios test-ios-macos test-android test-rn format format-ios lint lint-ios lint-android lint-pod lint-actions zizmor run-example-ios run-example-android run-example-rn version submit-version publish-cocoapods publish-maven clean
+.PHONY: all help check build build-ios build-android build-rn test test-ios test-ios-macos test-android test-rn format format-ios lint lint-ios lint-android lint-pod lint-actions zizmor run-example-ios run-example-android run-example-rn version publish-cocoapods publish-maven clean
 
 help:
 	@echo "Poltio Mobile SDK - Monorepo Makefile Commands:"
@@ -31,8 +31,7 @@ help:
 	@echo "  make run-example-ios     - Launch iOS Example App in simulator"
 	@echo "  make run-example-android - Launch Android Example App in emulator"
 	@echo "  make run-example-rn      - Launch React Native Example App"
-	@echo "  make version             - Bump version across all SDK manifests"
-	@echo "  make submit-version      - Tag release and trigger publishing"
+	@echo "  make version             - Sync manifests to VERSION=x.y.z (CI runs this from the release tag)"
 	@echo "  make publish-cocoapods   - Publish iOS SDK to CocoaPods Trunk"
 	@echo "  make publish-maven       - Publish Android SDK to Maven Central"
 	@echo "  make clean               - Clean build artifacts across all platforms"
@@ -258,10 +257,6 @@ VERSION ?= 1.0.0
 version:
 	@chmod +x scripts/bump-version.sh
 	@./scripts/bump-version.sh "$(VERSION)"
-
-submit-version:
-	@echo "==> Submitting version $(VERSION)..."
-	@git tag -a "v$(VERSION)" -m "Release v$(VERSION)"
 
 publish-cocoapods:
 	@echo "==> Pushing PoltioSDK to CocoaPods Trunk..."

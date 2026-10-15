@@ -4,7 +4,7 @@ Welcome to the **Poltio Mobile SDK** repository. This file provides guidelines, 
 
 > [!IMPORTANT]
 > ### MANDATORY GROUND RULES FOR ALL AI AGENTS
-> 1. **Root Makefile Commands**: EVERY build, test, lint, example-app, versioning, and publishing action MUST be executable via the root `Makefile` (`make build`, `make build-ios`, `make test-ios`, `make run-example-ios`, `make version`, `make submit-version`, etc.). Agents must maintain and update the Makefile as targets or sub-projects evolve.
+> 1. **Root Makefile Commands**: EVERY build, test, lint, example-app, versioning, and publishing action MUST be executable via the root `Makefile` (`make build`, `make build-ios`, `make test-ios`, `make run-example-ios`, `make version`, etc.). Agents must maintain and update the Makefile as targets or sub-projects evolve.
 > 2. **Monorepo Architecture**: This repository is a monorepo for all Poltio mobile SDKs. Code for iOS, Android, and React Native MUST be isolated in their respective `/ios`, `/android`, and `/react-native` directories.
 > 3. **Example Apps**: Sample apps MUST reside in `/example` (`/example/ios`, `/example/android`, `/example/rn`). Every sample app MUST be runnable directly via root `Makefile` targets.
 > 4. **Target Current Active Branch/PR**: When asked to check PR review comments, always make sure you check the PR corresponding to the current active git branch. Use `gh pr view --comments` (without providing a specific PR ID) so GitHub CLI automatically resolves the active pull request for the current branch.
@@ -93,9 +93,12 @@ AI agents MUST use and maintain the root `Makefile` targets for executing builds
 | `make run-example-ios` | Builds & runs the iOS example app in simulator. |
 | `make run-example-android`| Builds & runs the Android example app in emulator. |
 | `make run-example-rn` | Builds & starts the React Native example app. |
-| `make version` | Bumps version across all platform manifest files. |
-| `make submit-version` | Tags and triggers release/publishing workflows. |
-| `make publish-cocoapods`| Pushes iOS SDK podspec to CocoaPods Trunk. |
+| `make version` | Syncs manifests to `VERSION=x.y.z`; run by CI from the release tag, not locally. |
+| `make publish-cocoapods`| Manual fallback for the CocoaPods publish workflow. |
+
+> **Releases are CI-only**: merging a PR into `main` makes `release.yaml` cut the next tag and
+> GitHub release (patch by default; `minor`/`major` PR labels), which triggers the Maven Central
+> and CocoaPods publish workflows. Never bump versions, tag, or publish locally. See README "Releasing".
 
 ---
 
