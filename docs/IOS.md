@@ -32,7 +32,7 @@ All builds, tests, and example apps are run via the universal root `Makefile`:
 | **Build SDK** | `make build-ios` | Compiles the Swift package SDK (`swift build`). |
 | **Test SDK** | `make test-ios` | Runs the full unit test suite on an iOS Simulator (`xcodebuild test`); `make test-ios-macos` runs the host-only subset (`swift test`). |
 | **Lint Podspec** | `make lint-pod` | Validates CocoaPods podspec (`pod lib lint`). |
-| **Publish Pod** | `make publish-cocoapods` | Pushes podspec to CocoaPods Trunk (`pod trunk push`). |
+| **Publish Pod** | `make publish-cocoapods` | Manual fallback only; CI publishes on every release (`pod trunk push`). |
 | **Build Example** | `make build-example-ios` | Compiles `ExampleApp.app` bundle via `xcodebuild`. |
 | **Open Xcode** | `make open-example-ios` | Opens `example/ios/ExampleApp.xcodeproj` in Xcode. |
 | **Run Example** | `make run-example-ios` | Boots iOS Simulator (`iPhone 17 Pro`), installs `.app`, and launches app. |
@@ -117,16 +117,12 @@ pod trunk me
 
 ### Validation & Release:
 ```bash
-# 1. Validate the podspec locally
+# Validate the podspec locally (optional; CI validates again on push)
 make lint-pod
-
-# 2. Tag release in git and push
-git tag -a v1.0.0 -m "Release v1.0.0"
-git push origin v1.0.0
-
-# 3. Publish to CocoaPods Trunk (or triggered automatically via GitHub Actions)
-make publish-cocoapods
 ```
+
+Releasing is automated: merging a PR into `main` creates the tag and GitHub release, and
+`publish-cocoapods.yaml` pushes the podspec to Trunk. See the README's "Releasing" section.
 
 ---
 
