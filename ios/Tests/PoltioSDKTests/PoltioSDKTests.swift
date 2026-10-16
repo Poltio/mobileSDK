@@ -1026,13 +1026,13 @@ final class PoltioSDKTests: XCTestCase {
     #if canImport(UIKit)
         func testBuildWidgetURLWithAndWithoutPUID() {
             let urlWithoutPuid = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", puid: nil)
-            XCTAssertEqual(urlWithoutPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off&sdk_platform=ios&sdk_version=\(PoltioSDKInfo.version)")
+            XCTAssertEqual(urlWithoutPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off&session_source=mobilesdk&sdk_platform=ios")
 
             let urlWithEmptyPuid = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", puid: "   ")
-            XCTAssertEqual(urlWithEmptyPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off&sdk_platform=ios&sdk_version=\(PoltioSDKInfo.version)")
+            XCTAssertEqual(urlWithEmptyPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off&session_source=mobilesdk&sdk_platform=ios")
 
             let urlWithPuid = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", puid: "usr_123")
-            XCTAssertEqual(urlWithPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?puid=usr_123&disclaimer=off&sdk_platform=ios&sdk_version=\(PoltioSDKInfo.version)")
+            XCTAssertEqual(urlWithPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?puid=usr_123&disclaimer=off&session_source=mobilesdk&sdk_platform=ios")
         }
 
         func testWidgetNavigationPolicyTrustsOnlyPoltioDomains() throws {
@@ -1154,10 +1154,10 @@ final class PoltioSDKTests: XCTestCase {
 
         func testBuildWidgetURLWithWidgetId() {
             let urlWithWidgetId = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", widgetId: 42, puid: nil)
-            XCTAssertEqual(urlWithWidgetId?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?widget_id=42&disclaimer=off&sdk_platform=ios&sdk_version=\(PoltioSDKInfo.version)")
+            XCTAssertEqual(urlWithWidgetId?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?widget_id=42&disclaimer=off&session_source=mobilesdk&sdk_platform=ios")
 
             let urlWithoutWidgetId = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", widgetId: nil, puid: nil)
-            XCTAssertEqual(urlWithoutWidgetId?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off&sdk_platform=ios&sdk_version=\(PoltioSDKInfo.version)")
+            XCTAssertEqual(urlWithoutWidgetId?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off&session_source=mobilesdk&sdk_platform=ios")
         }
 
         func testBuildWidgetURLWithPassThroughParams() {
@@ -1172,7 +1172,7 @@ final class PoltioSDKTests: XCTestCase {
             )
             XCTAssertEqual(
                 url?.absoluteString,
-                "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?puid=usr_123&content=landing&custom_id=abc-123&loc=header&resultfit=fit&disclaimer=on&sdk_platform=ios&sdk_version=\(PoltioSDKInfo.version)"
+                "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?puid=usr_123&content=landing&custom_id=abc-123&loc=header&resultfit=fit&disclaimer=on&session_source=mobilesdk&sdk_platform=ios"
             )
         }
 

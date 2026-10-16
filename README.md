@@ -292,17 +292,18 @@ The event also reaches `onWidgetEvent` as `addToCart`, as before.
 
 #### Widget bridge contract
 
-The SDK loads the widget with `sdk_platform` (`ios` / `android`) and `sdk_version` (e.g. `1.0.2`) in
-its URL, so the widget can tell it's running inside an app. When it is, the add-to-cart button posts
-this message instead of running the store's web script. Always send `url` (it's the fallback when the
+The SDK loads the widget with `session_source=mobilesdk` (the web SDK sends `session_source=widget`)
+and `sdk_platform` (`ios` / `android`) in its URL, so the widget can tell it's running inside an app.
+When it is, the add-to-cart button posts this message instead of running the store's web script. Always send `url` (it's the fallback when the
 app doesn't add the item); `productId` is what most apps' carts need. Every field is passed through
 in `data`.
 
 ```js
 const msg = { event: "addToCart", data: { productId: "42", url: "https://shop.example.com/p/42", quantity: 1 } };
-if (window.webkit?.messageHandlers?.poltioNative) window.webkit.messageHandlers.poltioNative.postMessage(msg); // iOS app
-else if (window.PoltioNativeBridge) window.PoltioNativeBridge.postMessage(JSON.stringify(msg));             // Android app
-else runStoreCartScript();                                                                                   // web
+const inApp = new URLSearchParams(location.search).get("session_source") === "mobilesdk";
+if (inApp && window.webkit?.messageHandlers?.poltioNative) window.webkit.messageHandlers.poltioNative.postMessage(msg); // iOS
+else if (inApp && window.PoltioNativeBridge) window.PoltioNativeBridge.postMessage(JSON.stringify(msg));             // Android
+else runStoreCartScript();                                                                                            // web
 ```
 
 On iOS, `addToCart` is only accepted from `https://poltio.com` / `https://*.poltio.com` frames. On

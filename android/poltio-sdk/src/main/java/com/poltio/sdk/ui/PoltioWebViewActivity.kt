@@ -29,7 +29,6 @@ import androidx.annotation.VisibleForTesting
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
-import com.poltio.sdk.BuildConfig
 import com.poltio.sdk.PoltioCartItem
 import com.poltio.sdk.PoltioExecutors
 import com.poltio.sdk.PoltioLogger
@@ -136,10 +135,10 @@ internal class PoltioWebViewActivity : Activity() {
             appendIfPresent("loc", loc)
             appendIfPresent("resultfit", resultfit)
             builder.appendQueryParameter("disclaimer", disclaimer)
-            // Tells the widget it's running in an app through this SDK — same values as the API's
-            // `X-Poltio-SDK-Platform` / `X-Poltio-SDK-Version` headers.
+            // Tells the widget it's running in an app through this SDK, like the web SDK's
+            // `session_source=widget`; `sdk_platform` matches the API's `X-Poltio-SDK-Platform` header.
+            builder.appendQueryParameter("session_source", "mobilesdk")
             builder.appendQueryParameter("sdk_platform", "android")
-            builder.appendQueryParameter("sdk_version", BuildConfig.SDK_VERSION)
             return builder.build()
         }
     }

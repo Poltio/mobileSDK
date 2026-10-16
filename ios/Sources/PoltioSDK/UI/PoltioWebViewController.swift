@@ -172,10 +172,10 @@
             appendIfPresent("resultfit", resultfit)
 
             queryItems.append(URLQueryItem(name: "disclaimer", value: disclaimer))
-            // Tells the widget it's running in an app through this SDK — same values as the API's
-            // `X-Poltio-SDK-Platform` / `X-Poltio-SDK-Version` headers.
+            // Tells the widget it's running in an app through this SDK, like the web SDK's
+            // `session_source=widget`; `sdk_platform` matches the API's `X-Poltio-SDK-Platform` header.
+            queryItems.append(URLQueryItem(name: "session_source", value: "mobilesdk"))
             queryItems.append(URLQueryItem(name: "sdk_platform", value: PoltioSDKInfo.platform))
-            queryItems.append(URLQueryItem(name: "sdk_version", value: PoltioSDKInfo.version))
             components.queryItems = queryItems
             return components.url
         }

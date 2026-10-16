@@ -5,7 +5,6 @@ import android.net.Uri
 import android.os.Looper
 import android.webkit.WebResourceRequest
 import androidx.test.core.app.ApplicationProvider
-import com.poltio.sdk.BuildConfig
 import com.poltio.sdk.PoltioAddToCartHandler
 import com.poltio.sdk.PoltioCartItem
 import com.poltio.sdk.PoltioSDK
@@ -148,7 +147,7 @@ class PoltioWebViewActivityTest {
             puid = null,
         )
         assertEquals(
-            "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?widget_id=42&disclaimer=off&sdk_platform=android&sdk_version=${BuildConfig.SDK_VERSION}",
+            "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?widget_id=42&disclaimer=off&session_source=mobilesdk&sdk_platform=android",
             url.toString(),
         )
     }
@@ -204,7 +203,7 @@ class PoltioWebViewActivityTest {
             puid = null,
         )
         assertEquals(
-            "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off&sdk_platform=android&sdk_version=${BuildConfig.SDK_VERSION}",
+            "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off&session_source=mobilesdk&sdk_platform=android",
             url.toString(),
         )
     }
