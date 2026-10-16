@@ -5,6 +5,9 @@ import android.net.Uri
 import android.os.Looper
 import android.webkit.WebResourceRequest
 import androidx.test.core.app.ApplicationProvider
+import com.poltio.sdk.BuildConfig
+import com.poltio.sdk.PoltioAddToCartHandler
+import com.poltio.sdk.PoltioCartItem
 import com.poltio.sdk.PoltioSDK
 import com.poltio.sdk.PoltioUrlHandler
 import java.util.concurrent.TimeUnit
@@ -27,10 +30,22 @@ class PoltioWebViewActivityTest {
         PoltioSDK.reset()
     }
 
+    private fun launch(): PoltioWebViewActivity {
+        val intent = PoltioWebViewActivity.newIntent(ApplicationProvider.getApplicationContext(), "abc", null, null, null)
+        return Robolectric.buildActivity(PoltioWebViewActivity::class.java, intent).setup().get()
+    }
+
+    /** Simulates the widget's add-to-cart button sending [data]; returns the Activity under test. */
+    private fun addToCart(data: Map<String, Any?>): PoltioWebViewActivity {
+        val activity = launch()
+        activity.addToCart(data)
+        shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS)
+        return activity
+    }
+
     /** Simulates the user tapping [url] inside the widget; returns the Activity under test. */
     private fun tapLink(url: Uri): PoltioWebViewActivity {
-        val intent = PoltioWebViewActivity.newIntent(ApplicationProvider.getApplicationContext(), "abc", null, null, null)
-        val activity = Robolectric.buildActivity(PoltioWebViewActivity::class.java, intent).setup().get()
+        val activity = launch()
         val webView = activity.webView!!
         val request = object : WebResourceRequest {
             override fun getUrl() = url
@@ -80,6 +95,52 @@ class PoltioWebViewActivityTest {
     }
 
     @Test
+    fun `add to cart goes to the host handler and keeps the widget open`() {
+        val added = mutableListOf<PoltioCartItem>()
+        PoltioSDK.onAddToCart = PoltioAddToCartHandler { added += it; true }
+
+        val activity = addToCart(mapOf("productId" to 42, "url" to "https://shop.example.com/p/42", "quantity" to 2, "sku" to "SKU-42"))
+
+        assertEquals(listOf("42"), added.map { it.productId })
+        assertEquals(2, added.single().quantity)
+        assertEquals("SKU-42", added.single().data["sku"])
+        assertNull(shadowOf(activity).nextStartedActivity)
+        assertFalse(activity.isFinishing)
+    }
+
+    @Test
+    fun `add to cart falls back to the product link when the host declines or has no handler`() {
+        val productUrl = Uri.parse("https://shop.example.com/p/42")
+        val opened = mutableListOf<Uri>()
+        PoltioSDK.onOpenUrl = PoltioUrlHandler { opened += it; true }
+
+        PoltioSDK.onAddToCart = PoltioAddToCartHandler { false }
+        assertTrue(addToCart(mapOf("productId" to "42", "url" to productUrl.toString())).isFinishing)
+        PoltioSDK.onAddToCart = null
+        assertTrue(addToCart(mapOf("url" to productUrl.toString())).isFinishing)
+
+        assertEquals(listOf(productUrl, productUrl), opened)
+    }
+
+    @Test
+    fun `cart items are parsed defensively`() {
+        assertNull(PoltioCartItem.from(emptyMap()))
+        assertNull(PoltioCartItem.from(mapOf("productId" to " ", "url" to "javascript:alert(1)")))
+
+        val item = PoltioCartItem.from(mapOf("productId" to " p1 ", "url" to "myapp://cart", "quantity" to 0))!!
+        assertEquals("p1", item.productId)
+        assertNull(item.url)
+        assertEquals(1, item.quantity)
+
+        // Same rules as iOS: all whitespace trimmed, numeric-string quantities, host-less URLs dropped.
+        val padded = PoltioCartItem.from(mapOf("productId" to "42\n", "url" to "https://shop.example.com/p/42\n", "quantity" to "3"))!!
+        assertEquals("42", padded.productId)
+        assertEquals("https://shop.example.com/p/42", padded.url.toString())
+        assertEquals(3, padded.quantity)
+        assertNull(PoltioCartItem.from(mapOf("url" to "https://")))
+    }
+
+    @Test
     fun `widgetId is appended as a query parameter when present`() {
         val url = PoltioWebViewActivity.buildWidgetUrl(
             publicId = "6c964c1d-6eb4-4c19-ad16-342bd59bdac3",
@@ -87,7 +148,7 @@ class PoltioWebViewActivityTest {
             puid = null,
         )
         assertEquals(
-            "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?widget_id=42&disclaimer=off",
+            "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?widget_id=42&disclaimer=off&session_source=mobilesdk&sdk_platform=android&sdk_version=${BuildConfig.SDK_VERSION}",
             url.toString(),
         )
     }
@@ -143,7 +204,7 @@ class PoltioWebViewActivityTest {
             puid = null,
         )
         assertEquals(
-            "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off",
+            "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off&session_source=mobilesdk&sdk_platform=android&sdk_version=${BuildConfig.SDK_VERSION}",
             url.toString(),
         )
     }

@@ -1003,16 +1003,36 @@ final class PoltioSDKTests: XCTestCase {
         XCTAssertEqual(decoded.overlayOptions.pillCloseRememberDuration, 24)
     }
 
+    func testCartItemsAreParsedDefensively() throws {
+        XCTAssertNil(PoltioCartItem(data: [:]))
+        XCTAssertNil(PoltioCartItem(data: ["productId": " ", "url": "javascript:alert(1)"]))
+
+        let item = try XCTUnwrap(PoltioCartItem(data: ["productId": " p1 ", "url": "myapp://cart", "quantity": 0]))
+        XCTAssertEqual(item.productId, "p1")
+        XCTAssertNil(item.url)
+        XCTAssertEqual(item.quantity, 1)
+
+        // Same rules as Android: all whitespace trimmed, numeric-string quantities, host-less URLs dropped.
+        let padded = try XCTUnwrap(PoltioCartItem(data: ["productId": "42\n", "url": "https://shop.example.com/p/42\n", "quantity": "3"]))
+        XCTAssertEqual(padded.productId, "42")
+        XCTAssertEqual(padded.url?.absoluteString, "https://shop.example.com/p/42")
+        XCTAssertEqual(padded.quantity, 3)
+        XCTAssertNil(PoltioCartItem(data: ["url": "https://"]))
+
+        // WebKit bridges every JS number as a double-backed NSNumber: whole ones still become ids.
+        XCTAssertEqual(PoltioCartItem(data: ["productId": NSNumber(value: 42.0)])?.productId, "42")
+    }
+
     #if canImport(UIKit)
         func testBuildWidgetURLWithAndWithoutPUID() {
             let urlWithoutPuid = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", puid: nil)
-            XCTAssertEqual(urlWithoutPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off")
+            XCTAssertEqual(urlWithoutPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off&session_source=mobilesdk&sdk_platform=ios&sdk_version=\(PoltioSDKInfo.version)")
 
             let urlWithEmptyPuid = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", puid: "   ")
-            XCTAssertEqual(urlWithEmptyPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off")
+            XCTAssertEqual(urlWithEmptyPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off&session_source=mobilesdk&sdk_platform=ios&sdk_version=\(PoltioSDKInfo.version)")
 
             let urlWithPuid = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", puid: "usr_123")
-            XCTAssertEqual(urlWithPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?puid=usr_123&disclaimer=off")
+            XCTAssertEqual(urlWithPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?puid=usr_123&disclaimer=off&session_source=mobilesdk&sdk_platform=ios&sdk_version=\(PoltioSDKInfo.version)")
         }
 
         func testWidgetNavigationPolicyTrustsOnlyPoltioDomains() throws {
@@ -1085,12 +1105,59 @@ final class PoltioSDKTests: XCTestCase {
             XCTAssertEqual(handledURLs, [productURL])
         }
 
+        func testAddToCartIsOnlyTrustedFromPoltioFrames() {
+            XCTAssertTrue(PoltioWebViewController.isTrustedBridgeOrigin(protocol: "https", host: "www.poltio.com"))
+            XCTAssertTrue(PoltioWebViewController.isTrustedBridgeOrigin(protocol: "https", host: "poltio.com"))
+            XCTAssertFalse(PoltioWebViewController.isTrustedBridgeOrigin(protocol: "http", host: "www.poltio.com"))
+            XCTAssertFalse(PoltioWebViewController.isTrustedBridgeOrigin(protocol: "https", host: "evil.com"))
+            XCTAssertFalse(PoltioWebViewController.isTrustedBridgeOrigin(protocol: "https", host: "poltio.com.evil.com"))
+            XCTAssertFalse(PoltioWebViewController.isTrustedBridgeOrigin(protocol: "https", host: ""))
+        }
+
+        func testAddToCartGoesToHostHandlerAndKeepsWidgetOpen() throws {
+            let controller = PoltioWebViewController(publicId: "abc")
+            var added: [PoltioCartItem] = []
+            var openedURLs: [URL] = []
+            PoltioSDK.onAddToCart = { item in
+                added.append(item)
+                return true
+            }
+            PoltioSDK.onOpenURL = { url in
+                openedURLs.append(url)
+                return true
+            }
+
+            controller.addToCart(["productId": 42, "url": "https://shop.example.com/p/42", "quantity": 2, "sku": "SKU-42"])
+
+            let item = try XCTUnwrap(added.first)
+            XCTAssertEqual(item.productId, "42")
+            XCTAssertEqual(item.quantity, 2)
+            XCTAssertEqual(item.data["sku"] as? String, "SKU-42")
+            XCTAssertEqual(openedURLs, [])
+        }
+
+        func testAddToCartFallsBackToProductLinkWhenHostDeclinesOrHasNoHandler() throws {
+            let productURL = try XCTUnwrap(URL(string: "https://shop.example.com/p/42"))
+            var openedURLs: [URL] = []
+            PoltioSDK.onOpenURL = { url in
+                openedURLs.append(url)
+                return true
+            }
+
+            PoltioSDK.onAddToCart = { _ in false }
+            PoltioWebViewController(publicId: "abc").addToCart(["productId": "42", "url": productURL.absoluteString])
+            PoltioSDK.onAddToCart = nil
+            PoltioWebViewController(publicId: "abc").addToCart(["url": productURL.absoluteString])
+
+            XCTAssertEqual(openedURLs, [productURL, productURL])
+        }
+
         func testBuildWidgetURLWithWidgetId() {
             let urlWithWidgetId = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", widgetId: 42, puid: nil)
-            XCTAssertEqual(urlWithWidgetId?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?widget_id=42&disclaimer=off")
+            XCTAssertEqual(urlWithWidgetId?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?widget_id=42&disclaimer=off&session_source=mobilesdk&sdk_platform=ios&sdk_version=\(PoltioSDKInfo.version)")
 
             let urlWithoutWidgetId = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", widgetId: nil, puid: nil)
-            XCTAssertEqual(urlWithoutWidgetId?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off")
+            XCTAssertEqual(urlWithoutWidgetId?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off&session_source=mobilesdk&sdk_platform=ios&sdk_version=\(PoltioSDKInfo.version)")
         }
 
         func testBuildWidgetURLWithPassThroughParams() {
@@ -1105,7 +1172,7 @@ final class PoltioSDKTests: XCTestCase {
             )
             XCTAssertEqual(
                 url?.absoluteString,
-                "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?puid=usr_123&content=landing&custom_id=abc-123&loc=header&resultfit=fit&disclaimer=on"
+                "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?puid=usr_123&content=landing&custom_id=abc-123&loc=header&resultfit=fit&disclaimer=on&session_source=mobilesdk&sdk_platform=ios&sdk_version=\(PoltioSDKInfo.version)"
             )
         }
 

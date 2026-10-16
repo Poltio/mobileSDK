@@ -172,6 +172,11 @@
             appendIfPresent("resultfit", resultfit)
 
             queryItems.append(URLQueryItem(name: "disclaimer", value: disclaimer))
+            // Tells the widget it's running in an app through this SDK, like the web SDK's
+            // `session_source=widget`; `sdk_platform`/`sdk_version` match the API's `X-Poltio-SDK-*` headers.
+            queryItems.append(URLQueryItem(name: "session_source", value: "mobilesdk"))
+            queryItems.append(URLQueryItem(name: "sdk_platform", value: PoltioSDKInfo.platform))
+            queryItems.append(URLQueryItem(name: "sdk_version", value: PoltioSDKInfo.version))
             components.queryItems = queryItems
             return components.url
         }
@@ -256,6 +261,12 @@
                 return false
             }
             return host == "poltio.com" || host.hasSuffix(".poltio.com")
+        }
+
+        /// Whether a bridge message's sending frame (its `WKSecurityOrigin`) is one of Poltio's own.
+        static func isTrustedBridgeOrigin(protocol scheme: String, host: String) -> Bool {
+            guard scheme == "https", let url = URL(string: "https://\(host)") else { return false }
+            return isTrustedWidgetURL(url)
         }
 
         /// Hands a URL leaving the widget to the host app's `onOpenURL`, or else to the system.
@@ -373,14 +384,42 @@
                 return
             }
 
+            // `addToCart` makes the SDK and host act (the host's cart, or opening a link), so only
+            // Poltio's own frames may send it — never a third-party iframe embedded in the widget. Checked
+            // before `onWidgetEvent` so hosts listening there never see a forged one either.
+            let origin = message.frameInfo.securityOrigin
+            if event == "addToCart", !Self.isTrustedBridgeOrigin(protocol: origin.protocol, host: origin.host) {
+                PoltioLogger.warning("Ignoring addToCart from untrusted frame '\(origin.host)'.")
+                return
+            }
+
             let data = body["data"] as? [String: Any]
             PoltioLogger.debug("Received widget bridge event '\(event)'.")
             onWidgetEvent?(event, data)
 
-            if event == "close" {
+            switch event {
+            case "close":
                 dismiss(animated: true) { [weak self] in
                     self?.notifyDismiss()
                 }
+            case "addToCart":
+                addToCart(data)
+            default:
+                break
+            }
+        }
+
+        /// Offers the widget's add-to-cart tap to the host app, falling back to opening the product link.
+        func addToCart(_ data: [String: Any]?) {
+            guard let item = PoltioCartItem(data: data ?? [:]) else {
+                PoltioLogger.warning("Ignoring addToCart without a productId or an http(s) url.")
+                return
+            }
+            if PoltioSDK.onAddToCart?(item) == true {
+                return
+            }
+            if let url = item.url {
+                openExternally(url)
             }
         }
     }

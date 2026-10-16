@@ -170,6 +170,7 @@ public final class PoltioSDK {
                 UserDefaults.standard.removeObject(forKey: PoltioSDK.puidStorageKey)
                 PoltioSDK.onWidgetEvent = nil
                 PoltioSDK.onOpenURL = nil
+                PoltioSDK.onAddToCart = nil
             }
             PoltioLogger.logLevel = .warning
         }
@@ -502,6 +503,13 @@ public final class PoltioSDK {
     /// Links back into it when the app opens them itself, so this is how product links land on your
     /// own screens.
     public static var onOpenURL: ((_ url: URL) -> Bool)?
+
+    /// Optional handler for the widget's add-to-cart button — the in-app counterpart of the
+    /// site-specific cart script the widget runs on the web. Called on the main thread with the widget
+    /// still open: return `true` once you've added the item, or `false` to have the SDK open
+    /// `item.url` like a tapped product link instead (through `onOpenURL`; also what happens when no
+    /// handler is set).
+    public static var onAddToCart: ((_ item: PoltioCartItem) -> Bool)?
 
     // MARK: - Internal Helpers
 

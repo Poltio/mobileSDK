@@ -249,6 +249,68 @@ PoltioSDK.onOpenUrl = PoltioUrlHandler { url ->
 PoltioSDK.setOnOpenUrl(url -> router.handle(url));
 ```
 
+### Adding products to your cart (`onAddToCart`)
+
+On the web, the widget's add-to-cart button runs a script written for each store. In your app, the
+widget hands the product to `onAddToCart` instead. It is called on the main thread and **the widget
+stays open**, so the user can keep browsing. Return `true` once you've added the item, or `false` to
+have the SDK open `item.url` like a tapped product link (through `onOpenURL` / `onOpenUrl` above).
+The same fallback runs when no handler is set, so the button never does nothing.
+
+A `PoltioCartItem` has `productId` (your catalog ID from the widget's product data), `url` (http/https
+only), `quantity` (at least 1), and `data`, which holds the full payload including extra fields such
+as `sku` or `variant`.
+
+```swift
+// iOS
+PoltioSDK.onAddToCart = { item in
+    guard let productId = item.productId else { return false }
+    cart.add(productId: productId, quantity: item.quantity)
+    return true
+}
+```
+
+```kotlin
+// Android
+PoltioSDK.onAddToCart = PoltioAddToCartHandler { item ->
+    val productId = item.productId ?: return@PoltioAddToCartHandler false
+    cart.add(productId, item.quantity)
+    true
+}
+```
+
+```java
+// Android (Java)
+PoltioSDK.setOnAddToCart(item -> {
+    if (item.getProductId() == null) return false;
+    cart.add(item.getProductId(), item.getQuantity());
+    return true;
+});
+```
+
+The event also reaches `onWidgetEvent` as `addToCart`, as before.
+
+#### Widget bridge contract
+
+The SDK loads the widget with `session_source=mobilesdk` (the web SDK sends `session_source=widget`)
+plus `sdk_platform` (`ios` / `android`) and `sdk_version` (e.g. `1.0.2`) in its URL, so the widget can
+tell it's running inside an app.
+When it is, the add-to-cart button posts this message instead of running the store's web script. Always send `url` (it's the fallback when the
+app doesn't add the item); `productId` is what most apps' carts need. Every field is passed through
+in `data`.
+
+```js
+const msg = { event: "addToCart", data: { productId: "42", url: "https://shop.example.com/p/42", quantity: 1 } };
+const inApp = new URLSearchParams(location.search).get("session_source") === "mobilesdk";
+if (inApp && window.webkit?.messageHandlers?.poltioNative) window.webkit.messageHandlers.poltioNative.postMessage(msg); // iOS
+else if (inApp && window.PoltioNativeBridge) window.PoltioNativeBridge.postMessage(JSON.stringify(msg));             // Android
+else runStoreCartScript();                                                                                            // web
+```
+
+On iOS, `addToCart` is only accepted from `https://poltio.com` / `https://*.poltio.com` frames. On
+Android, any frame inside the widget can currently send it, so validate `productId` against your
+catalog before adding it.
+
 ---
 
 ## 💰 Conversion Tracking (`recordPurchase`)
