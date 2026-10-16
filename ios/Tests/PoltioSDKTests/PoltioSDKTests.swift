@@ -1018,6 +1018,9 @@ final class PoltioSDKTests: XCTestCase {
         XCTAssertEqual(padded.url?.absoluteString, "https://shop.example.com/p/42")
         XCTAssertEqual(padded.quantity, 3)
         XCTAssertNil(PoltioCartItem(data: ["url": "https://"]))
+
+        // WebKit bridges every JS number as a double-backed NSNumber: whole ones still become ids.
+        XCTAssertEqual(PoltioCartItem(data: ["productId": NSNumber(value: 42.0)])?.productId, "42")
     }
 
     #if canImport(UIKit)
