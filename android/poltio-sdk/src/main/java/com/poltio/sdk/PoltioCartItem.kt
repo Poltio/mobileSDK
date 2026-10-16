@@ -25,11 +25,8 @@ class PoltioCartItem internal constructor(
             val url = trimmed(data["url"])?.let(Uri::parse)
                 ?.takeIf { it.scheme?.lowercase() in setOf("http", "https") && !it.host.isNullOrEmpty() }
             if (productId == null && url == null) return null
-            // Accept numbers or numeric strings, truncating fractions — same as iOS.
-            val quantity = when (val raw = data["quantity"]) {
-                is Number -> raw.toInt()
-                else -> trimmed(raw)?.toIntOrNull()
-            }?.takeIf { it > 0 } ?: 1
+            // Numbers or numeric strings, truncating fractions — same as iOS.
+            val quantity = ((data["quantity"] as? Number)?.toInt() ?: trimmed(data["quantity"])?.toIntOrNull())?.takeIf { it > 0 } ?: 1
             return PoltioCartItem(productId, url, quantity, data)
         }
     }
