@@ -293,7 +293,8 @@ The event also reaches `onWidgetEvent` as `addToCart`, as before.
 #### Widget bridge contract
 
 The SDK loads the widget with `session_source=mobilesdk` (the web SDK sends `session_source=widget`)
-and `sdk_platform` (`ios` / `android`) in its URL, so the widget can tell it's running inside an app.
+plus `sdk_platform` (`ios` / `android`) and `sdk_version` (e.g. `1.0.2`) in its URL, so the widget can
+tell it's running inside an app.
 When it is, the add-to-cart button posts this message instead of running the store's web script. Always send `url` (it's the fallback when the
 app doesn't add the item); `productId` is what most apps' carts need. Every field is passed through
 in `data`.
