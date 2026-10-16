@@ -172,6 +172,8 @@
             appendIfPresent("resultfit", resultfit)
 
             queryItems.append(URLQueryItem(name: "disclaimer", value: disclaimer))
+            // Bridge events this SDK acts on, so the widget only relies on them where they're handled.
+            queryItems.append(URLQueryItem(name: "sdk_features", value: "addToCart"))
             components.queryItems = queryItems
             return components.url
         }
@@ -256,6 +258,12 @@
                 return false
             }
             return host == "poltio.com" || host.hasSuffix(".poltio.com")
+        }
+
+        /// Whether a bridge message's sending frame (its `WKSecurityOrigin`) is one of Poltio's own.
+        static func isTrustedBridgeOrigin(protocol scheme: String, host: String) -> Bool {
+            guard scheme == "https", let url = URL(string: "https://\(host)") else { return false }
+            return isTrustedWidgetURL(url)
         }
 
         /// Hands a URL leaving the widget to the host app's `onOpenURL`, or else to the system.
@@ -377,7 +385,7 @@
             // Poltio's own frames may send it — never a third-party iframe embedded in the widget. Checked
             // before `onWidgetEvent` so hosts listening there never see a forged one either.
             let origin = message.frameInfo.securityOrigin
-            if event == "addToCart", origin.protocol != "https" || URL(string: "https://\(origin.host)").map(Self.isTrustedWidgetURL) != true {
+            if event == "addToCart", !Self.isTrustedBridgeOrigin(protocol: origin.protocol, host: origin.host) {
                 PoltioLogger.warning("Ignoring addToCart from untrusted frame '\(origin.host)'.")
                 return
             }

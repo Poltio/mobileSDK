@@ -281,26 +281,34 @@ PoltioSDK.onAddToCart = PoltioAddToCartHandler { item ->
 
 ```java
 // Android (Java)
-PoltioSDK.setOnAddToCart(item -> cart.add(item));
+PoltioSDK.setOnAddToCart(item -> {
+    if (item.getProductId() == null) return false;
+    cart.add(item.getProductId(), item.getQuantity());
+    return true;
+});
 ```
 
 The event also reaches `onWidgetEvent` as `addToCart`, as before.
 
 #### Widget bridge contract
 
-For the widget: when running inside the SDK, the add-to-cart button posts this message instead of
-running the store's web script. At least one of `productId` or `url` is required; every field is
-passed through in `data`.
+For the widget: SDKs that handle the button load the widget with `sdk_features=addToCart` in its URL.
+Only when that flag is present, the add-to-cart button posts this message instead of running the
+store's web script. Always send `url` (it's the fallback when the app doesn't add the item); `productId`
+is what most apps' carts need. Every field is passed through in `data`. Without the flag (older SDKs,
+or the web), keep today's behaviour: open the product link in an app, run the store's script on the web.
 
 ```js
 const msg = { event: "addToCart", data: { productId: "42", url: "https://shop.example.com/p/42", quantity: 1 } };
-if (window.webkit?.messageHandlers?.poltioNative) window.webkit.messageHandlers.poltioNative.postMessage(msg); // iOS
-else if (window.PoltioNativeBridge) window.PoltioNativeBridge.postMessage(JSON.stringify(msg));             // Android
-else runStoreCartScript(); // web
+const inSdkWithCart = new URLSearchParams(location.search).get("sdk_features")?.split(",").includes("addToCart");
+if (!inSdkWithCart) runStoreCartScript(); // web, or an older SDK: open the product link there instead
+else if (window.webkit?.messageHandlers?.poltioNative) window.webkit.messageHandlers.poltioNative.postMessage(msg); // iOS
+else window.PoltioNativeBridge.postMessage(JSON.stringify(msg));                                                    // Android
 ```
 
-On iOS, `addToCart` is only accepted from `https://*.poltio.com` frames, never from third-party
-iframes embedded in the widget.
+On iOS, `addToCart` is only accepted from `https://poltio.com` / `https://*.poltio.com` frames. On
+Android, any frame inside the widget can currently send it, so validate `productId` against your
+catalog before adding it.
 
 ---
 

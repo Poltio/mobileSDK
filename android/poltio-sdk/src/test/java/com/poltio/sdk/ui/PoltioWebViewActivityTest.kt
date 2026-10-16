@@ -147,7 +147,7 @@ class PoltioWebViewActivityTest {
             puid = null,
         )
         assertEquals(
-            "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?widget_id=42&disclaimer=off",
+            "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?widget_id=42&disclaimer=off&sdk_features=addToCart",
             url.toString(),
         )
     }
@@ -203,7 +203,7 @@ class PoltioWebViewActivityTest {
             puid = null,
         )
         assertEquals(
-            "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off",
+            "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off&sdk_features=addToCart",
             url.toString(),
         )
     }

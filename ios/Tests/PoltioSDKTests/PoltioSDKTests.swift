@@ -1023,13 +1023,13 @@ final class PoltioSDKTests: XCTestCase {
     #if canImport(UIKit)
         func testBuildWidgetURLWithAndWithoutPUID() {
             let urlWithoutPuid = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", puid: nil)
-            XCTAssertEqual(urlWithoutPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off")
+            XCTAssertEqual(urlWithoutPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off&sdk_features=addToCart")
 
             let urlWithEmptyPuid = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", puid: "   ")
-            XCTAssertEqual(urlWithEmptyPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off")
+            XCTAssertEqual(urlWithEmptyPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off&sdk_features=addToCart")
 
             let urlWithPuid = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", puid: "usr_123")
-            XCTAssertEqual(urlWithPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?puid=usr_123&disclaimer=off")
+            XCTAssertEqual(urlWithPuid?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?puid=usr_123&disclaimer=off&sdk_features=addToCart")
         }
 
         func testWidgetNavigationPolicyTrustsOnlyPoltioDomains() throws {
@@ -1102,6 +1102,15 @@ final class PoltioSDKTests: XCTestCase {
             XCTAssertEqual(handledURLs, [productURL])
         }
 
+        func testAddToCartIsOnlyTrustedFromPoltioFrames() {
+            XCTAssertTrue(PoltioWebViewController.isTrustedBridgeOrigin(protocol: "https", host: "www.poltio.com"))
+            XCTAssertTrue(PoltioWebViewController.isTrustedBridgeOrigin(protocol: "https", host: "poltio.com"))
+            XCTAssertFalse(PoltioWebViewController.isTrustedBridgeOrigin(protocol: "http", host: "www.poltio.com"))
+            XCTAssertFalse(PoltioWebViewController.isTrustedBridgeOrigin(protocol: "https", host: "evil.com"))
+            XCTAssertFalse(PoltioWebViewController.isTrustedBridgeOrigin(protocol: "https", host: "poltio.com.evil.com"))
+            XCTAssertFalse(PoltioWebViewController.isTrustedBridgeOrigin(protocol: "https", host: ""))
+        }
+
         func testAddToCartGoesToHostHandlerAndKeepsWidgetOpen() throws {
             let controller = PoltioWebViewController(publicId: "abc")
             var added: [PoltioCartItem] = []
@@ -1142,10 +1151,10 @@ final class PoltioSDKTests: XCTestCase {
 
         func testBuildWidgetURLWithWidgetId() {
             let urlWithWidgetId = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", widgetId: 42, puid: nil)
-            XCTAssertEqual(urlWithWidgetId?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?widget_id=42&disclaimer=off")
+            XCTAssertEqual(urlWithWidgetId?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?widget_id=42&disclaimer=off&sdk_features=addToCart")
 
             let urlWithoutWidgetId = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", widgetId: nil, puid: nil)
-            XCTAssertEqual(urlWithoutWidgetId?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off")
+            XCTAssertEqual(urlWithoutWidgetId?.absoluteString, "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?disclaimer=off&sdk_features=addToCart")
         }
 
         func testBuildWidgetURLWithPassThroughParams() {
@@ -1160,7 +1169,7 @@ final class PoltioSDKTests: XCTestCase {
             )
             XCTAssertEqual(
                 url?.absoluteString,
-                "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?puid=usr_123&content=landing&custom_id=abc-123&loc=header&resultfit=fit&disclaimer=on"
+                "https://www.poltio.com/widget/6c964c1d-6eb4-4c19-ad16-342bd59bdac3?puid=usr_123&content=landing&custom_id=abc-123&loc=header&resultfit=fit&disclaimer=on&sdk_features=addToCart"
             )
         }
 

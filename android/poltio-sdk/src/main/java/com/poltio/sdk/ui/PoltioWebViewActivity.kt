@@ -135,6 +135,8 @@ internal class PoltioWebViewActivity : Activity() {
             appendIfPresent("loc", loc)
             appendIfPresent("resultfit", resultfit)
             builder.appendQueryParameter("disclaimer", disclaimer)
+            // Bridge events this SDK acts on, so the widget only relies on them where they're handled.
+            builder.appendQueryParameter("sdk_features", "addToCart")
             return builder.build()
         }
     }
