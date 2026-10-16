@@ -373,6 +373,15 @@
                 return
             }
 
+            // `addToCart` makes the SDK and host act (the host's cart, or opening a link), so only
+            // Poltio's own frames may send it — never a third-party iframe embedded in the widget. Checked
+            // before `onWidgetEvent` so hosts listening there never see a forged one either.
+            let origin = message.frameInfo.securityOrigin
+            if event == "addToCart", origin.protocol != "https" || URL(string: "https://\(origin.host)").map(Self.isTrustedWidgetURL) != true {
+                PoltioLogger.warning("Ignoring addToCart from untrusted frame '\(origin.host)'.")
+                return
+            }
+
             let data = body["data"] as? [String: Any]
             PoltioLogger.debug("Received widget bridge event '\(event)'.")
             onWidgetEvent?(event, data)
@@ -383,13 +392,6 @@
                     self?.notifyDismiss()
                 }
             case "addToCart":
-                // The SDK acts on this one (the host's cart, or opening a link), so only Poltio's own
-                // frames may send it — never a third-party iframe embedded in the widget.
-                let origin = message.frameInfo.securityOrigin
-                guard origin.protocol == "https", let originURL = URL(string: "https://\(origin.host)"), Self.isTrustedWidgetURL(originURL) else {
-                    PoltioLogger.warning("Ignoring addToCart from untrusted frame '\(origin.host)'.")
-                    return
-                }
                 addToCart(data)
             default:
                 break

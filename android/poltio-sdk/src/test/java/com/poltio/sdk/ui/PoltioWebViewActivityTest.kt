@@ -130,6 +130,13 @@ class PoltioWebViewActivityTest {
         assertEquals("p1", item.productId)
         assertNull(item.url)
         assertEquals(1, item.quantity)
+
+        // Same rules as iOS: all whitespace trimmed, numeric-string quantities, host-less URLs dropped.
+        val padded = PoltioCartItem.from(mapOf("productId" to "42\n", "url" to "https://shop.example.com/p/42\n", "quantity" to "3"))!!
+        assertEquals("42", padded.productId)
+        assertEquals("https://shop.example.com/p/42", padded.url.toString())
+        assertEquals(3, padded.quantity)
+        assertNull(PoltioCartItem.from(mapOf("url" to "https://")))
     }
 
     @Test

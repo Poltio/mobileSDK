@@ -1011,6 +1011,13 @@ final class PoltioSDKTests: XCTestCase {
         XCTAssertEqual(item.productId, "p1")
         XCTAssertNil(item.url)
         XCTAssertEqual(item.quantity, 1)
+
+        // Same rules as Android: all whitespace trimmed, numeric-string quantities, host-less URLs dropped.
+        let padded = try XCTUnwrap(PoltioCartItem(data: ["productId": "42\n", "url": "https://shop.example.com/p/42\n", "quantity": "3"]))
+        XCTAssertEqual(padded.productId, "42")
+        XCTAssertEqual(padded.url?.absoluteString, "https://shop.example.com/p/42")
+        XCTAssertEqual(padded.quantity, 3)
+        XCTAssertNil(PoltioCartItem(data: ["url": "https://"]))
     }
 
     #if canImport(UIKit)

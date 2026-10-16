@@ -16,18 +16,20 @@ public struct PoltioCartItem {
 
     /// Parses the widget's `addToCart` payload; `nil` when it names neither a product nor a link.
     init?(data: [String: Any]) {
-        if let id = data["productId"] as? String, !id.trimmingCharacters(in: .whitespaces).isEmpty {
-            productId = id.trimmingCharacters(in: .whitespaces)
-        } else if let id = data["productId"] as? Int {
-            productId = String(id)
-        } else {
-            productId = nil
+        func trimmed(_ value: Any?) -> String? {
+            ((value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 }
         }
-        url = (data["url"] as? String)
-            .flatMap { URL(string: $0.trimmingCharacters(in: .whitespaces)) }
-            .flatMap { ["http", "https"].contains($0.scheme?.lowercased() ?? "") ? $0 : nil }
+        // Accept numbers or numeric strings, truncating fractions — same as Android.
+        func integer(_ value: Any?) -> Int? {
+            (value as? NSNumber)?.intValue ?? trimmed(value).flatMap { Int($0) }
+        }
+
+        productId = trimmed(data["productId"]) ?? (data["productId"] as? Int).map(String.init)
+        url = trimmed(data["url"]).flatMap { URL(string: $0) }.flatMap { url in
+            ["http", "https"].contains(url.scheme?.lowercased() ?? "") && url.host?.isEmpty == false ? url : nil
+        }
         guard productId != nil || url != nil else { return nil }
-        quantity = (data["quantity"] as? Int).flatMap { $0 > 0 ? $0 : nil } ?? 1
+        quantity = integer(data["quantity"]).flatMap { $0 > 0 ? $0 : nil } ?? 1
         self.data = data
     }
 }
