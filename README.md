@@ -249,6 +249,59 @@ PoltioSDK.onOpenUrl = PoltioUrlHandler { url ->
 PoltioSDK.setOnOpenUrl(url -> router.handle(url));
 ```
 
+### Adding products to your cart (`onAddToCart`)
+
+On the web, the widget's add-to-cart button runs a script written for each store. In your app, the
+widget hands the product to `onAddToCart` instead. It is called on the main thread and **the widget
+stays open**, so the user can keep browsing. Return `true` once you've added the item, or `false` to
+have the SDK open `item.url` like a tapped product link (through `onOpenURL` / `onOpenUrl` above).
+The same fallback runs when no handler is set, so the button never does nothing.
+
+A `PoltioCartItem` has `productId` (your catalog ID from the widget's product data), `url` (http/https
+only), `quantity` (at least 1), and `data`, which holds the full payload including extra fields such
+as `sku` or `variant`.
+
+```swift
+// iOS
+PoltioSDK.onAddToCart = { item in
+    guard let productId = item.productId else { return false }
+    cart.add(productId: productId, quantity: item.quantity)
+    return true
+}
+```
+
+```kotlin
+// Android
+PoltioSDK.onAddToCart = PoltioAddToCartHandler { item ->
+    val productId = item.productId ?: return@PoltioAddToCartHandler false
+    cart.add(productId, item.quantity)
+    true
+}
+```
+
+```java
+// Android (Java)
+PoltioSDK.setOnAddToCart(item -> cart.add(item));
+```
+
+The event also reaches `onWidgetEvent` as `addToCart`, as before.
+
+#### Widget bridge contract
+
+For the widget: when running inside the SDK, the add-to-cart button posts this message instead of
+running the store's web script. At least one of `productId` or `url` is required; every field is
+passed through in `data`.
+
+```js
+const msg = { event: "addToCart", data: { productId: "42", url: "https://shop.example.com/p/42", quantity: 1 } };
+if (window.webkit?.messageHandlers?.poltioNative) window.webkit.messageHandlers.poltioNative.postMessage(msg); // iOS
+else if (window.PoltioNativeBridge) window.PoltioNativeBridge.postMessage(JSON.stringify(msg));             // Android
+else runStoreCartScript(); // web
+```
+
+On iOS, `addToCart` is only accepted from `https://*.poltio.com` frames, never from third-party
+iframes embedded in the widget.
+
 ---
 
 ## 💰 Conversion Tracking (`recordPurchase`)

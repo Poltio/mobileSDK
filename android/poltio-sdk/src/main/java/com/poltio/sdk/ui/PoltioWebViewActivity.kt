@@ -29,6 +29,7 @@ import androidx.annotation.VisibleForTesting
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import com.poltio.sdk.PoltioCartItem
 import com.poltio.sdk.PoltioExecutors
 import com.poltio.sdk.PoltioLogger
 import com.poltio.sdk.PoltioOverlayOptions
@@ -167,7 +168,13 @@ internal class PoltioWebViewActivity : Activity() {
             PoltioExecutors.runOnMain {
                 PoltioLogger.debug { "Received widget bridge event '$event'." }
                 PoltioSDK.onWidgetEvent?.onWidgetEvent(event, data)
-                if (event == "close") dismissWithAnimation()
+                when (event) {
+                    "close" -> dismissWithAnimation()
+                    // ponytail: `addJavascriptInterface` can't tell which frame called, so unlike iOS an
+                    // embedded third-party iframe could send this too; switch the bridge to
+                    // `WebViewCompat.addWebMessageListener` (androidx.webkit) to restrict it by origin.
+                    "addToCart" -> addToCart(data)
+                }
             }
         }
     }
@@ -274,19 +281,8 @@ internal class PoltioWebViewActivity : Activity() {
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                     val url = request?.url ?: return false
                     if (isTrustedWidgetUrl(url)) return false
-                    // Like iOS: close first, then hand over, so the host's UI lands on its own Activity.
                     // Sub-frames (e.g. an embedded player's custom scheme) never close the widget.
-                    val handler = PoltioSDK.onOpenUrl
-                    if (handler != null && request.isForMainFrame) {
-                        PoltioLogger.debug { "Closing the widget to hand URL '$url' to the host app." }
-                        dismissWithAnimation {
-                            // Host navigated away: drop the old trigger (inline, before anything its
-                            // own off-thread `track()` resolves).
-                            if (handler.onOpenUrl(url)) PoltioOverlayManager.hideTrigger() else openWithSystem(url)
-                        }
-                    } else {
-                        openWithSystem(url)
-                    }
+                    if (request.isForMainFrame) openExternally(url) else openWithSystem(url)
                     return true
                 }
 
@@ -378,6 +374,29 @@ internal class PoltioWebViewActivity : Activity() {
     private fun snapBackOpen() {
         sheet.animate().translationY(0f).setDuration(200).setInterpolator(DecelerateInterpolator()).start()
         scrim.animate().alpha(1f).setDuration(200).start()
+    }
+
+    /** Hands a URL leaving the widget to the host app's `onOpenUrl`, or else to the system. */
+    private fun openExternally(url: Uri) {
+        val handler = PoltioSDK.onOpenUrl ?: return openWithSystem(url)
+        // Like iOS: close first, then hand over, so the host's UI lands on its own Activity.
+        PoltioLogger.debug { "Closing the widget to hand URL '$url' to the host app." }
+        dismissWithAnimation {
+            // Host navigated away: drop the old trigger (inline, before anything its own
+            // off-thread `track()` resolves).
+            if (handler.onOpenUrl(url)) PoltioOverlayManager.hideTrigger() else openWithSystem(url)
+        }
+    }
+
+    /** Offers the widget's add-to-cart tap to the host app, falling back to opening the product link. */
+    @VisibleForTesting
+    internal fun addToCart(data: Map<String, Any?>?) {
+        val item = PoltioCartItem.from(data.orEmpty()) ?: run {
+            PoltioLogger.warning { "Ignoring addToCart without a productId or an http(s) url." }
+            return
+        }
+        if (PoltioSDK.onAddToCart?.onAddToCart(item) == true) return
+        item.url?.let(::openExternally)
     }
 
     private fun openWithSystem(url: Uri) {

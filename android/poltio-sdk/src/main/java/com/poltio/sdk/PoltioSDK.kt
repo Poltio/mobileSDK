@@ -35,6 +35,18 @@ fun interface PoltioUrlHandler {
     fun onOpenUrl(url: Uri): Boolean
 }
 
+/** Gets first refusal on the widget's add-to-cart button; see [PoltioSDK.onAddToCart]. */
+fun interface PoltioAddToCartHandler {
+    /**
+     * Called on the main thread; the widget stays open.
+     *
+     * @param item The product the user wants in their cart.
+     * @return `true` if your app added [item] to its cart, or `false` to have the SDK open
+     * [PoltioCartItem.url] like a tapped product link instead (via [PoltioSDK.onOpenUrl]).
+     */
+    fun onAddToCart(item: PoltioCartItem): Boolean
+}
+
 /**
  * Main entry point for the Poltio Android SDK. A plain Kotlin `object` since the SDK is
  * process-wide singleton state — there is no `PoltioSDK.shared` indirection like on iOS. Every
@@ -182,6 +194,7 @@ object PoltioSDK {
         }
         onWidgetEvent = null
         onOpenUrl = null
+        onAddToCart = null
         PoltioLogger.logLevel = PoltioLogLevel.WARNING
     }
 
@@ -540,6 +553,24 @@ object PoltioSDK {
     @JvmStatic
     @Volatile
     var onOpenUrl: PoltioUrlHandler? = null
+
+    /**
+     * Optional handler for the widget's add-to-cart button — the in-app counterpart of the
+     * site-specific cart script the widget runs on the web. Called on the main thread with the
+     * widget still open: return `true` once you've added the item, or `false` to have the SDK open
+     * [PoltioCartItem.url] like a tapped product link instead (also what happens when no handler is set):
+     *
+     * ```kotlin
+     * PoltioSDK.onAddToCart = PoltioAddToCartHandler { item ->
+     *     val id = item.productId ?: return@PoltioAddToCartHandler false
+     *     cart.add(id, item.quantity)
+     *     true
+     * }
+     * ```
+     */
+    @JvmStatic
+    @Volatile
+    var onAddToCart: PoltioAddToCartHandler? = null
 
     // MARK: - Internal Helpers
 

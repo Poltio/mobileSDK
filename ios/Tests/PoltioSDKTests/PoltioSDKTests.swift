@@ -1003,6 +1003,16 @@ final class PoltioSDKTests: XCTestCase {
         XCTAssertEqual(decoded.overlayOptions.pillCloseRememberDuration, 24)
     }
 
+    func testCartItemsAreParsedDefensively() throws {
+        XCTAssertNil(PoltioCartItem(data: [:]))
+        XCTAssertNil(PoltioCartItem(data: ["productId": " ", "url": "javascript:alert(1)"]))
+
+        let item = try XCTUnwrap(PoltioCartItem(data: ["productId": " p1 ", "url": "myapp://cart", "quantity": 0]))
+        XCTAssertEqual(item.productId, "p1")
+        XCTAssertNil(item.url)
+        XCTAssertEqual(item.quantity, 1)
+    }
+
     #if canImport(UIKit)
         func testBuildWidgetURLWithAndWithoutPUID() {
             let urlWithoutPuid = PoltioWebViewController.buildWidgetURL(publicId: "6c964c1d-6eb4-4c19-ad16-342bd59bdac3", puid: nil)
@@ -1083,6 +1093,44 @@ final class PoltioSDKTests: XCTestCase {
 
             XCTAssertEqual(policy, .cancel)
             XCTAssertEqual(handledURLs, [productURL])
+        }
+
+        func testAddToCartGoesToHostHandlerAndKeepsWidgetOpen() throws {
+            let controller = PoltioWebViewController(publicId: "abc")
+            var added: [PoltioCartItem] = []
+            var openedURLs: [URL] = []
+            PoltioSDK.onAddToCart = { item in
+                added.append(item)
+                return true
+            }
+            PoltioSDK.onOpenURL = { url in
+                openedURLs.append(url)
+                return true
+            }
+
+            controller.addToCart(["productId": 42, "url": "https://shop.example.com/p/42", "quantity": 2, "sku": "SKU-42"])
+
+            let item = try XCTUnwrap(added.first)
+            XCTAssertEqual(item.productId, "42")
+            XCTAssertEqual(item.quantity, 2)
+            XCTAssertEqual(item.data["sku"] as? String, "SKU-42")
+            XCTAssertEqual(openedURLs, [])
+        }
+
+        func testAddToCartFallsBackToProductLinkWhenHostDeclinesOrHasNoHandler() throws {
+            let productURL = try XCTUnwrap(URL(string: "https://shop.example.com/p/42"))
+            var openedURLs: [URL] = []
+            PoltioSDK.onOpenURL = { url in
+                openedURLs.append(url)
+                return true
+            }
+
+            PoltioSDK.onAddToCart = { _ in false }
+            PoltioWebViewController(publicId: "abc").addToCart(["productId": "42", "url": productURL.absoluteString])
+            PoltioSDK.onAddToCart = nil
+            PoltioWebViewController(publicId: "abc").addToCart(["url": productURL.absoluteString])
+
+            XCTAssertEqual(openedURLs, [productURL, productURL])
         }
 
         func testBuildWidgetURLWithWidgetId() {
