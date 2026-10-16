@@ -172,8 +172,10 @@
             appendIfPresent("resultfit", resultfit)
 
             queryItems.append(URLQueryItem(name: "disclaimer", value: disclaimer))
-            // Bridge events this SDK acts on, so the widget only relies on them where they're handled.
-            queryItems.append(URLQueryItem(name: "sdk_features", value: "addToCart"))
+            // Tells the widget it's running in an app through this SDK — same values as the API's
+            // `X-Poltio-SDK-Platform` / `X-Poltio-SDK-Version` headers.
+            queryItems.append(URLQueryItem(name: "sdk_platform", value: PoltioSDKInfo.platform))
+            queryItems.append(URLQueryItem(name: "sdk_version", value: PoltioSDKInfo.version))
             components.queryItems = queryItems
             return components.url
         }

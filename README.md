@@ -292,18 +292,17 @@ The event also reaches `onWidgetEvent` as `addToCart`, as before.
 
 #### Widget bridge contract
 
-For the widget: SDKs that handle the button load the widget with `sdk_features=addToCart` in its URL.
-Only when that flag is present, the add-to-cart button posts this message instead of running the
-store's web script. Always send `url` (it's the fallback when the app doesn't add the item); `productId`
-is what most apps' carts need. Every field is passed through in `data`. Without the flag (older SDKs,
-or the web), keep today's behaviour: open the product link in an app, run the store's script on the web.
+The SDK loads the widget with `sdk_platform` (`ios` / `android`) and `sdk_version` (e.g. `1.0.2`) in
+its URL, so the widget can tell it's running inside an app. When it is, the add-to-cart button posts
+this message instead of running the store's web script. Always send `url` (it's the fallback when the
+app doesn't add the item); `productId` is what most apps' carts need. Every field is passed through
+in `data`.
 
 ```js
 const msg = { event: "addToCart", data: { productId: "42", url: "https://shop.example.com/p/42", quantity: 1 } };
-const inSdkWithCart = new URLSearchParams(location.search).get("sdk_features")?.split(",").includes("addToCart");
-if (!inSdkWithCart) runStoreCartScript(); // web, or an older SDK: open the product link there instead
-else if (window.webkit?.messageHandlers?.poltioNative) window.webkit.messageHandlers.poltioNative.postMessage(msg); // iOS
-else window.PoltioNativeBridge.postMessage(JSON.stringify(msg));                                                    // Android
+if (window.webkit?.messageHandlers?.poltioNative) window.webkit.messageHandlers.poltioNative.postMessage(msg); // iOS app
+else if (window.PoltioNativeBridge) window.PoltioNativeBridge.postMessage(JSON.stringify(msg));             // Android app
+else runStoreCartScript();                                                                                   // web
 ```
 
 On iOS, `addToCart` is only accepted from `https://poltio.com` / `https://*.poltio.com` frames. On
