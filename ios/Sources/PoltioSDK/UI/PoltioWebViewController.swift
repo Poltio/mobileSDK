@@ -30,6 +30,8 @@
         /// Name of the JS bridge message handler. The widget page communicates back to native code via
         /// `window.webkit.messageHandlers.poltioNative.postMessage({ event: "close" | "complete" | "leadSubmit", data: {...} })`.
         private static let bridgeHandlerName = "poltioNative"
+        /// Diameter of the close button's visible disc.
+        private static let closeDiscSize: CGFloat = 30
 
         /// Callback invoked when the modal is dismissed (via close button or swipe down).
         var onDismiss: (() -> Void)?
@@ -78,20 +80,6 @@
             let panelBackgroundColor = overlayOptions?.resolvedWidgetBgColor ?? .systemBackground
             view.backgroundColor = panelBackgroundColor
 
-            // Header Navigation / Close Bar
-            let headerView = UIView()
-            headerView.translatesAutoresizingMaskIntoConstraints = false
-            headerView.backgroundColor = panelBackgroundColor
-            view.addSubview(headerView)
-
-            let closeButton = UIButton(type: .system)
-            closeButton.translatesAutoresizingMaskIntoConstraints = false
-            let image = UIImage(systemName: "xmark.circle.fill")
-            closeButton.setImage(image, for: .normal)
-            closeButton.tintColor = .secondaryLabel
-            closeButton.addTarget(self, action: #selector(didTapClose), for: .touchUpInside)
-            headerView.addSubview(closeButton)
-
             // WebKit Configuration
             let config = WKWebViewConfiguration()
             config.allowsInlineMediaPlayback = true
@@ -116,24 +104,43 @@
             activityIndicator.hidesWhenStopped = true
             view.addSubview(activityIndicator)
 
+            // Close button floating over the widget, which fills the whole sheet. A dark blurred disc
+            // behind a white mark keeps it legible on any widget content, light or dark.
+            let closeBackground = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterialDark))
+            closeBackground.translatesAutoresizingMaskIntoConstraints = false
+            closeBackground.isUserInteractionEnabled = false
+            closeBackground.layer.cornerRadius = Self.closeDiscSize / 2
+            closeBackground.clipsToBounds = true
+            view.addSubview(closeBackground)
+
+            let closeButton = UIButton(type: .system)
+            closeButton.translatesAutoresizingMaskIntoConstraints = false
+            let xmarkConfig = UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)
+            closeButton.setImage(UIImage(systemName: "xmark", withConfiguration: xmarkConfig), for: .normal)
+            closeButton.tintColor = .white
+            closeButton.accessibilityLabel = "Close"
+            closeButton.addTarget(self, action: #selector(didTapClose), for: .touchUpInside)
+            view.addSubview(closeButton)
+
             NSLayoutConstraint.activate([
-                headerView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-                headerView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-                headerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-                headerView.heightAnchor.constraint(equalToConstant: 48),
-
-                closeButton.trailingAnchor.constraint(equalTo: headerView.trailingAnchor, constant: -16),
-                closeButton.centerYAnchor.constraint(equalTo: headerView.centerYAnchor),
-                closeButton.widthAnchor.constraint(equalToConstant: 32),
-                closeButton.heightAnchor.constraint(equalToConstant: 32),
-
-                webView.topAnchor.constraint(equalTo: headerView.bottomAnchor),
+                webView.topAnchor.constraint(equalTo: view.topAnchor),
                 webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
                 webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
                 webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
                 activityIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
                 activityIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+
+                // A 44pt tap target around the smaller visible disc.
+                closeButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 6),
+                closeButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -6),
+                closeButton.widthAnchor.constraint(equalToConstant: 44),
+                closeButton.heightAnchor.constraint(equalToConstant: 44),
+
+                closeBackground.centerXAnchor.constraint(equalTo: closeButton.centerXAnchor),
+                closeBackground.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
+                closeBackground.widthAnchor.constraint(equalToConstant: Self.closeDiscSize),
+                closeBackground.heightAnchor.constraint(equalToConstant: Self.closeDiscSize),
             ])
         }
 

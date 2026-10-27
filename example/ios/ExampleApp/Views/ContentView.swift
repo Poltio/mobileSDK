@@ -112,6 +112,17 @@ struct SDKStatusView: View {
                         }
                     }
 
+                    Button(action: {
+                        PoltioSDK.track(event: "view", params: ["url": LookbookView.trackedURL])
+                        eventStatusMessage = "Tracked 'view' for '\(LookbookView.trackedURL)'"
+                    }) {
+                        HStack {
+                            Image(systemName: "sparkles")
+                                .foregroundColor(.brown)
+                            Text("Track View Lookbook (\(LookbookView.trackedURL))")
+                        }
+                    }
+
                     Button(role: .destructive, action: {
                         PoltioSDK.hideTrigger()
                         eventStatusMessage = "Hidden Active Trigger Overlay"
@@ -159,7 +170,7 @@ enum AppTab: Int, CaseIterable, Identifiable {
     case shop = 0
     case phones = 1
     case tvs = 2
-    case laptops = 3
+    case lookbook = 3
     case sdkInfo = 4
 
     var id: Int {
@@ -194,13 +205,12 @@ struct ContentView: View {
             }
             .tag(AppTab.tvs)
 
-            NavigationStack {
-                PLPView(category: .laptops)
-            }
-            .tabItem {
-                Label("Laptops", systemImage: "laptopcomputer")
-            }
-            .tag(AppTab.laptops)
+            // Laptops stays reachable from Shop's categories; a sixth tab would push SDK Info under "More".
+            LookbookView()
+                .tabItem {
+                    Label("Lookbook", systemImage: "sparkles")
+                }
+                .tag(AppTab.lookbook)
 
             SDKStatusView()
                 .tabItem {
@@ -219,8 +229,8 @@ struct ContentView: View {
                 PoltioSDK.track(event: "view", params: ["url": "example://plp/phones"])
             case .tvs:
                 PoltioSDK.track(event: "view", params: ["url": "example://plp/tvs"])
-            case .laptops:
-                PoltioSDK.track(event: "view", params: ["url": "example://plp/laptops"])
+            case .lookbook:
+                PoltioSDK.track(event: "view", params: ["url": LookbookView.trackedURL])
             case .sdkInfo:
                 PoltioSDK.track(event: "view", params: ["url": "example://sdk_info"])
             }

@@ -49,6 +49,8 @@
 
         private var overlayWindow: PoltioPassthroughWindow?
         private var activeTriggerView: (UIView & PoltioTriggerPresentable)?
+        /// How far the active trigger slides in from, and out to, beyond its docked edge.
+        private var triggerSlideOffsetX: CGFloat = 80
         private var currentPublicId: String?
         private var currentTriggerType: String?
         private var pendingShowWorkItem: DispatchWorkItem?
@@ -178,7 +180,7 @@
                 }
 
                 let vertical = widget.overlayOptions.verticalPosition
-                let horizontal = widget.overlayOptions.horizontalPosition
+                let isLeftDocked = widget.overlayOptions.isLeftDocked
                 let triggerView: UIView & PoltioTriggerPresentable
 
                 if widget.overlayOptions.isPillTrigger {
@@ -190,7 +192,7 @@
                     pillView.translatesAutoresizingMaskIntoConstraints = false
                     rootVC.view.addSubview(pillView)
                     pinTrigger(
-                        pillView, in: rootVC.view, vertical: vertical, horizontal: horizontal,
+                        pillView, in: rootVC.view, vertical: vertical, isLeftDocked: isLeftDocked,
                         horizontalInset: 16, verticalInset: 70, hugsRawEdgeHorizontally: false
                     )
                     triggerView = pillView
@@ -202,7 +204,7 @@
                     cardView.translatesAutoresizingMaskIntoConstraints = false
                     rootVC.view.addSubview(cardView)
                     pinTrigger(
-                        cardView, in: rootVC.view, vertical: vertical, horizontal: horizontal,
+                        cardView, in: rootVC.view, vertical: vertical, isLeftDocked: isLeftDocked,
                         horizontalInset: 0, verticalInset: 70, hugsRawEdgeHorizontally: true
                     )
                     triggerView = cardView
@@ -215,20 +217,21 @@
                     boxView.translatesAutoresizingMaskIntoConstraints = false
                     rootVC.view.addSubview(boxView)
                     pinTrigger(
-                        boxView, in: rootVC.view, vertical: vertical, horizontal: horizontal,
+                        boxView, in: rootVC.view, vertical: vertical, isLeftDocked: isLeftDocked,
                         horizontalInset: 0, verticalInset: 24, hugsRawEdgeHorizontally: true
                     )
                     triggerView = boxView
                 }
 
                 activeTriggerView = triggerView
+                triggerSlideOffsetX = isLeftDocked ? -80 : 80
                 overlayWindow = window
                 window.isHidden = false
 
                 PoltioLogger.info("Attached floating trigger overlay for widget '\(widget.publicId)' (type: \(widget.overlayOptions.triggerType ?? "unknown")) in dedicated passthrough window.")
 
                 triggerView.alpha = 0
-                triggerView.transform = CGAffineTransform(translationX: 80, y: 0)
+                triggerView.transform = CGAffineTransform(translationX: triggerSlideOffsetX, y: 0)
 
                 UIView.animate(
                     withDuration: 0.4,
@@ -255,6 +258,7 @@
                 currentTriggerType = nil
                 let windowToClose = overlayWindow
                 let viewToClose = activeTriggerView
+                let slideOffsetX = triggerSlideOffsetX
 
                 overlayWindow = nil
                 activeTriggerView = nil
@@ -263,7 +267,7 @@
 
                 UIView.animate(withDuration: 0.25, animations: {
                     view.alpha = 0
-                    view.transform = CGAffineTransform(translationX: 80, y: 0)
+                    view.transform = CGAffineTransform(translationX: slideOffsetX, y: 0)
                 }, completion: { _ in
                     view.removeFromSuperview()
                     window.isHidden = true
@@ -283,7 +287,7 @@
             overlayWindow = nil
         }
 
-        /// Pins `view` within `container` according to the parsed `floatingPosition` (`vertical`/`horizontal`),
+        /// Pins `view` within `container` according to the parsed `floatingPosition` (`vertical`, left or right),
         /// generalizing what used to be three hardcoded per-trigger constraint blocks. `hugsRawEdgeHorizontally`
         /// preserves each trigger's pre-existing horizontal-anchoring convention (card/box hug the raw view
         /// edge so their collapsed tabs bleed off-screen; pill insets from the safe area).
@@ -291,14 +295,14 @@
             _ view: UIView,
             in container: UIView,
             vertical: String,
-            horizontal: String,
+            isLeftDocked: Bool,
             horizontalInset: CGFloat,
             verticalInset: CGFloat,
             hugsRawEdgeHorizontally: Bool
         ) {
             var constraints: [NSLayoutConstraint] = []
 
-            if horizontal == "left" {
+            if isLeftDocked {
                 let anchor = hugsRawEdgeHorizontally ? container.leadingAnchor : container.safeAreaLayoutGuide.leadingAnchor
                 constraints.append(view.leadingAnchor.constraint(equalTo: anchor, constant: horizontalInset))
             } else {
@@ -344,7 +348,7 @@
 
                         window.isHidden = false
                         trigger.alpha = 0
-                        trigger.transform = CGAffineTransform(translationX: 80, y: 0)
+                        trigger.transform = CGAffineTransform(translationX: self.triggerSlideOffsetX, y: 0)
 
                         UIView.animate(
                             withDuration: 0.35,

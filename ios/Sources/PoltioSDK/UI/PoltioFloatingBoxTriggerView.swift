@@ -21,6 +21,15 @@
         /// range so bad API data can't produce a degenerate or oversized trigger).
         private let scale: CGFloat
 
+        /// Docked on the left screen edge: every edge-facing detail is mirrored, like web's `box.ts`,
+        /// so the square side sits against the edge and the rounded side faces the screen.
+        private let isLeftDocked: Bool
+
+        /// The corners facing away from the docked edge — the only ones an edge tab rounds.
+        private var innerCorners: CACornerMask {
+            isLeftDocked ? [.layerMaxXMinYCorner, .layerMaxXMaxYCorner] : [.layerMinXMinYCorner, .layerMinXMaxYCorner]
+        }
+
         // Container views
         private let collapsedContainer = UIView()
         private let expandedContainer = UIView()
@@ -90,6 +99,7 @@
             self.onOpenWidget = onOpenWidget
             self.onDismissForever = onDismissForever
             scale = max(0.5, min(2.0, CGFloat(widget.overlayOptions.boxResize)))
+            isLeftDocked = widget.overlayOptions.isLeftDocked
             let shouldStartExpanded = widget.overlayOptions.isInitialExpanded
                 || widget.overlayOptions.boxStartMode?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "open"
             currentState = shouldStartExpanded ? .expanded : .collapsed
@@ -143,8 +153,8 @@
             let tapExpanded = UITapGestureRecognizer(target: self, action: #selector(handleExpandedTap))
             expandedContainer.addGestureRecognizer(tapExpanded)
 
-            let swipeToCollapse = UISwipeGestureRecognizer(target: self, action: #selector(handleSwipeRight))
-            swipeToCollapse.direction = .right
+            let swipeToCollapse = UISwipeGestureRecognizer(target: self, action: #selector(handleSwipeToEdge))
+            swipeToCollapse.direction = isLeftDocked ? .left : .right
             expandedContainer.addGestureRecognizer(swipeToCollapse)
 
             setupAccessibility()
@@ -159,7 +169,7 @@
 
             var expandedActions = [
                 PoltioTriggerAccessibility.action(PoltioTriggerAccessibility.collapseActionName) { [weak self] in
-                    self?.handleSwipeRight()
+                    self?.handleSwipeToEdge()
                 },
             ]
             if options.boxShowCloseButton {
@@ -186,10 +196,10 @@
             collapsedContainer.translatesAutoresizingMaskIntoConstraints = false
             collapsedContainer.backgroundColor = outerBg
             collapsedContainer.layer.cornerRadius = 14
-            collapsedContainer.layer.maskedCorners = [.layerMinXMinYCorner, .layerMinXMaxYCorner]
+            collapsedContainer.layer.maskedCorners = innerCorners
             collapsedContainer.layer.shadowColor = UIColor.black.cgColor
             collapsedContainer.layer.shadowOpacity = 0.18
-            collapsedContainer.layer.shadowOffset = CGSize(width: -2, height: 3)
+            collapsedContainer.layer.shadowOffset = CGSize(width: isLeftDocked ? 2 : -2, height: 3)
             collapsedContainer.layer.shadowRadius = 8
             collapsedContainer.isUserInteractionEnabled = true
 
@@ -199,13 +209,14 @@
             collapsedLabel.font = widget.overlayOptions.resolvedFont(size: 13, weight: .bold)
             collapsedLabel.textColor = headerColor
             collapsedLabel.textAlignment = .center
-            collapsedLabel.transform = CGAffineTransform(rotationAngle: -CGFloat.pi / 2)
+            // Letter tops face the screen on either edge: bottom-to-top on the right, top-to-bottom on the left.
+            collapsedLabel.transform = CGAffineTransform(rotationAngle: isLeftDocked ? CGFloat.pi / 2 : -CGFloat.pi / 2)
 
             collapsedContainer.addSubview(collapsedLabel)
             addSubview(collapsedContainer)
 
             NSLayoutConstraint.activate([
-                collapsedContainer.trailingAnchor.constraint(equalTo: trailingAnchor),
+                pinToDockedEdge(collapsedContainer),
                 collapsedContainer.centerYAnchor.constraint(equalTo: centerYAnchor),
                 collapsedContainer.widthAnchor.constraint(equalToConstant: collapsedWidth),
                 collapsedContainer.heightAnchor.constraint(equalToConstant: collapsedHeight),
@@ -234,7 +245,7 @@
             expandedContainer.layer.cornerRadius = expandedCornerRadius
             expandedContainer.layer.shadowColor = UIColor.black.cgColor
             expandedContainer.layer.shadowOpacity = 0.20
-            expandedContainer.layer.shadowOffset = CGSize(width: -3, height: 4)
+            expandedContainer.layer.shadowOffset = CGSize(width: isLeftDocked ? 3 : -3, height: 4)
             expandedContainer.layer.shadowRadius = 12
             expandedContainer.clipsToBounds = false
             expandedContainer.isUserInteractionEnabled = true
@@ -242,7 +253,7 @@
             innerCard.translatesAutoresizingMaskIntoConstraints = false
             innerCard.backgroundColor = innerBg
             innerCard.layer.cornerRadius = expandedCornerRadius
-            innerCard.layer.maskedCorners = [.layerMinXMinYCorner, .layerMinXMaxYCorner]
+            innerCard.layer.maskedCorners = innerCorners
             innerCard.clipsToBounds = true
             expandedContainer.addSubview(innerCard)
 
@@ -267,11 +278,11 @@
             headerLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             innerCard.addSubview(headerLabel)
 
-            // 2. Top Right Collapse Chevron Button
+            // 2. Top Right Collapse Chevron Button, pointing at the edge the box collapses into
             collapseButton.translatesAutoresizingMaskIntoConstraints = false
-            collapseButton.setImage(UIImage(systemName: "chevron.right"), for: .normal)
+            collapseButton.setImage(UIImage(systemName: isLeftDocked ? "chevron.left" : "chevron.right"), for: .normal)
             collapseButton.tintColor = fullImageMode ? .white : .systemGray
-            collapseButton.addTarget(self, action: #selector(handleSwipeRight), for: .touchUpInside)
+            collapseButton.addTarget(self, action: #selector(handleSwipeToEdge), for: .touchUpInside)
             innerCard.addSubview(collapseButton)
 
             // 3. Middle Banner (Image & Fallback Graphic)
@@ -301,7 +312,7 @@
             addSubview(expandedContainer)
 
             NSLayoutConstraint.activate([
-                expandedContainer.trailingAnchor.constraint(equalTo: trailingAnchor),
+                pinToDockedEdge(expandedContainer),
                 expandedContainer.centerYAnchor.constraint(equalTo: centerYAnchor),
                 expandedContainer.widthAnchor.constraint(equalToConstant: expandedWidth),
                 expandedContainer.heightAnchor.constraint(equalToConstant: expandedHeight),
@@ -338,6 +349,13 @@
                     closeButton.heightAnchor.constraint(equalToConstant: 24),
                 ])
             }
+        }
+
+        /// Holds `container` against the docked edge, so it stays put while the trigger resizes.
+        private func pinToDockedEdge(_ container: UIView) -> NSLayoutConstraint {
+            isLeftDocked
+                ? container.leadingAnchor.constraint(equalTo: leadingAnchor)
+                : container.trailingAnchor.constraint(equalTo: trailingAnchor)
         }
 
         /// Default layout: header text, a fixed-height banner strip, footer text.
@@ -500,9 +518,8 @@
             // on PoltioScrollObserver.handleScrolled.
             guard let scrollView = notification.object as? UIScrollView,
                   let scrolledScene = scrollView.window?.windowScene,
-                  scrolledScene == window?.windowScene
-            else { return }
-            guard !hasAutoOpenedFromScroll else { return }
+                  scrolledScene == window?.windowScene,
+                  !hasAutoOpenedFromScroll else { return }
             hasAutoOpenedFromScroll = true
             NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didScrollPastThresholdNotification, object: nil)
             if currentState == .collapsed {
@@ -530,9 +547,8 @@
             // on PoltioScrollObserver.handleScrolled.
             guard let scrollView = notification.object as? UIScrollView,
                   let scrolledScene = scrollView.window?.windowScene,
-                  scrolledScene == window?.windowScene
-            else { return }
-            guard currentState == .expanded,
+                  scrolledScene == window?.windowScene,
+                  currentState == .expanded,
                   let expandedAt, Date().timeIntervalSince(expandedAt) > Self.scrollCollapseGracePeriod
             else { return }
             setState(.collapsed, animated: true)
@@ -622,7 +638,7 @@
             onOpenWidget()
         }
 
-        @objc private func handleSwipeRight() {
+        @objc private func handleSwipeToEdge() {
             setState(.collapsed, animated: true)
         }
 

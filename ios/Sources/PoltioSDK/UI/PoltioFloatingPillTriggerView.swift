@@ -476,8 +476,7 @@
         // MARK: - Pulsate Animation
 
         private func startPulsateAnimation() {
-            guard widget.overlayOptions.showPulsate else { return }
-            guard pulsateLayer.animation(forKey: PoltioFloatingPillTriggerView.pulsateAnimationKey) == nil else {
+            guard widget.overlayOptions.showPulsate, pulsateLayer.animation(forKey: PoltioFloatingPillTriggerView.pulsateAnimationKey) == nil else {
                 return
             }
 
@@ -584,9 +583,8 @@
             // on PoltioScrollObserver.handleScrolled.
             guard let scrollView = notification.object as? UIScrollView,
                   let scrolledScene = scrollView.window?.windowScene,
-                  scrolledScene == window?.windowScene
-            else { return }
-            guard !hasAutoOpenedFromScroll else { return }
+                  scrolledScene == window?.windowScene,
+                  !hasAutoOpenedFromScroll else { return }
             hasAutoOpenedFromScroll = true
             NotificationCenter.default.removeObserver(self, name: PoltioScrollObserver.didScrollPastThresholdNotification, object: nil)
             if currentState == .collapsed {
@@ -614,9 +612,8 @@
             // on PoltioScrollObserver.handleScrolled.
             guard let scrollView = notification.object as? UIScrollView,
                   let scrolledScene = scrollView.window?.windowScene,
-                  scrolledScene == window?.windowScene
-            else { return }
-            guard currentState == .expanded,
+                  scrolledScene == window?.windowScene,
+                  currentState == .expanded,
                   let expandedAt, Date().timeIntervalSince(expandedAt) > Self.scrollCollapseGracePeriod
             else { return }
             setState(.collapsed, animated: true)

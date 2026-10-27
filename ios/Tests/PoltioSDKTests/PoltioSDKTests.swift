@@ -1105,6 +1105,21 @@ final class PoltioSDKTests: XCTestCase {
             XCTAssertEqual(handledURLs, [productURL])
         }
 
+        func testWidgetFillsTheSheetUnderAFloatingCloseButton() throws {
+            let controller = PoltioWebViewController(publicId: "abc")
+            controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 800)
+            controller.view.layoutIfNeeded()
+
+            let webView = try XCTUnwrap(controller.view.subviews.compactMap { $0 as? WKWebView }.first)
+            XCTAssertEqual(webView.frame, controller.view.bounds)
+
+            // Added last, so it sits above the widget rather than in a bar of its own.
+            let closeButton = try XCTUnwrap(controller.view.subviews.last as? UIButton)
+            XCTAssertEqual(closeButton.accessibilityLabel, "Close")
+            XCTAssertTrue(webView.frame.contains(closeButton.frame))
+            XCTAssertEqual(closeButton.frame.size, CGSize(width: 44, height: 44))
+        }
+
         func testAddToCartIsOnlyTrustedFromPoltioFrames() {
             XCTAssertTrue(PoltioWebViewController.isTrustedBridgeOrigin(protocol: "https", host: "www.poltio.com"))
             XCTAssertTrue(PoltioWebViewController.isTrustedBridgeOrigin(protocol: "https", host: "poltio.com"))
@@ -1871,6 +1886,40 @@ final class PoltioSDKTests: XCTestCase {
             let activeWidget = PoltioWidgetResponse(publicId: "active_1", overlayOptions: activeOptions)
             let activeCardView = PoltioFloatingCardTriggerView(widget: activeWidget, onOpenWidget: {})
             XCTAssertEqual(activeCardView.currentState, .expanded)
+        }
+
+        func testEdgeTabsMirrorOnTheLeftEdge() {
+            let roundedOnRight: CACornerMask = [.layerMinXMinYCorner, .layerMinXMaxYCorner]
+            let roundedOnLeft: CACornerMask = [.layerMaxXMinYCorner, .layerMaxXMaxYCorner]
+            let cases: [(position: String?, corners: CACornerMask, swipe: UISwipeGestureRecognizer.Direction)] = [
+                (nil, roundedOnRight, .right),
+                ("bottom-right", roundedOnRight, .right),
+                ("center-left", roundedOnLeft, .left),
+                ("bottom-left", roundedOnLeft, .left),
+            ]
+
+            for (position, corners, swipe) in cases {
+                let box = PoltioFloatingBoxTriggerView(
+                    widget: PoltioWidgetResponse(publicId: "box", overlayOptions: PoltioOverlayOptions(triggerType: "box", floatingPosition: position)),
+                    onOpenWidget: {}
+                )
+                let card = PoltioFloatingCardTriggerView(
+                    widget: PoltioWidgetResponse(publicId: "card", overlayOptions: PoltioOverlayOptions(triggerType: "card", floatingPosition: position)),
+                    onOpenWidget: {}
+                )
+
+                for (name, trigger) in [("box", box as UIView), ("card", card as UIView)] {
+                    // Subview 0 is the collapsed edge tab, subview 1 the expanded container.
+                    let collapsedTab = trigger.subviews[0]
+                    let expanded = trigger.subviews[1]
+                    let label = "\(name) at \(position ?? "default")"
+                    XCTAssertEqual(collapsedTab.layer.maskedCorners, corners, label)
+                    XCTAssertEqual(collapsedTab.layer.shadowOffset.width < 0, corners == roundedOnRight, label)
+                    let swipes = expanded.gestureRecognizers?.compactMap { $0 as? UISwipeGestureRecognizer }
+                    XCTAssertEqual(swipes?.map(\.direction), [swipe], label)
+                }
+                XCTAssertEqual(box.subviews[1].subviews[0].layer.maskedCorners, corners, "box inner card at \(position ?? "default")")
+            }
         }
 
         func testOverlayManagerCardTriggerPresentation() {
