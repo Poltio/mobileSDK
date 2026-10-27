@@ -95,8 +95,9 @@ class PoltioOverlayManagerTest {
         host.destroy()
     }
 
-    /** Runs [block] with trigger views counted into a list of widget ids, then restores the reporter. */
-    private fun countingViews(block: (reported: List<Int?>) -> Unit) {
+    /** Runs [block] with trigger views counted into a list of widget ids, then restores the reporter.
+     * Inline so a failing assertion inside [block] reports its own line. */
+    private inline fun countingViews(block: (reported: List<Int?>) -> Unit) {
         val original = PoltioOverlayManager.ctaViewReporter
         val reported = mutableListOf<Int?>()
         PoltioOverlayManager.ctaViewReporter = { reported += it.widgetId }

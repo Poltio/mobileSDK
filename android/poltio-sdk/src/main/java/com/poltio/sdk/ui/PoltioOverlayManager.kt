@@ -57,6 +57,10 @@ internal object PoltioOverlayManager {
     private var pendingTrigger: TriggerRequest? = null
     /** What the trigger on screen was built from, so a configuration change can carry it over. */
     private var shownTrigger: TriggerRequest? = null
+    /** Whether the widget sheet is up, from its creation until it's destroyed for good (a rotation
+     * rebuilding it doesn't count). No trigger shows meanwhile: the host under the sheet is paused,
+     * or, rebuilt behind it by a rotation, resumed for only a moment. */
+    private var isSheetOpen = false
 
     /** [reportView] is false for a trigger carried over a configuration change: it was already
      * counted before the rotation, and a host that re-tracks its screen counts it again anyway. */
@@ -76,16 +80,7 @@ internal object PoltioOverlayManager {
                 // host behind it, which resumes again once the sheet closes.
                 if (activity is PoltioWebViewActivity) return
                 resumedActivity = WeakReference(activity)
-                if (pendingTrigger == null) return
-                // Posted, and only shown if this host is still resumed by then: a host rebuilt by a
-                // rotation behind the open widget sheet resumes for a moment and pauses again in
-                // the same pass, and a trigger shown then would sit, counted, under the sheet.
-                PoltioExecutors.main.post {
-                    val request = pendingTrigger ?: return@post
-                    if (resumedActivity?.get() !== activity) return@post
-                    pendingTrigger = null
-                    showTriggerOnMain(request.widget, request.puid, request.reportView)
-                }
+                showPendingTriggerIfPossible()
             }
 
             override fun onActivityPaused(activity: Activity) {
@@ -93,6 +88,12 @@ internal object PoltioOverlayManager {
             }
 
             override fun onActivityDestroyed(activity: Activity) {
+                if (activity is PoltioWebViewActivity && !activity.isChangingConfigurations) {
+                    // The sheet is closed for good; the host may have resumed under it already.
+                    isSheetOpen = false
+                    showPendingTriggerIfPossible()
+                    return
+                }
                 if (resumedActivity?.get() === activity) resumedActivity = null
                 if (overlayContainer?.let { it.context === activity } == true) {
                     // A configuration change (e.g. rotation) rebuilds the host: carry its trigger
@@ -103,7 +104,9 @@ internal object PoltioOverlayManager {
                 }
             }
 
-            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
+                if (activity is PoltioWebViewActivity) isSheetOpen = true
+            }
             override fun onActivityStarted(activity: Activity) = Unit
             override fun onActivityStopped(activity: Activity) = Unit
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
@@ -135,6 +138,15 @@ internal object PoltioOverlayManager {
     /** Hides and removes any currently displayed floating trigger, on the main thread. */
     fun hideTrigger() {
         PoltioExecutors.runOnMain { hideTriggerOnMain() }
+    }
+
+    /** Shows the kept trigger once nothing stands in its way: a host resumed and the sheet closed,
+     * in whichever order those happen. */
+    private fun showPendingTriggerIfPossible() {
+        val request = pendingTrigger ?: return
+        if (isSheetOpen || resumedActivity?.get() == null) return
+        pendingTrigger = null
+        showTriggerOnMain(request.widget, request.puid, request.reportView)
     }
 
     /** Whether [widget] is the one the current trigger was built for: same content and same widget. */
@@ -190,10 +202,10 @@ internal object PoltioOverlayManager {
 
         teardownOverlaySynchronously()
 
-        if (activity == null) {
+        if (activity == null || isSheetOpen) {
             // Keep it rather than give up after a few tries: a host sitting paused under the widget
             // sheet after a rotation resumes only once the sheet closes, however long that takes.
-            PoltioLogger.debug { "No resumed Activity; showing the trigger for widget '${widget.publicId}' once one resumes." }
+            PoltioLogger.debug { "No resumed Activity or widget sheet up; showing the trigger for widget '${widget.publicId}' once a host resumes with the sheet closed." }
             pendingTrigger = TriggerRequest(widget, puid, reportView)
             return
         }
@@ -410,8 +422,8 @@ internal object PoltioOverlayManager {
     internal fun onWidgetWebViewDismissed() {
         PoltioExecutors.runOnMain {
             val container = overlayContainer ?: return@runOnMain
-            // Only a trigger the sheet hid comes back here. One shown since it opened (e.g. kept
-            // across a rotation and shown as the host resumed) is already on screen, entering.
+            // Only a trigger the sheet hid comes back here. One shown as the sheet went away (kept
+            // across a rotation and shown once the sheet closed) is already on screen, entering.
             if (container.visibility == android.view.View.VISIBLE) return@runOnMain
             val trigger = activeTriggerView as? PoltioTriggerPresentable
 
