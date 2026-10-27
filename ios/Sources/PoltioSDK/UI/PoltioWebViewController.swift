@@ -131,9 +131,10 @@
                 activityIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
                 activityIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor),
 
-                // A 44pt tap target around the smaller visible disc.
+                // A 44pt tap target around the smaller visible disc, top-right in every language like
+                // the rest of the SDK's physically placed chrome.
                 closeButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 6),
-                closeButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -6),
+                closeButton.rightAnchor.constraint(equalTo: view.safeAreaLayoutGuide.rightAnchor, constant: -6),
                 closeButton.widthAnchor.constraint(equalToConstant: 44),
                 closeButton.heightAnchor.constraint(equalToConstant: 44),
 

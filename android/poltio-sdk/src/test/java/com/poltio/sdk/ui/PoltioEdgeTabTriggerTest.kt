@@ -31,6 +31,7 @@ class PoltioEdgeTabTriggerTest {
         ),
     )
 
+    /** The horizontal gravity, keeping the relative flag so START/END can't pass for LEFT/RIGHT. */
     private fun edgeGravity(view: View) = (view.layoutParams as FrameLayout.LayoutParams).gravity and Gravity.RELATIVE_HORIZONTAL_GRAVITY_MASK
 
     private fun cornerRadii(view: View) = (view.background as GradientDrawable).cornerRadii
@@ -61,8 +62,8 @@ class PoltioEdgeTabTriggerTest {
             val r = context.dp(14f).toFloat()
 
             assertArrayEquals(label, edgeTabCornerRadii(r, left), cornerRadii(tab), 0f)
-            assertEquals(label, if (left) Gravity.START else Gravity.END, edgeGravity(tab))
-            assertEquals(label, if (left) Gravity.START else Gravity.END, edgeGravity(expanded))
+            assertEquals(label, if (left) Gravity.LEFT else Gravity.RIGHT, edgeGravity(tab))
+            assertEquals(label, if (left) Gravity.LEFT else Gravity.RIGHT, edgeGravity(expanded))
             assertEquals(label, if (left) 90f else -90f, (tab as FrameLayout).getChildAt(0).rotation, 0f)
         }
     }
@@ -79,8 +80,8 @@ class PoltioEdgeTabTriggerTest {
             val expandedParams = expanded.layoutParams as FrameLayout.LayoutParams
 
             assertArrayEquals(label, edgeTabCornerRadii(r, left), cornerRadii(tab), 0f)
-            assertEquals(label, if (left) Gravity.START else Gravity.END, edgeGravity(tab))
-            assertEquals(label, if (left) Gravity.START else Gravity.END, edgeGravity(expanded))
+            assertEquals(label, if (left) Gravity.LEFT else Gravity.RIGHT, edgeGravity(tab))
+            assertEquals(label, if (left) Gravity.LEFT else Gravity.RIGHT, edgeGravity(expanded))
             assertEquals(label, if (left) margin else 0, expandedParams.leftMargin)
             assertEquals(label, if (left) 0 else margin, expandedParams.rightMargin)
         }
