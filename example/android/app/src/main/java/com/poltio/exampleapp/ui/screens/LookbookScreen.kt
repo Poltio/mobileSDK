@@ -44,7 +44,7 @@ import androidx.compose.ui.unit.sp
 import com.poltio.exampleapp.services.PoltioSDKPlaceholder
 
 /** Point a widget at this URL to show it on the Lookbook screen. */
-private const val LOOKBOOK_URL = "example://lookbook"
+private const val LOOKBOOK_URL = "poltiodemo://lookbook"
 
 private data class Look(val name: String, val price: String, val icon: ImageVector, val tint: Color)
 
