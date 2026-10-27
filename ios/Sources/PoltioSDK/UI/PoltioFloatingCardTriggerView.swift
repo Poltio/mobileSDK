@@ -386,10 +386,11 @@
         }
 
         /// Holds `container` `inset` points off the docked edge, so it stays put while the trigger resizes.
+        /// Physical anchors, like the overlay manager's, so a right-to-left language doesn't flip it.
         private func pinToDockedEdge(_ container: UIView, inset: CGFloat = 0) -> NSLayoutConstraint {
             isLeftDocked
-                ? container.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset)
-                : container.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset)
+                ? container.leftAnchor.constraint(equalTo: leftAnchor, constant: inset)
+                : container.rightAnchor.constraint(equalTo: rightAnchor, constant: -inset)
         }
 
         /// Matches web's card (`core.ts`'s `first` → `second` transition): reveals the collapsed

@@ -54,5 +54,6 @@ When opening Android Studio for the first time on a new Mac, follow these steps 
 ## 🛠 Features Demonstrated
 - **Interactive Landing Page**: Screen tracking for Poltio TAG targeting.
 - **Category PLPs**: Category-specific Poltio Quiz overlay banners (Phones, TVs, Laptops).
+- **Lookbook**: An editorial, full-bleed screen tracked as `poltiodemo://lookbook`, for trying triggers over imagery (the Lookbook tab).
 - **Product PDPs**: Spec sheets with dynamic Poltio Widget trigger buttons.
 - **SDK Activity Inspector**: Live event stream for SDK events and screen views.

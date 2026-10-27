@@ -57,6 +57,12 @@ internal class PoltioFloatingCardTriggerView(
     var currentState: TriggerState = if (widget.overlayOptions.isInitialExpanded) TriggerState.EXPANDED else TriggerState.COLLAPSED
         private set
 
+    /** Docked on the left screen edge: the edge tab and every edge-facing detail are mirrored, so
+     * the square side sits against the edge and the rounded side faces the screen. */
+    private val isLeftDocked = widget.overlayOptions.isLeftDocked
+    /** Absolute, like the overlay manager's, so a right-to-left locale doesn't flip the tab. */
+    private val dockedEdgeGravity = if (isLeftDocked) Gravity.LEFT else Gravity.RIGHT
+
     private val collapsedWidthPx = context.dp(Constants.COLLAPSED_WIDTH_DP)
     private val collapsedHeightPx = context.dp(Constants.COLLAPSED_HEIGHT_DP)
     private val expandedTotalWidthPx = context.dp(Constants.EXPANDED_CARD_WIDTH_DP + Constants.EXPANDED_CARD_MARGIN_DP)
@@ -169,8 +175,7 @@ internal class PoltioFloatingCardTriggerView(
         collapsedContainer.background = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             setColor(widget.overlayOptions.resolvedBgColor)
-            val r = context.dp(Constants.COLLAPSED_CORNER_RADIUS_DP).toFloat()
-            cornerRadii = floatArrayOf(r, r, 0f, 0f, 0f, 0f, r, r)
+            cornerRadii = edgeTabCornerRadii(context.dp(Constants.COLLAPSED_CORNER_RADIUS_DP).toFloat(), isLeftDocked)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             collapsedContainer.outlineProvider = ViewOutlineProvider.BACKGROUND
@@ -185,7 +190,9 @@ internal class PoltioFloatingCardTriggerView(
             },
         )
 
-        val chevron = PoltioChevronGlyphView(context, PoltioChevronDirection.LEFT, widget.overlayOptions.resolvedIconColor)
+        // Points away from the docked edge, the way the card expands.
+        val expandDirection = if (isLeftDocked) PoltioChevronDirection.RIGHT else PoltioChevronDirection.LEFT
+        val chevron = PoltioChevronGlyphView(context, expandDirection, widget.overlayOptions.resolvedIconColor)
         collapsedContainer.addView(
             chevron,
             FrameLayout.LayoutParams(context.dp(Constants.COLLAPSED_CHEVRON_SIZE_DP), context.dp(Constants.COLLAPSED_CHEVRON_SIZE_DP), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
@@ -193,7 +200,7 @@ internal class PoltioFloatingCardTriggerView(
             },
         )
 
-        addView(collapsedContainer, FrameLayout.LayoutParams(collapsedWidthPx, collapsedHeightPx, Gravity.CENTER_VERTICAL or Gravity.END))
+        addView(collapsedContainer, FrameLayout.LayoutParams(collapsedWidthPx, collapsedHeightPx, Gravity.CENTER_VERTICAL or dockedEdgeGravity))
 
         var downX = 0f
         collapsedContainer.setOnTouchListener { view, event ->
@@ -302,8 +309,9 @@ internal class PoltioFloatingCardTriggerView(
 
         expandedContainer.addView(column, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
 
-        addView(expandedContainer, FrameLayout.LayoutParams(expandedCardWidthPx, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER_VERTICAL or Gravity.END).apply {
-            rightMargin = context.dp(Constants.EXPANDED_CARD_MARGIN_DP)
+        addView(expandedContainer, FrameLayout.LayoutParams(expandedCardWidthPx, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER_VERTICAL or dockedEdgeGravity).apply {
+            val margin = context.dp(Constants.EXPANDED_CARD_MARGIN_DP)
+            if (isLeftDocked) leftMargin = margin else rightMargin = margin
         })
 
         var downX = 0f
@@ -312,7 +320,8 @@ internal class PoltioFloatingCardTriggerView(
                 MotionEvent.ACTION_DOWN -> downX = event.x
                 MotionEvent.ACTION_UP -> {
                     val dx = event.x - downX
-                    if (dx > context.dp(24f)) {
+                    val towardsEdge = if (isLeftDocked) -dx else dx
+                    if (towardsEdge > context.dp(24f)) {
                         setState(TriggerState.COLLAPSED, animated = true)
                     } else if (abs(dx) < context.dp(8f)) {
                         view.performClick()

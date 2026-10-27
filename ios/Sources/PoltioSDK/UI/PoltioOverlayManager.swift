@@ -35,6 +35,15 @@
         override var shouldAutorotate: Bool {
             true
         }
+
+        override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+            super.viewWillTransition(to: size, with: coordinator)
+            // A rotation can change the host tab bar's height: measure it again once both windows
+            // have laid out at the new size.
+            coordinator.animate(alongsideTransition: nil) { _ in
+                PoltioOverlayManager.shared.refreshTabBarClearance()
+            }
+        }
     }
 
     /// Manages attaching, presenting, and dismissing native Poltio floating triggers and interactive webviews.
@@ -51,8 +60,15 @@
         private var activeTriggerView: (UIView & PoltioTriggerPresentable)?
         /// How far the active trigger slides in from, and out to, beyond its docked edge.
         private var triggerSlideOffsetX: CGFloat = 80
+        /// The active trigger's bottom constraint when it's bottom-docked, and its own inset above the
+        /// safe area, kept so its clearance over the host tab bar can follow the bar after it's built.
+        private var triggerBottomConstraint: NSLayoutConstraint?
+        private var triggerBottomInset: CGFloat = 0
         private var currentPublicId: String?
         private var currentTriggerType: String?
+        /// Widgets can share content and trigger type yet differ in copy, colors and position, so the
+        /// trigger on screen is only the incoming one when its widget id matches too.
+        private var currentWidgetId: Int?
         private var pendingShowWorkItem: DispatchWorkItem?
         private var showTriggerRetryCount = 0
 
@@ -92,7 +108,7 @@
 
                 let targetTriggerType = widget.overlayOptions.triggerType ?? ""
 
-                if currentPublicId == widget.publicId,
+                if isCurrent(widget),
                    currentTriggerType == targetTriggerType,
                    let activeView = activeTriggerView,
                    activeView.superview != nil,
@@ -107,16 +123,19 @@
                     // The scene check matters on iPadOS multi-window setups: without it, switching
                     // focus to a different scene of the same app while this widget's trigger is
                     // still attached (but inactive) in the first scene would match on
-                    // publicId/triggerType alone and return here, leaving the trigger invisible in
+                    // widget and trigger type alone and return here, leaving the trigger invisible in
                     // the scene actually on screen instead of reattaching to it.
                     PoltioSDK.shared.reportCtaView(widget: widget)
+                    // The screen tracked may have hidden or shown the host tab bar (a push with
+                    // `hidesBottomBarWhenPushed`), so the kept trigger measures it again.
+                    refreshTabBarClearance()
                     return
                 }
 
                 // A retry (scheduled by this same method below) re-enters here for the same widget while
                 // it's still waiting on a UIWindowScene. Only reset the retry counter for a genuinely new
                 // widget — otherwise it gets zeroed on every retry and the cap below never trips.
-                let isRetryForSameWidget = currentPublicId == widget.publicId
+                let isRetryForSameWidget = isCurrent(widget)
 
                 // Clean up previous overlay and update state immediately
                 teardownOverlaySynchronously()
@@ -125,6 +144,7 @@
                 }
                 currentPublicId = widget.publicId
                 currentTriggerType = targetTriggerType
+                currentWidgetId = widget.widgetId
 
                 guard let windowScene = findActiveWindowScene() else {
                     guard showTriggerRetryCount < Self.maxShowTriggerRetries else {
@@ -132,12 +152,13 @@
                         showTriggerRetryCount = 0
                         currentPublicId = nil
                         currentTriggerType = nil
+                        currentWidgetId = nil
                         return
                     }
                     showTriggerRetryCount += 1
                     PoltioLogger.debug("UIWindowScene not ready yet, retrying showTrigger (\(showTriggerRetryCount)/\(Self.maxShowTriggerRetries)) after 0.2s...")
                     let workItem = DispatchWorkItem { [weak self] in
-                        guard let self, currentPublicId == widget.publicId else { return }
+                        guard let self, isCurrent(widget) else { return }
                         showTrigger(widget: widget, puid: puid)
                     }
                     pendingShowWorkItem = workItem
@@ -181,7 +202,10 @@
 
                 let vertical = widget.overlayOptions.verticalPosition
                 let isLeftDocked = widget.overlayOptions.isLeftDocked
+                let bottomObstruction = vertical == "bottom" ? hostTabBarOverlap() : 0
                 let triggerView: UIView & PoltioTriggerPresentable
+                let bottomConstraint: NSLayoutConstraint?
+                let bottomInset: CGFloat
 
                 if widget.overlayOptions.isPillTrigger {
                     let pillView = PoltioFloatingPillTriggerView(
@@ -191,9 +215,11 @@
                     )
                     pillView.translatesAutoresizingMaskIntoConstraints = false
                     rootVC.view.addSubview(pillView)
-                    pinTrigger(
+                    bottomInset = 70
+                    bottomConstraint = Self.pinTrigger(
                         pillView, in: rootVC.view, vertical: vertical, isLeftDocked: isLeftDocked,
-                        horizontalInset: 16, verticalInset: 70, hugsRawEdgeHorizontally: false
+                        horizontalInset: 16, verticalInset: bottomInset, hugsRawEdgeHorizontally: false,
+                        bottomObstruction: bottomObstruction
                     )
                     triggerView = pillView
                 } else if widget.overlayOptions.isCardTrigger {
@@ -203,9 +229,11 @@
                     )
                     cardView.translatesAutoresizingMaskIntoConstraints = false
                     rootVC.view.addSubview(cardView)
-                    pinTrigger(
+                    bottomInset = 70
+                    bottomConstraint = Self.pinTrigger(
                         cardView, in: rootVC.view, vertical: vertical, isLeftDocked: isLeftDocked,
-                        horizontalInset: 0, verticalInset: 70, hugsRawEdgeHorizontally: true
+                        horizontalInset: 0, verticalInset: bottomInset, hugsRawEdgeHorizontally: true,
+                        bottomObstruction: bottomObstruction
                     )
                     triggerView = cardView
                 } else {
@@ -216,14 +244,18 @@
                     )
                     boxView.translatesAutoresizingMaskIntoConstraints = false
                     rootVC.view.addSubview(boxView)
-                    pinTrigger(
+                    bottomInset = 24
+                    bottomConstraint = Self.pinTrigger(
                         boxView, in: rootVC.view, vertical: vertical, isLeftDocked: isLeftDocked,
-                        horizontalInset: 0, verticalInset: 24, hugsRawEdgeHorizontally: true
+                        horizontalInset: 0, verticalInset: bottomInset, hugsRawEdgeHorizontally: true,
+                        bottomObstruction: bottomObstruction
                     )
                     triggerView = boxView
                 }
 
                 activeTriggerView = triggerView
+                triggerBottomConstraint = bottomConstraint
+                triggerBottomInset = bottomInset
                 triggerSlideOffsetX = isLeftDocked ? -80 : 80
                 overlayWindow = window
                 window.isHidden = false
@@ -248,6 +280,11 @@
             }
         }
 
+        /// Whether `widget` is the one the current trigger was built for: same content and same widget.
+        private func isCurrent(_ widget: PoltioWidgetResponse) -> Bool {
+            currentPublicId == widget.publicId && currentWidgetId == widget.widgetId
+        }
+
         /// Hides and removes any currently displayed floating trigger view and its overlay window with animation.
         func hideTrigger() {
             DispatchQueue.main.async { [weak self] in
@@ -256,12 +293,14 @@
                 pendingShowWorkItem = nil
                 currentPublicId = nil
                 currentTriggerType = nil
+                currentWidgetId = nil
                 let windowToClose = overlayWindow
                 let viewToClose = activeTriggerView
                 let slideOffsetX = triggerSlideOffsetX
 
                 overlayWindow = nil
                 activeTriggerView = nil
+                triggerBottomConstraint = nil
 
                 guard let view = viewToClose, let window = windowToClose else { return }
 
@@ -281,8 +320,10 @@
             pendingShowWorkItem = nil
             currentPublicId = nil
             currentTriggerType = nil
+            currentWidgetId = nil
             activeTriggerView?.removeFromSuperview()
             activeTriggerView = nil
+            triggerBottomConstraint = nil
             overlayWindow?.isHidden = true
             overlayWindow = nil
         }
@@ -290,24 +331,34 @@
         /// Pins `view` within `container` according to the parsed `floatingPosition` (`vertical`, left or right),
         /// generalizing what used to be three hardcoded per-trigger constraint blocks. `hugsRawEdgeHorizontally`
         /// preserves each trigger's pre-existing horizontal-anchoring convention (card/box hug the raw view
-        /// edge so their collapsed tabs bleed off-screen; pill insets from the safe area).
-        private func pinTrigger(
+        /// edge so their collapsed tabs bleed off-screen; pill insets from the safe area). `bottomObstruction`
+        /// lifts a bottom-docked trigger over host chrome the overlay window's safe area can't see.
+        ///
+        /// Anchors are physical (`left`/`right`), not `leading`/`trailing`: `floating-position` names a
+        /// physical side, and the triggers draw their rounded corners for it, so a right-to-left app
+        /// language must not flip the trigger onto the other edge.
+        ///
+        /// Returns the bottom constraint of a bottom-docked trigger, for `updateBottomClearance`.
+        @discardableResult
+        static func pinTrigger(
             _ view: UIView,
             in container: UIView,
             vertical: String,
             isLeftDocked: Bool,
             horizontalInset: CGFloat,
             verticalInset: CGFloat,
-            hugsRawEdgeHorizontally: Bool
-        ) {
+            hugsRawEdgeHorizontally: Bool,
+            bottomObstruction: CGFloat = 0
+        ) -> NSLayoutConstraint? {
             var constraints: [NSLayoutConstraint] = []
+            var bottomConstraint: NSLayoutConstraint?
 
             if isLeftDocked {
-                let anchor = hugsRawEdgeHorizontally ? container.leadingAnchor : container.safeAreaLayoutGuide.leadingAnchor
-                constraints.append(view.leadingAnchor.constraint(equalTo: anchor, constant: horizontalInset))
+                let anchor = hugsRawEdgeHorizontally ? container.leftAnchor : container.safeAreaLayoutGuide.leftAnchor
+                constraints.append(view.leftAnchor.constraint(equalTo: anchor, constant: horizontalInset))
             } else {
-                let anchor = hugsRawEdgeHorizontally ? container.trailingAnchor : container.safeAreaLayoutGuide.trailingAnchor
-                constraints.append(view.trailingAnchor.constraint(equalTo: anchor, constant: -horizontalInset))
+                let anchor = hugsRawEdgeHorizontally ? container.rightAnchor : container.safeAreaLayoutGuide.rightAnchor
+                constraints.append(view.rightAnchor.constraint(equalTo: anchor, constant: -horizontalInset))
             }
 
             switch vertical {
@@ -316,10 +367,112 @@
             case "center":
                 constraints.append(view.centerYAnchor.constraint(equalTo: container.centerYAnchor, constant: -verticalInset))
             default: // "bottom"
-                constraints.append(view.bottomAnchor.constraint(equalTo: container.safeAreaLayoutGuide.bottomAnchor, constant: -verticalInset))
+                let bottom = view.bottomAnchor.constraint(equalTo: container.safeAreaLayoutGuide.bottomAnchor)
+                updateBottomClearance(bottom, inset: verticalInset, overlap: bottomObstruction)
+                constraints.append(bottom)
+                bottomConstraint = bottom
             }
 
             NSLayoutConstraint.activate(constraints)
+            return bottomConstraint
+        }
+
+        /// Points a bottom-docked trigger's bottom `constraint` `inset` above the safe area plus the
+        /// `overlap` of host tab bar. Returns whether it moved.
+        @discardableResult
+        static func updateBottomClearance(_ constraint: NSLayoutConstraint, inset: CGFloat, overlap: CGFloat) -> Bool {
+            let constant = -(inset + overlap)
+            guard constraint.constant != constant else { return false }
+            constraint.constant = constant
+            // A new constant alone doesn't always flag the layout as stale; the next pass must move it.
+            (constraint.firstItem as? UIView)?.superview?.setNeedsLayout()
+            return true
+        }
+
+        // MARK: - Host Tab Bar
+
+        /// How far the host app's visible tab bar reaches above the bottom safe area. The trigger has
+        /// its own window, whose safe area knows nothing of the host's bars, so a bottom-docked trigger
+        /// would otherwise sit over the tab bar and take the taps meant for it.
+        private func hostTabBarOverlap() -> CGFloat {
+            guard let hostWindow = findHostKeyWindow(),
+                  let tabBar = Self.visibleTabBar(under: hostWindow.rootViewController)
+            else { return 0 }
+            return Self.tabBarOverlap(
+                tabBarTop: tabBar.convert(tabBar.bounds, to: hostWindow).minY,
+                windowHeight: hostWindow.bounds.height,
+                safeAreaBottom: hostWindow.safeAreaInsets.bottom
+            )
+        }
+
+        /// Measures the host tab bar again and moves a bottom-docked trigger to keep clear of it: the
+        /// bar can hide (`hidesBottomBarWhenPushed`), come back, or change height on rotation while the
+        /// same trigger stays up. A host transition still running (a push hiding the bar) finishes first.
+        func refreshTabBarClearance() {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, triggerBottomConstraint != nil else { return }
+                if let coordinator = Self.transitionInFlight(under: findHostKeyWindow()?.rootViewController) {
+                    coordinator.animate(alongsideTransition: nil) { [weak self] _ in
+                        self?.applyTabBarClearance()
+                    }
+                } else {
+                    applyTabBarClearance()
+                }
+            }
+        }
+
+        private func applyTabBarClearance() {
+            guard let constraint = triggerBottomConstraint,
+                  let trigger = activeTriggerView,
+                  Self.updateBottomClearance(constraint, inset: triggerBottomInset, overlap: hostTabBarOverlap())
+            else { return }
+            UIView.animate(withDuration: 0.25, delay: 0, options: [.curveEaseInOut, .allowUserInteraction]) {
+                trigger.superview?.layoutIfNeeded()
+            }
+        }
+
+        /// A view controller transition running anywhere under `root` (a push, a presentation), if any.
+        private static func transitionInFlight(under root: UIViewController?) -> UIViewControllerTransitionCoordinator? {
+            guard let root else { return nil }
+            if let coordinator = root.transitionCoordinator {
+                return coordinator
+            }
+            for child in root.children {
+                if let coordinator = transitionInFlight(under: child) {
+                    return coordinator
+                }
+            }
+            return transitionInFlight(under: root.presentedViewController)
+        }
+
+        /// The tab bar on screen under `root`, if any: searched from the topmost presented controller
+        /// (a modal over a tab bar controller hides its bar), through child controllers, which is where
+        /// SwiftUI's `TabView` keeps its `UITabBarController`.
+        static func visibleTabBar(under root: UIViewController?) -> UITabBar? {
+            var top = root
+            while let presented = top?.presentedViewController, !presented.isBeingDismissed {
+                top = presented
+            }
+            return firstVisibleTabBar(in: top)
+        }
+
+        private static func firstVisibleTabBar(in viewController: UIViewController?) -> UITabBar? {
+            guard let viewController else { return nil }
+            if let tabBarController = viewController as? UITabBarController {
+                let tabBar = tabBarController.tabBar
+                return !tabBar.isHidden && tabBar.window != nil ? tabBar : nil
+            }
+            for child in viewController.children {
+                if let tabBar = firstVisibleTabBar(in: child) {
+                    return tabBar
+                }
+            }
+            return nil
+        }
+
+        /// The part of a tab bar starting at `tabBarTop` that lies above the bottom safe area.
+        static func tabBarOverlap(tabBarTop: CGFloat, windowHeight: CGFloat, safeAreaBottom: CGFloat) -> CGFloat {
+            max(0, windowHeight - safeAreaBottom - tabBarTop)
         }
 
         /// Presents the interactive widget modal WebView on top of the active view controller.
@@ -345,6 +498,8 @@
 
                         // Reset to collapsed tab after user interacted with webview
                         trigger.resetToCollapsed(animated: false)
+                        // The host may have rotated or changed screens while the sheet covered it.
+                        self.refreshTabBarClearance()
 
                         window.isHidden = false
                         trigger.alpha = 0
