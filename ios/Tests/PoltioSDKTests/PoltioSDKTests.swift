@@ -1981,6 +1981,45 @@ final class PoltioSDKTests: XCTestCase {
             XCTAssertNil(PoltioOverlayManager.visibleTabBar(under: UIViewController()))
         }
 
+        func testBottomTriggerFollowsTheTabBarAfterItIsBuilt() throws {
+            let container = UIView(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
+            func addTrigger() -> UIView {
+                let trigger = UIView()
+                trigger.translatesAutoresizingMaskIntoConstraints = false
+                container.addSubview(trigger)
+                NSLayoutConstraint.activate([
+                    trigger.widthAnchor.constraint(equalToConstant: 42),
+                    trigger.heightAnchor.constraint(equalToConstant: 140),
+                ])
+                return trigger
+            }
+
+            let trigger = addTrigger()
+            let bottom = try XCTUnwrap(PoltioOverlayManager.pinTrigger(
+                trigger, in: container, vertical: "bottom", isLeftDocked: false,
+                horizontalInset: 0, verticalInset: 24, hugsRawEdgeHorizontally: true,
+                bottomObstruction: 50
+            ))
+            container.layoutIfNeeded()
+            XCTAssertEqual(trigger.frame.maxY, 874 - 24 - 50)
+
+            // The tab bar hides: the trigger drops back to its own inset.
+            XCTAssertTrue(PoltioOverlayManager.updateBottomClearance(bottom, inset: 24, overlap: 0))
+            container.layoutIfNeeded()
+            XCTAssertEqual(trigger.frame.maxY, 874 - 24)
+
+            // Measured again with nothing changed, it stays put.
+            XCTAssertFalse(PoltioOverlayManager.updateBottomClearance(bottom, inset: 24, overlap: 0))
+
+            // Only a bottom-docked trigger has a clearance to follow.
+            for vertical in ["top", "center"] {
+                XCTAssertNil(PoltioOverlayManager.pinTrigger(
+                    addTrigger(), in: container, vertical: vertical, isLeftDocked: false,
+                    horizontalInset: 0, verticalInset: 24, hugsRawEdgeHorizontally: true
+                ), vertical)
+            }
+        }
+
         func testPoltioWordmarkContrastsWithTheCardBackground() {
             func isLight(_ color: UIColor) -> Bool {
                 var white: CGFloat = 0, alpha: CGFloat = 0

@@ -35,6 +35,15 @@
         override var shouldAutorotate: Bool {
             true
         }
+
+        override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+            super.viewWillTransition(to: size, with: coordinator)
+            // A rotation can change the host tab bar's height: measure it again once both windows
+            // have laid out at the new size.
+            coordinator.animate(alongsideTransition: nil) { _ in
+                PoltioOverlayManager.shared.refreshTabBarClearance()
+            }
+        }
     }
 
     /// Manages attaching, presenting, and dismissing native Poltio floating triggers and interactive webviews.
@@ -51,6 +60,10 @@
         private var activeTriggerView: (UIView & PoltioTriggerPresentable)?
         /// How far the active trigger slides in from, and out to, beyond its docked edge.
         private var triggerSlideOffsetX: CGFloat = 80
+        /// The active trigger's bottom constraint when it's bottom-docked, and its own inset above the
+        /// safe area, kept so its clearance over the host tab bar can follow the bar after it's built.
+        private var triggerBottomConstraint: NSLayoutConstraint?
+        private var triggerBottomInset: CGFloat = 0
         private var currentPublicId: String?
         private var currentTriggerType: String?
         /// Widgets can share content and trigger type yet differ in copy, colors and position, so the
@@ -113,6 +126,9 @@
                     // widget and trigger type alone and return here, leaving the trigger invisible in
                     // the scene actually on screen instead of reattaching to it.
                     PoltioSDK.shared.reportCtaView(widget: widget)
+                    // The screen tracked may have hidden or shown the host tab bar (a push with
+                    // `hidesBottomBarWhenPushed`), so the kept trigger measures it again.
+                    refreshTabBarClearance()
                     return
                 }
 
@@ -188,6 +204,8 @@
                 let isLeftDocked = widget.overlayOptions.isLeftDocked
                 let bottomObstruction = vertical == "bottom" ? hostTabBarOverlap() : 0
                 let triggerView: UIView & PoltioTriggerPresentable
+                let bottomConstraint: NSLayoutConstraint?
+                let bottomInset: CGFloat
 
                 if widget.overlayOptions.isPillTrigger {
                     let pillView = PoltioFloatingPillTriggerView(
@@ -197,9 +215,10 @@
                     )
                     pillView.translatesAutoresizingMaskIntoConstraints = false
                     rootVC.view.addSubview(pillView)
-                    Self.pinTrigger(
+                    bottomInset = 70
+                    bottomConstraint = Self.pinTrigger(
                         pillView, in: rootVC.view, vertical: vertical, isLeftDocked: isLeftDocked,
-                        horizontalInset: 16, verticalInset: 70, hugsRawEdgeHorizontally: false,
+                        horizontalInset: 16, verticalInset: bottomInset, hugsRawEdgeHorizontally: false,
                         bottomObstruction: bottomObstruction
                     )
                     triggerView = pillView
@@ -210,9 +229,10 @@
                     )
                     cardView.translatesAutoresizingMaskIntoConstraints = false
                     rootVC.view.addSubview(cardView)
-                    Self.pinTrigger(
+                    bottomInset = 70
+                    bottomConstraint = Self.pinTrigger(
                         cardView, in: rootVC.view, vertical: vertical, isLeftDocked: isLeftDocked,
-                        horizontalInset: 0, verticalInset: 70, hugsRawEdgeHorizontally: true,
+                        horizontalInset: 0, verticalInset: bottomInset, hugsRawEdgeHorizontally: true,
                         bottomObstruction: bottomObstruction
                     )
                     triggerView = cardView
@@ -224,15 +244,18 @@
                     )
                     boxView.translatesAutoresizingMaskIntoConstraints = false
                     rootVC.view.addSubview(boxView)
-                    Self.pinTrigger(
+                    bottomInset = 24
+                    bottomConstraint = Self.pinTrigger(
                         boxView, in: rootVC.view, vertical: vertical, isLeftDocked: isLeftDocked,
-                        horizontalInset: 0, verticalInset: 24, hugsRawEdgeHorizontally: true,
+                        horizontalInset: 0, verticalInset: bottomInset, hugsRawEdgeHorizontally: true,
                         bottomObstruction: bottomObstruction
                     )
                     triggerView = boxView
                 }
 
                 activeTriggerView = triggerView
+                triggerBottomConstraint = bottomConstraint
+                triggerBottomInset = bottomInset
                 triggerSlideOffsetX = isLeftDocked ? -80 : 80
                 overlayWindow = window
                 window.isHidden = false
@@ -277,6 +300,7 @@
 
                 overlayWindow = nil
                 activeTriggerView = nil
+                triggerBottomConstraint = nil
 
                 guard let view = viewToClose, let window = windowToClose else { return }
 
@@ -299,6 +323,7 @@
             currentWidgetId = nil
             activeTriggerView?.removeFromSuperview()
             activeTriggerView = nil
+            triggerBottomConstraint = nil
             overlayWindow?.isHidden = true
             overlayWindow = nil
         }
@@ -312,6 +337,9 @@
         /// Anchors are physical (`left`/`right`), not `leading`/`trailing`: `floating-position` names a
         /// physical side, and the triggers draw their rounded corners for it, so a right-to-left app
         /// language must not flip the trigger onto the other edge.
+        ///
+        /// Returns the bottom constraint of a bottom-docked trigger, for `updateBottomClearance`.
+        @discardableResult
         static func pinTrigger(
             _ view: UIView,
             in container: UIView,
@@ -321,8 +349,9 @@
             verticalInset: CGFloat,
             hugsRawEdgeHorizontally: Bool,
             bottomObstruction: CGFloat = 0
-        ) {
+        ) -> NSLayoutConstraint? {
             var constraints: [NSLayoutConstraint] = []
+            var bottomConstraint: NSLayoutConstraint?
 
             if isLeftDocked {
                 let anchor = hugsRawEdgeHorizontally ? container.leftAnchor : container.safeAreaLayoutGuide.leftAnchor
@@ -338,10 +367,26 @@
             case "center":
                 constraints.append(view.centerYAnchor.constraint(equalTo: container.centerYAnchor, constant: -verticalInset))
             default: // "bottom"
-                constraints.append(view.bottomAnchor.constraint(equalTo: container.safeAreaLayoutGuide.bottomAnchor, constant: -(verticalInset + bottomObstruction)))
+                let bottom = view.bottomAnchor.constraint(equalTo: container.safeAreaLayoutGuide.bottomAnchor)
+                updateBottomClearance(bottom, inset: verticalInset, overlap: bottomObstruction)
+                constraints.append(bottom)
+                bottomConstraint = bottom
             }
 
             NSLayoutConstraint.activate(constraints)
+            return bottomConstraint
+        }
+
+        /// Points a bottom-docked trigger's bottom `constraint` `inset` above the safe area plus the
+        /// `overlap` of host tab bar. Returns whether it moved.
+        @discardableResult
+        static func updateBottomClearance(_ constraint: NSLayoutConstraint, inset: CGFloat, overlap: CGFloat) -> Bool {
+            let constant = -(inset + overlap)
+            guard constraint.constant != constant else { return false }
+            constraint.constant = constant
+            // A new constant alone doesn't always flag the layout as stale; the next pass must move it.
+            (constraint.firstItem as? UIView)?.superview?.setNeedsLayout()
+            return true
         }
 
         // MARK: - Host Tab Bar
@@ -358,6 +403,46 @@
                 windowHeight: hostWindow.bounds.height,
                 safeAreaBottom: hostWindow.safeAreaInsets.bottom
             )
+        }
+
+        /// Measures the host tab bar again and moves a bottom-docked trigger to keep clear of it: the
+        /// bar can hide (`hidesBottomBarWhenPushed`), come back, or change height on rotation while the
+        /// same trigger stays up. A host transition still running (a push hiding the bar) finishes first.
+        func refreshTabBarClearance() {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, triggerBottomConstraint != nil else { return }
+                if let coordinator = Self.transitionInFlight(under: findHostKeyWindow()?.rootViewController) {
+                    coordinator.animate(alongsideTransition: nil) { [weak self] _ in
+                        self?.applyTabBarClearance()
+                    }
+                } else {
+                    applyTabBarClearance()
+                }
+            }
+        }
+
+        private func applyTabBarClearance() {
+            guard let constraint = triggerBottomConstraint,
+                  let trigger = activeTriggerView,
+                  Self.updateBottomClearance(constraint, inset: triggerBottomInset, overlap: hostTabBarOverlap())
+            else { return }
+            UIView.animate(withDuration: 0.25, delay: 0, options: [.curveEaseInOut, .allowUserInteraction]) {
+                trigger.superview?.layoutIfNeeded()
+            }
+        }
+
+        /// A view controller transition running anywhere under `root` (a push, a presentation), if any.
+        private static func transitionInFlight(under root: UIViewController?) -> UIViewControllerTransitionCoordinator? {
+            guard let root else { return nil }
+            if let coordinator = root.transitionCoordinator {
+                return coordinator
+            }
+            for child in root.children {
+                if let coordinator = transitionInFlight(under: child) {
+                    return coordinator
+                }
+            }
+            return transitionInFlight(under: root.presentedViewController)
         }
 
         /// The tab bar on screen under `root`, if any: searched from the topmost presented controller
@@ -413,6 +498,8 @@
 
                         // Reset to collapsed tab after user interacted with webview
                         trigger.resetToCollapsed(animated: false)
+                        // The host may have rotated or changed screens while the sheet covered it.
+                        self.refreshTabBarClearance()
 
                         window.isHidden = false
                         trigger.alpha = 0
