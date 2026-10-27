@@ -61,7 +61,7 @@ struct PLPView: View {
             .background(Color.gray.opacity(0.05))
         #endif
             .onAppear {
-                PoltioSDK.track(event: "view", params: ["url": "example://plp/\(category.rawValue.lowercased())"])
+                PoltioSDK.track(event: "view", params: ["url": "poltiodemo://plp/\(category.rawValue.lowercased())"])
             }
     }
 }

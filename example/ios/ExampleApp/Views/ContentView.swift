@@ -69,46 +69,59 @@ struct SDKStatusView: View {
 
                 Section(header: Text("Test Dynamic Screen Views")) {
                     Button(action: {
-                        PoltioSDK.track(event: "view", params: ["url": "example://home"])
-                        eventStatusMessage = "Tracked 'view' for 'example://home'"
+                        PoltioSDK.track(event: "view", params: ["url": "poltiodemo://home"])
+                        eventStatusMessage = "Tracked 'view' for 'poltiodemo://home'"
                     }) {
                         HStack {
                             Image(systemName: "storefront")
                                 .foregroundColor(.blue)
-                            Text("Track View Home (example://home)")
+                            Text("Track View Home (poltiodemo://home)")
+                        }
+                    }
+
+                    // No screen tracks the bare PLP URL (category pages track plp/<category>), so
+                    // this is the way to show a widget aimed at it.
+                    Button(action: {
+                        PoltioSDK.track(event: "view", params: ["url": "poltiodemo://plp"])
+                        eventStatusMessage = "Tracked 'view' for 'poltiodemo://plp'"
+                    }) {
+                        HStack {
+                            Image(systemName: "square.grid.2x2")
+                                .foregroundColor(.orange)
+                            Text("Track View PLP (poltiodemo://plp)")
                         }
                     }
 
                     Button(action: {
-                        PoltioSDK.track(event: "view", params: ["url": "example://plp/phones"])
-                        eventStatusMessage = "Tracked 'view' for 'example://plp/phones'"
+                        PoltioSDK.track(event: "view", params: ["url": "poltiodemo://plp/phones"])
+                        eventStatusMessage = "Tracked 'view' for 'poltiodemo://plp/phones'"
                     }) {
                         HStack {
                             Image(systemName: "iphone")
                                 .foregroundColor(.teal)
-                            Text("Track View Phones (example://plp/phones)")
+                            Text("Track View Phones (poltiodemo://plp/phones)")
                         }
                     }
 
                     Button(action: {
-                        PoltioSDK.track(event: "view", params: ["url": "example://plp/tvs"])
-                        eventStatusMessage = "Tracked 'view' for 'example://plp/tvs'"
+                        PoltioSDK.track(event: "view", params: ["url": "poltiodemo://plp/tvs"])
+                        eventStatusMessage = "Tracked 'view' for 'poltiodemo://plp/tvs'"
                     }) {
                         HStack {
                             Image(systemName: "tv")
                                 .foregroundColor(.indigo)
-                            Text("Track View TVs (example://plp/tvs)")
+                            Text("Track View TVs (poltiodemo://plp/tvs)")
                         }
                     }
 
                     Button(action: {
-                        PoltioSDK.track(event: "view", params: ["url": "example://plp/laptops"])
-                        eventStatusMessage = "Tracked 'view' for 'example://plp/laptops'"
+                        PoltioSDK.track(event: "view", params: ["url": "poltiodemo://plp/laptops"])
+                        eventStatusMessage = "Tracked 'view' for 'poltiodemo://plp/laptops'"
                     }) {
                         HStack {
                             Image(systemName: "laptopcomputer")
                                 .foregroundColor(.purple)
-                            Text("Track View Laptops (example://plp/laptops)")
+                            Text("Track View Laptops (poltiodemo://plp/laptops)")
                         }
                     }
 
@@ -136,8 +149,8 @@ struct SDKStatusView: View {
 
                 Section(header: Text("Manual Event Tracking")) {
                     Button("Track Custom View Event") {
-                        PoltioSDK.track(event: "view", params: ["url": "example://manual_track"])
-                        eventStatusMessage = "Tracked 'view' event for 'example://manual_track'"
+                        PoltioSDK.track(event: "view", params: ["url": "poltiodemo://manual_track"])
+                        eventStatusMessage = "Tracked 'view' event for 'poltiodemo://manual_track'"
                     }
 
                     Button("Record Purchase") {
@@ -145,7 +158,7 @@ struct SDKStatusView: View {
                         PoltioSDK.recordPurchase(
                             orderId: orderId,
                             value: 99.99,
-                            url: "example://checkout/complete",
+                            url: "poltiodemo://checkout/complete",
                             currency: "USD",
                             items: [PoltioPurchaseItem(id: "sku_123", name: "Wireless Headphones", quantity: 1, value: 99.99)]
                         )
@@ -219,20 +232,20 @@ struct ContentView: View {
                 .tag(AppTab.sdkInfo)
         }
         .onAppear {
-            PoltioSDK.track(event: "view", params: ["url": "example://home"])
+            PoltioSDK.track(event: "view", params: ["url": "poltiodemo://home"])
         }
         .onChange(of: selectedTab) { newTab in
             switch newTab {
             case .shop:
-                PoltioSDK.track(event: "view", params: ["url": "example://home"])
+                PoltioSDK.track(event: "view", params: ["url": "poltiodemo://home"])
             case .phones:
-                PoltioSDK.track(event: "view", params: ["url": "example://plp/phones"])
+                PoltioSDK.track(event: "view", params: ["url": "poltiodemo://plp/phones"])
             case .tvs:
-                PoltioSDK.track(event: "view", params: ["url": "example://plp/tvs"])
+                PoltioSDK.track(event: "view", params: ["url": "poltiodemo://plp/tvs"])
             case .lookbook:
                 PoltioSDK.track(event: "view", params: ["url": LookbookView.trackedURL])
             case .sdkInfo:
-                PoltioSDK.track(event: "view", params: ["url": "example://sdk_info"])
+                PoltioSDK.track(event: "view", params: ["url": "poltiodemo://sdk_info"])
             }
         }
     }

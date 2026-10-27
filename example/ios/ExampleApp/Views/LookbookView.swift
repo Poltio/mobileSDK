@@ -1,9 +1,9 @@
 import SwiftUI
 
 /// An editorial, image-led screen, like the one a fashion app opens on, for trying triggers over
-/// full-bleed content. Tracked as `example://lookbook`: point a widget at that URL to show it here.
+/// full-bleed content. Tracked as `poltiodemo://lookbook`: point a widget at that URL to show it here.
 struct LookbookView: View {
-    static let trackedURL = "example://lookbook"
+    static let trackedURL = "poltiodemo://lookbook"
 
     private let looks = Look.samples
 
