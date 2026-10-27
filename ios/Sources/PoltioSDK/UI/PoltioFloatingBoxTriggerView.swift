@@ -351,11 +351,12 @@
             }
         }
 
-        /// Holds `container` against the docked edge, so it stays put while the trigger resizes.
+        /// Holds `container` against the docked edge, so it stays put while the trigger resizes. Physical
+        /// anchors, like the overlay manager's, so a right-to-left language doesn't flip it.
         private func pinToDockedEdge(_ container: UIView) -> NSLayoutConstraint {
             isLeftDocked
-                ? container.leadingAnchor.constraint(equalTo: leadingAnchor)
-                : container.trailingAnchor.constraint(equalTo: trailingAnchor)
+                ? container.leftAnchor.constraint(equalTo: leftAnchor)
+                : container.rightAnchor.constraint(equalTo: rightAnchor)
         }
 
         /// Default layout: header text, a fixed-height banner strip, footer text.

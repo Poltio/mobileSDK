@@ -27,9 +27,6 @@ import java.lang.ref.WeakReference
  * `window.decorView` / root `FrameLayout` rather than a system-alert-window overlay.
  */
 internal object PoltioOverlayManager {
-    private const val MAX_SHOW_RETRIES = 10
-    private const val RETRY_DELAY_MS = 200L
-
     /**
      * Default bottom inset for the box trigger — unlike pill/card (70dp), the box trigger's
      * collapsed tab is tall (140dp) and sits low by design, but 24dp put it directly behind most
@@ -52,8 +49,16 @@ internal object PoltioOverlayManager {
     /** Widgets can share content and trigger type yet differ in copy, colors and position, so the
      * trigger on screen is only the incoming one when its widget id matches too. */
     private var currentWidgetId: Int? = null
-    private var showTriggerRetryCount = 0
-    private var pendingShowRunnable: Runnable? = null
+
+    /** A widget waiting for a host Activity to resume, shown from `onActivityResumed`: one that
+     * resolved while no host was resumed (the app still starting or in the background, or the
+     * widget sheet up over a host that a rotation rebuilt behind it), or the trigger a host was
+     * showing when a configuration change destroyed it. */
+    private var pendingTrigger: TriggerRequest? = null
+    /** What the trigger on screen was built from, so a configuration change can carry it over. */
+    private var shownTrigger: TriggerRequest? = null
+
+    private class TriggerRequest(val widget: PoltioWidgetResponse, val puid: String?)
 
     /** Registers activity-lifecycle tracking; safe to call more than once with the same instance. */
     fun attach(app: Application) {
@@ -61,7 +66,14 @@ internal object PoltioOverlayManager {
         application = app
         app.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityResumed(activity: Activity) {
+                // The widget sheet never hosts a trigger: while it's up, the trigger belongs to the
+                // host behind it, which resumes again once the sheet closes.
+                if (activity is PoltioWebViewActivity) return
                 resumedActivity = WeakReference(activity)
+                pendingTrigger?.let { request ->
+                    pendingTrigger = null
+                    showTriggerOnMain(request.widget, request.puid)
+                }
             }
 
             override fun onActivityPaused(activity: Activity) {
@@ -71,7 +83,11 @@ internal object PoltioOverlayManager {
             override fun onActivityDestroyed(activity: Activity) {
                 if (resumedActivity?.get() === activity) resumedActivity = null
                 if (overlayContainer?.let { it.context === activity } == true) {
+                    // A configuration change (e.g. rotation) rebuilds the host: carry its trigger
+                    // over to the new one instead of leaving it bare until the next screen view.
+                    val carriedOver = shownTrigger.takeIf { activity.isChangingConfigurations }
                     teardownOverlaySynchronously()
+                    if (carriedOver != null) pendingTrigger = carriedOver
                 }
             }
 
@@ -114,8 +130,8 @@ internal object PoltioOverlayManager {
         currentPublicId == widget.publicId && currentWidgetId == widget.widgetId
 
     private fun showTriggerOnMain(widget: PoltioWidgetResponse, puid: String?) {
-        pendingShowRunnable?.let { PoltioExecutors.main.removeCallbacks(it) }
-        pendingShowRunnable = null
+        // A newer request supersedes one still waiting for a host to resume.
+        pendingTrigger = null
 
         val options = widget.overlayOptions
         if (!(options.isBoxTrigger || options.isPillTrigger || options.isCardTrigger)) {
@@ -160,39 +176,25 @@ internal object PoltioOverlayManager {
             return
         }
 
-        val isRetryForSameWidget = isCurrent(widget)
         teardownOverlaySynchronously()
-        if (!isRetryForSameWidget) showTriggerRetryCount = 0
+
+        if (activity == null) {
+            // Keep it rather than give up after a few tries: a host sitting paused under the widget
+            // sheet after a rotation resumes only once the sheet closes, however long that takes.
+            PoltioLogger.debug { "No resumed Activity; showing the trigger for widget '${widget.publicId}' once one resumes." }
+            pendingTrigger = TriggerRequest(widget, puid)
+            return
+        }
+
         currentPublicId = widget.publicId
         currentTriggerType = targetTriggerType
         currentWidgetId = widget.widgetId
 
-        if (activity == null) {
-            if (showTriggerRetryCount >= MAX_SHOW_RETRIES) {
-                PoltioLogger.warning { "No resumed Activity available after $MAX_SHOW_RETRIES retries; giving up on showing trigger for widget '${widget.publicId}'." }
-                showTriggerRetryCount = 0
-                currentPublicId = null
-                currentTriggerType = null
-                currentWidgetId = null
-                return
-            }
-            showTriggerRetryCount++
-            PoltioLogger.debug { "No resumed Activity yet, retrying showTrigger ($showTriggerRetryCount/$MAX_SHOW_RETRIES) after ${RETRY_DELAY_MS}ms..." }
-            val runnable = Runnable {
-                if (isCurrent(widget)) showTriggerOnMain(widget, puid)
-            }
-            pendingShowRunnable = runnable
-            PoltioExecutors.main.postDelayed(runnable, RETRY_DELAY_MS)
-            return
-        }
-
-        showTriggerRetryCount = 0
-
         val contentRoot = activity.findViewById<ViewGroup>(android.R.id.content) ?: return
 
         // The trigger is now guaranteed to actually render below — report the impression once
-        // here rather than at the top of the method, so retries while waiting for a resumed
-        // Activity (which re-enter this same method) don't double-report.
+        // here rather than at the top of the method, so a widget kept for a host to resume isn't
+        // reported until it actually shows.
         PoltioSDK.reportCtaView(widget)
         val container = FrameLayout(activity).apply {
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
@@ -237,6 +239,7 @@ internal object PoltioOverlayManager {
         }
 
         activeTriggerView = triggerView
+        shownTrigger = TriggerRequest(widget, puid)
 
         PoltioLogger.info { "Attached floating trigger overlay for widget '${widget.publicId}' (type: ${options.triggerType ?: "unknown"})." }
 
@@ -257,8 +260,8 @@ internal object PoltioOverlayManager {
     }
 
     private fun hideTriggerOnMain() {
-        pendingShowRunnable?.let { PoltioExecutors.main.removeCallbacks(it) }
-        pendingShowRunnable = null
+        pendingTrigger = null
+        shownTrigger = null
         currentPublicId = null
         currentTriggerType = null
         currentWidgetId = null
@@ -282,8 +285,7 @@ internal object PoltioOverlayManager {
 
     /** Synchronously tears down any existing overlay container/view (no animation). */
     private fun teardownOverlaySynchronously() {
-        pendingShowRunnable?.let { PoltioExecutors.main.removeCallbacks(it) }
-        pendingShowRunnable = null
+        shownTrigger = null
         currentPublicId = null
         currentTriggerType = null
         currentWidgetId = null
@@ -326,7 +328,9 @@ internal object PoltioOverlayManager {
         val params = view.layoutParams as? FrameLayout.LayoutParams
             ?: FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT)
 
-        val horizontalGravity = if (horizontal == "left") Gravity.START else Gravity.END
+        // Absolute LEFT/RIGHT, not START/END: `floating-position` names a physical side and the
+        // triggers draw their rounded corners for it, so a right-to-left locale mustn't flip it.
+        val horizontalGravity = if (horizontal == "left") Gravity.LEFT else Gravity.RIGHT
         val verticalGravity = when (vertical) {
             "top" -> Gravity.TOP
             "center" -> Gravity.CENTER_VERTICAL

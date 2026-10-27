@@ -186,6 +186,7 @@
 
                 let vertical = widget.overlayOptions.verticalPosition
                 let isLeftDocked = widget.overlayOptions.isLeftDocked
+                let bottomObstruction = vertical == "bottom" ? hostTabBarOverlap() : 0
                 let triggerView: UIView & PoltioTriggerPresentable
 
                 if widget.overlayOptions.isPillTrigger {
@@ -196,9 +197,10 @@
                     )
                     pillView.translatesAutoresizingMaskIntoConstraints = false
                     rootVC.view.addSubview(pillView)
-                    pinTrigger(
+                    Self.pinTrigger(
                         pillView, in: rootVC.view, vertical: vertical, isLeftDocked: isLeftDocked,
-                        horizontalInset: 16, verticalInset: 70, hugsRawEdgeHorizontally: false
+                        horizontalInset: 16, verticalInset: 70, hugsRawEdgeHorizontally: false,
+                        bottomObstruction: bottomObstruction
                     )
                     triggerView = pillView
                 } else if widget.overlayOptions.isCardTrigger {
@@ -208,9 +210,10 @@
                     )
                     cardView.translatesAutoresizingMaskIntoConstraints = false
                     rootVC.view.addSubview(cardView)
-                    pinTrigger(
+                    Self.pinTrigger(
                         cardView, in: rootVC.view, vertical: vertical, isLeftDocked: isLeftDocked,
-                        horizontalInset: 0, verticalInset: 70, hugsRawEdgeHorizontally: true
+                        horizontalInset: 0, verticalInset: 70, hugsRawEdgeHorizontally: true,
+                        bottomObstruction: bottomObstruction
                     )
                     triggerView = cardView
                 } else {
@@ -221,9 +224,10 @@
                     )
                     boxView.translatesAutoresizingMaskIntoConstraints = false
                     rootVC.view.addSubview(boxView)
-                    pinTrigger(
+                    Self.pinTrigger(
                         boxView, in: rootVC.view, vertical: vertical, isLeftDocked: isLeftDocked,
-                        horizontalInset: 0, verticalInset: 24, hugsRawEdgeHorizontally: true
+                        horizontalInset: 0, verticalInset: 24, hugsRawEdgeHorizontally: true,
+                        bottomObstruction: bottomObstruction
                     )
                     triggerView = boxView
                 }
@@ -302,24 +306,30 @@
         /// Pins `view` within `container` according to the parsed `floatingPosition` (`vertical`, left or right),
         /// generalizing what used to be three hardcoded per-trigger constraint blocks. `hugsRawEdgeHorizontally`
         /// preserves each trigger's pre-existing horizontal-anchoring convention (card/box hug the raw view
-        /// edge so their collapsed tabs bleed off-screen; pill insets from the safe area).
-        private func pinTrigger(
+        /// edge so their collapsed tabs bleed off-screen; pill insets from the safe area). `bottomObstruction`
+        /// lifts a bottom-docked trigger over host chrome the overlay window's safe area can't see.
+        ///
+        /// Anchors are physical (`left`/`right`), not `leading`/`trailing`: `floating-position` names a
+        /// physical side, and the triggers draw their rounded corners for it, so a right-to-left app
+        /// language must not flip the trigger onto the other edge.
+        static func pinTrigger(
             _ view: UIView,
             in container: UIView,
             vertical: String,
             isLeftDocked: Bool,
             horizontalInset: CGFloat,
             verticalInset: CGFloat,
-            hugsRawEdgeHorizontally: Bool
+            hugsRawEdgeHorizontally: Bool,
+            bottomObstruction: CGFloat = 0
         ) {
             var constraints: [NSLayoutConstraint] = []
 
             if isLeftDocked {
-                let anchor = hugsRawEdgeHorizontally ? container.leadingAnchor : container.safeAreaLayoutGuide.leadingAnchor
-                constraints.append(view.leadingAnchor.constraint(equalTo: anchor, constant: horizontalInset))
+                let anchor = hugsRawEdgeHorizontally ? container.leftAnchor : container.safeAreaLayoutGuide.leftAnchor
+                constraints.append(view.leftAnchor.constraint(equalTo: anchor, constant: horizontalInset))
             } else {
-                let anchor = hugsRawEdgeHorizontally ? container.trailingAnchor : container.safeAreaLayoutGuide.trailingAnchor
-                constraints.append(view.trailingAnchor.constraint(equalTo: anchor, constant: -horizontalInset))
+                let anchor = hugsRawEdgeHorizontally ? container.rightAnchor : container.safeAreaLayoutGuide.rightAnchor
+                constraints.append(view.rightAnchor.constraint(equalTo: anchor, constant: -horizontalInset))
             }
 
             switch vertical {
@@ -328,10 +338,56 @@
             case "center":
                 constraints.append(view.centerYAnchor.constraint(equalTo: container.centerYAnchor, constant: -verticalInset))
             default: // "bottom"
-                constraints.append(view.bottomAnchor.constraint(equalTo: container.safeAreaLayoutGuide.bottomAnchor, constant: -verticalInset))
+                constraints.append(view.bottomAnchor.constraint(equalTo: container.safeAreaLayoutGuide.bottomAnchor, constant: -(verticalInset + bottomObstruction)))
             }
 
             NSLayoutConstraint.activate(constraints)
+        }
+
+        // MARK: - Host Tab Bar
+
+        /// How far the host app's visible tab bar reaches above the bottom safe area. The trigger has
+        /// its own window, whose safe area knows nothing of the host's bars, so a bottom-docked trigger
+        /// would otherwise sit over the tab bar and take the taps meant for it.
+        private func hostTabBarOverlap() -> CGFloat {
+            guard let hostWindow = findHostKeyWindow(),
+                  let tabBar = Self.visibleTabBar(under: hostWindow.rootViewController)
+            else { return 0 }
+            return Self.tabBarOverlap(
+                tabBarTop: tabBar.convert(tabBar.bounds, to: hostWindow).minY,
+                windowHeight: hostWindow.bounds.height,
+                safeAreaBottom: hostWindow.safeAreaInsets.bottom
+            )
+        }
+
+        /// The tab bar on screen under `root`, if any: searched from the topmost presented controller
+        /// (a modal over a tab bar controller hides its bar), through child controllers, which is where
+        /// SwiftUI's `TabView` keeps its `UITabBarController`.
+        static func visibleTabBar(under root: UIViewController?) -> UITabBar? {
+            var top = root
+            while let presented = top?.presentedViewController, !presented.isBeingDismissed {
+                top = presented
+            }
+            return firstVisibleTabBar(in: top)
+        }
+
+        private static func firstVisibleTabBar(in viewController: UIViewController?) -> UITabBar? {
+            guard let viewController else { return nil }
+            if let tabBarController = viewController as? UITabBarController {
+                let tabBar = tabBarController.tabBar
+                return !tabBar.isHidden && tabBar.window != nil ? tabBar : nil
+            }
+            for child in viewController.children {
+                if let tabBar = firstVisibleTabBar(in: child) {
+                    return tabBar
+                }
+            }
+            return nil
+        }
+
+        /// The part of a tab bar starting at `tabBarTop` that lies above the bottom safe area.
+        static func tabBarOverlap(tabBarTop: CGFloat, windowHeight: CGFloat, safeAreaBottom: CGFloat) -> CGFloat {
+            max(0, windowHeight - safeAreaBottom - tabBarTop)
         }
 
         /// Presents the interactive widget modal WebView on top of the active view controller.

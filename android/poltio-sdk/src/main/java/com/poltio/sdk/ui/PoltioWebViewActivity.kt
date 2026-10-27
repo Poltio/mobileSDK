@@ -323,7 +323,8 @@ internal class PoltioWebViewActivity : Activity() {
             addView(disc, FrameLayout.LayoutParams(dp(30f), dp(30f), Gravity.CENTER))
             addView(PoltioCloseGlyphView(context, Color.WHITE), FrameLayout.LayoutParams(dp(28f), dp(28f), Gravity.CENTER))
         }
-        sheet.addView(closeButton, FrameLayout.LayoutParams(dp(48f), dp(48f), Gravity.TOP or Gravity.END).apply {
+        // Top-right in every locale, like the SDK's other physically placed chrome.
+        sheet.addView(closeButton, FrameLayout.LayoutParams(dp(48f), dp(48f), Gravity.TOP or Gravity.RIGHT).apply {
             topMargin = dp(4f)
             rightMargin = dp(4f)
         })
