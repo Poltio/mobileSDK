@@ -53,6 +53,9 @@
         private var triggerSlideOffsetX: CGFloat = 80
         private var currentPublicId: String?
         private var currentTriggerType: String?
+        /// Widgets can share content and trigger type yet differ in copy, colors and position, so the
+        /// trigger on screen is only the incoming one when its widget id matches too.
+        private var currentWidgetId: Int?
         private var pendingShowWorkItem: DispatchWorkItem?
         private var showTriggerRetryCount = 0
 
@@ -92,7 +95,7 @@
 
                 let targetTriggerType = widget.overlayOptions.triggerType ?? ""
 
-                if currentPublicId == widget.publicId,
+                if isCurrent(widget),
                    currentTriggerType == targetTriggerType,
                    let activeView = activeTriggerView,
                    activeView.superview != nil,
@@ -107,7 +110,7 @@
                     // The scene check matters on iPadOS multi-window setups: without it, switching
                     // focus to a different scene of the same app while this widget's trigger is
                     // still attached (but inactive) in the first scene would match on
-                    // publicId/triggerType alone and return here, leaving the trigger invisible in
+                    // widget and trigger type alone and return here, leaving the trigger invisible in
                     // the scene actually on screen instead of reattaching to it.
                     PoltioSDK.shared.reportCtaView(widget: widget)
                     return
@@ -116,7 +119,7 @@
                 // A retry (scheduled by this same method below) re-enters here for the same widget while
                 // it's still waiting on a UIWindowScene. Only reset the retry counter for a genuinely new
                 // widget — otherwise it gets zeroed on every retry and the cap below never trips.
-                let isRetryForSameWidget = currentPublicId == widget.publicId
+                let isRetryForSameWidget = isCurrent(widget)
 
                 // Clean up previous overlay and update state immediately
                 teardownOverlaySynchronously()
@@ -125,6 +128,7 @@
                 }
                 currentPublicId = widget.publicId
                 currentTriggerType = targetTriggerType
+                currentWidgetId = widget.widgetId
 
                 guard let windowScene = findActiveWindowScene() else {
                     guard showTriggerRetryCount < Self.maxShowTriggerRetries else {
@@ -132,12 +136,13 @@
                         showTriggerRetryCount = 0
                         currentPublicId = nil
                         currentTriggerType = nil
+                        currentWidgetId = nil
                         return
                     }
                     showTriggerRetryCount += 1
                     PoltioLogger.debug("UIWindowScene not ready yet, retrying showTrigger (\(showTriggerRetryCount)/\(Self.maxShowTriggerRetries)) after 0.2s...")
                     let workItem = DispatchWorkItem { [weak self] in
-                        guard let self, currentPublicId == widget.publicId else { return }
+                        guard let self, isCurrent(widget) else { return }
                         showTrigger(widget: widget, puid: puid)
                     }
                     pendingShowWorkItem = workItem
@@ -248,6 +253,11 @@
             }
         }
 
+        /// Whether `widget` is the one the current trigger was built for: same content and same widget.
+        private func isCurrent(_ widget: PoltioWidgetResponse) -> Bool {
+            currentPublicId == widget.publicId && currentWidgetId == widget.widgetId
+        }
+
         /// Hides and removes any currently displayed floating trigger view and its overlay window with animation.
         func hideTrigger() {
             DispatchQueue.main.async { [weak self] in
@@ -256,6 +266,7 @@
                 pendingShowWorkItem = nil
                 currentPublicId = nil
                 currentTriggerType = nil
+                currentWidgetId = nil
                 let windowToClose = overlayWindow
                 let viewToClose = activeTriggerView
                 let slideOffsetX = triggerSlideOffsetX
@@ -281,6 +292,7 @@
             pendingShowWorkItem = nil
             currentPublicId = nil
             currentTriggerType = nil
+            currentWidgetId = nil
             activeTriggerView?.removeFromSuperview()
             activeTriggerView = nil
             overlayWindow?.isHidden = true

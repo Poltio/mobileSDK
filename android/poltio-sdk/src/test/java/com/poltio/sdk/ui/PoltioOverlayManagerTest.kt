@@ -3,11 +3,15 @@ package com.poltio.sdk.ui
 import android.app.Activity
 import android.app.Application
 import android.os.Looper
+import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.test.core.app.ApplicationProvider
 import com.poltio.sdk.PoltioOverlayOptions
 import com.poltio.sdk.PoltioWidgetResponse
 import org.json.JSONObject
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -23,6 +27,46 @@ class PoltioOverlayManagerTest {
     )
 
     private fun idleMain() = shadowOf(Looper.getMainLooper()).idle()
+
+    /** A card widget on the shared content; [widgetId] tells two such widgets apart. */
+    private fun cardWidget(widgetId: Int) = PoltioWidgetResponse(
+        publicId = "shared_widget",
+        overlayOptions = PoltioOverlayOptions.fromJson(JSONObject("""{"trigger-type":"card"}""")),
+        widgetId = widgetId,
+    )
+
+    @Test
+    fun `a different widget on the same content and trigger type replaces the trigger`() {
+        val application = ApplicationProvider.getApplicationContext<Application>()
+        PoltioOverlayManager.attach(application)
+        val controller = Robolectric.buildActivity(Activity::class.java).create().start().resume()
+        val contentRoot = controller.get().findViewById<FrameLayout>(android.R.id.content)
+        fun shownCard(): PoltioFloatingCardTriggerView? {
+            val container = contentRoot.getChildAt(contentRoot.childCount - 1) as? ViewGroup ?: return null
+            return (0 until container.childCount).map(container::getChildAt).filterIsInstance<PoltioFloatingCardTriggerView>().singleOrNull()
+        }
+
+        PoltioOverlayManager.showTrigger(cardWidget(widgetId = 1), puid = null)
+        idleMain()
+        val first = shownCard()
+        assertNotNull(first)
+
+        // The same widget again (a revisit, or one widget on two screens) keeps the trigger as it is.
+        PoltioOverlayManager.showTrigger(cardWidget(widgetId = 1), puid = null)
+        idleMain()
+        assertSame(first, shownCard())
+
+        // Another widget showing the same content as a card has its own copy, colors and position.
+        PoltioOverlayManager.showTrigger(cardWidget(widgetId = 2), puid = null)
+        idleMain()
+        val second = shownCard()
+        assertNotNull(second)
+        assertNotSame(first, second)
+
+        PoltioOverlayManager.hideTrigger()
+        idleMain()
+        controller.destroy()
+    }
 
     @Test
     fun `showTrigger reattaches to a newly resumed Activity instead of reusing a backstacked one`() {

@@ -49,6 +49,9 @@ internal object PoltioOverlayManager {
     private var triggerSlideOffsetDp = 80f
     private var currentPublicId: String? = null
     private var currentTriggerType: String? = null
+    /** Widgets can share content and trigger type yet differ in copy, colors and position, so the
+     * trigger on screen is only the incoming one when its widget id matches too. */
+    private var currentWidgetId: Int? = null
     private var showTriggerRetryCount = 0
     private var pendingShowRunnable: Runnable? = null
 
@@ -106,6 +109,10 @@ internal object PoltioOverlayManager {
         PoltioExecutors.runOnMain { hideTriggerOnMain() }
     }
 
+    /** Whether [widget] is the one the current trigger was built for: same content and same widget. */
+    private fun isCurrent(widget: PoltioWidgetResponse): Boolean =
+        currentPublicId == widget.publicId && currentWidgetId == widget.widgetId
+
     private fun showTriggerOnMain(widget: PoltioWidgetResponse, puid: String?) {
         pendingShowRunnable?.let { PoltioExecutors.main.removeCallbacks(it) }
         pendingShowRunnable = null
@@ -133,7 +140,7 @@ internal object PoltioOverlayManager {
 
         val targetTriggerType = options.triggerType ?: ""
 
-        if (currentPublicId == widget.publicId &&
+        if (isCurrent(widget) &&
             currentTriggerType == targetTriggerType &&
             activeTriggerView != null &&
             activeTriggerView?.parent != null &&
@@ -146,18 +153,19 @@ internal object PoltioOverlayManager {
             // The `context === activity` check matters because the trigger is attached to the
             // current Activity's content view: without it, navigating to a *new* Activity (which
             // only backstacks the old one rather than destroying it) that resolves the same widget
-            // would match on publicId/triggerType alone and return here — leaving the trigger
+            // would match on widget and trigger type alone and return here — leaving the trigger
             // attached to the paused, off-screen Activity underneath instead of the one actually
             // visible now.
             PoltioSDK.reportCtaView(widget)
             return
         }
 
-        val isRetryForSameWidget = currentPublicId == widget.publicId
+        val isRetryForSameWidget = isCurrent(widget)
         teardownOverlaySynchronously()
         if (!isRetryForSameWidget) showTriggerRetryCount = 0
         currentPublicId = widget.publicId
         currentTriggerType = targetTriggerType
+        currentWidgetId = widget.widgetId
 
         if (activity == null) {
             if (showTriggerRetryCount >= MAX_SHOW_RETRIES) {
@@ -165,12 +173,13 @@ internal object PoltioOverlayManager {
                 showTriggerRetryCount = 0
                 currentPublicId = null
                 currentTriggerType = null
+                currentWidgetId = null
                 return
             }
             showTriggerRetryCount++
             PoltioLogger.debug { "No resumed Activity yet, retrying showTrigger ($showTriggerRetryCount/$MAX_SHOW_RETRIES) after ${RETRY_DELAY_MS}ms..." }
             val runnable = Runnable {
-                if (currentPublicId == widget.publicId) showTriggerOnMain(widget, puid)
+                if (isCurrent(widget)) showTriggerOnMain(widget, puid)
             }
             pendingShowRunnable = runnable
             PoltioExecutors.main.postDelayed(runnable, RETRY_DELAY_MS)
@@ -252,6 +261,7 @@ internal object PoltioOverlayManager {
         pendingShowRunnable = null
         currentPublicId = null
         currentTriggerType = null
+        currentWidgetId = null
 
         val container = overlayContainer
         val view = activeTriggerView
@@ -276,6 +286,7 @@ internal object PoltioOverlayManager {
         pendingShowRunnable = null
         currentPublicId = null
         currentTriggerType = null
+        currentWidgetId = null
         activeTriggerView = null
         overlayContainer?.let { (it.parent as? ViewGroup)?.removeView(it) }
         overlayContainer = null
