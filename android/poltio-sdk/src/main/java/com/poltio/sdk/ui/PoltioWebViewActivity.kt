@@ -240,29 +240,6 @@ internal class PoltioWebViewActivity : Activity() {
             insets
         }
 
-        dragHandle = FrameLayout(this)
-        val grabber = View(this).apply {
-            background = GradientDrawable().apply {
-                setColor(Color.LTGRAY)
-                cornerRadius = dp(2f).toFloat()
-            }
-        }
-        dragHandle.addView(grabber, FrameLayout.LayoutParams(dp(36f), dp(4f), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
-            topMargin = dp(8f)
-        })
-
-        val closeButton = PoltioCloseGlyphView(this, Color.DKGRAY).apply {
-            contentDescription = "Close"
-            setOnClickListener { dismissWithAnimation() }
-        }
-        dragHandle.addView(closeButton, FrameLayout.LayoutParams(dp(32f), dp(32f), Gravity.CENTER_VERTICAL or Gravity.END).apply {
-            rightMargin = dp(16f)
-        })
-        setupDragToDismiss(dragHandle)
-
-        val headerHeightPx = dp(56f)
-        sheet.addView(dragHandle, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, headerHeightPx, Gravity.TOP))
-
         val webView = WebView(this).apply {
             setBackgroundColor(panelBackgroundColor)
             settings.javaScriptEnabled = true
@@ -311,11 +288,45 @@ internal class PoltioWebViewActivity : Activity() {
             }
         }
         this.webView = webView
-        sheet.addView(webView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.TOP).apply {
-            topMargin = headerHeightPx
-        })
+        // The widget fills the whole sheet; the grabber and close button float over it.
+        sheet.addView(webView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.TOP))
 
         sheet.addView(progressBar, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+
+        // A small strip around the grabber stays draggable for swipe-to-dismiss, without covering
+        // more of the widget than that. Translucent gray reads on light and dark content alike.
+        dragHandle = FrameLayout(this)
+        val grabber = View(this).apply {
+            background = GradientDrawable().apply {
+                setColor(Color.argb(150, 128, 128, 128))
+                cornerRadius = dp(2f).toFloat()
+            }
+        }
+        dragHandle.addView(grabber, FrameLayout.LayoutParams(dp(36f), dp(4f), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
+            topMargin = dp(8f)
+        })
+        setupDragToDismiss(dragHandle)
+        sheet.addView(dragHandle, FrameLayout.LayoutParams(dp(96f), dp(24f), Gravity.TOP or Gravity.CENTER_HORIZONTAL))
+
+        // A white mark on a dark disc keeps the close button legible on any widget content; the
+        // 48dp frame around the smaller disc is the tap target.
+        val closeButton = FrameLayout(this).apply {
+            contentDescription = "Close"
+            isClickable = true
+            setOnClickListener { dismissWithAnimation() }
+            val disc = View(context).apply {
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(Color.argb(140, 0, 0, 0))
+                }
+            }
+            addView(disc, FrameLayout.LayoutParams(dp(30f), dp(30f), Gravity.CENTER))
+            addView(PoltioCloseGlyphView(context, Color.WHITE), FrameLayout.LayoutParams(dp(28f), dp(28f), Gravity.CENTER))
+        }
+        sheet.addView(closeButton, FrameLayout.LayoutParams(dp(48f), dp(48f), Gravity.TOP or Gravity.END).apply {
+            topMargin = dp(4f)
+            rightMargin = dp(4f)
+        })
 
         setContentView(root)
         animateIn()
@@ -323,7 +334,7 @@ internal class PoltioWebViewActivity : Activity() {
 
     private val progressBar: ProgressBar by lazy { ProgressBar(this) }
 
-    /** Tracks vertical drags on [dragHandle] (the grabber + header strip) to swipe-dismiss the sheet. */
+    /** Tracks vertical drags on [dragHandle] (the strip around the grabber) to swipe-dismiss the sheet. */
     private fun setupDragToDismiss(dragHandle: View) {
         var dragStartRawY = 0f
         var dragStartTranslationY = 0f

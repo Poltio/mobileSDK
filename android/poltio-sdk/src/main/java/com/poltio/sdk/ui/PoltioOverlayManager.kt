@@ -45,6 +45,8 @@ internal object PoltioOverlayManager {
 
     private var overlayContainer: FrameLayout? = null
     private var activeTriggerView: (android.view.View)? = null
+    /** How far (dp) the active trigger slides in from, and out to, beyond its docked edge. */
+    private var triggerSlideOffsetDp = 80f
     private var currentPublicId: String? = null
     private var currentTriggerType: String? = null
     private var showTriggerRetryCount = 0
@@ -211,6 +213,7 @@ internal object PoltioOverlayManager {
 
         val vertical = options.verticalPosition
         val horizontal = options.horizontalPosition
+        triggerSlideOffsetDp = if (options.isLeftDocked) -80f else 80f
 
         val triggerView: android.view.View = when {
             options.isPillTrigger -> PoltioFloatingPillTriggerView(activity, widget, onOpenWidget, onDismissForever).also {
@@ -234,7 +237,7 @@ internal object PoltioOverlayManager {
     private fun animateTriggerIn(view: android.view.View) {
         val restingX = view.translationX
         view.alpha = 0f
-        view.translationX = restingX + view.context.dp(80f)
+        view.translationX = restingX + view.context.dp(triggerSlideOffsetDp)
         view.animate()
             .alpha(1f)
             .translationX(restingX)
@@ -259,7 +262,7 @@ internal object PoltioOverlayManager {
 
         view.animate()
             .alpha(0f)
-            .translationX(view.translationX + view.context.dp(80f))
+            .translationX(view.translationX + view.context.dp(triggerSlideOffsetDp))
             .setDuration(250)
             .withEndAction {
                 (container.parent as? ViewGroup)?.removeView(container)

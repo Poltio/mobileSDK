@@ -50,6 +50,11 @@ internal class PoltioFloatingBoxTriggerView(
     /** Uniform scale factor applied to every dimension below, clamped to a sane range. */
     private val scale = widget.overlayOptions.boxResize.toFloat().coerceIn(0.5f, 2.0f)
 
+    /** Docked on the left screen edge: every edge-facing detail is mirrored, like web's `box.ts`,
+     * so the square side sits against the edge and the rounded side faces the screen. */
+    private val isLeftDocked = widget.overlayOptions.isLeftDocked
+    private val dockedEdgeGravity = if (isLeftDocked) Gravity.START else Gravity.END
+
     private val collapsedWidthPx get() = context.dp(42f * scale)
     private val collapsedHeightPx get() = context.dp(140f * scale)
     private val expandedWidthPx get() = context.dp(180f * scale)
@@ -142,8 +147,7 @@ internal class PoltioFloatingBoxTriggerView(
 
         collapsedContainer.background = GradientDrawable().apply {
             setColor(outerBg)
-            val r = context.dp(14f).toFloat()
-            cornerRadii = floatArrayOf(r, r, 0f, 0f, 0f, 0f, r, r)
+            cornerRadii = edgeTabCornerRadii(context.dp(14f).toFloat(), isLeftDocked)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             collapsedContainer.outlineProvider = ViewOutlineProvider.BACKGROUND
@@ -157,14 +161,15 @@ internal class PoltioFloatingBoxTriggerView(
             textSize = 13f
             typeface = resolvedTypeface(widget.overlayOptions.floatingFontFamily, android.graphics.Typeface.BOLD)
             gravity = Gravity.CENTER
-            rotation = -90f
+            // Letter tops face the screen on either edge: bottom-to-top on the right, top-to-bottom on the left.
+            rotation = if (isLeftDocked) 90f else -90f
         }
         collapsedContainer.addView(
             label,
             FrameLayout.LayoutParams(context.dp(130f * scale), context.dp(30f * scale), Gravity.CENTER),
         )
 
-        addView(collapsedContainer, FrameLayout.LayoutParams(collapsedWidthPx, collapsedHeightPx, Gravity.CENTER_VERTICAL or Gravity.END))
+        addView(collapsedContainer, FrameLayout.LayoutParams(collapsedWidthPx, collapsedHeightPx, Gravity.CENTER_VERTICAL or dockedEdgeGravity))
 
         var downX = 0f
         collapsedContainer.setOnTouchListener { view, event ->
@@ -238,7 +243,9 @@ internal class PoltioFloatingBoxTriggerView(
             maxLines = 1
         }
 
-        val collapseButton = PoltioChevronGlyphView(context, PoltioChevronDirection.RIGHT, if (fullImageMode) Color.WHITE else Color.GRAY).apply {
+        // Points at the edge the box collapses into.
+        val collapseDirection = if (isLeftDocked) PoltioChevronDirection.LEFT else PoltioChevronDirection.RIGHT
+        val collapseButton = PoltioChevronGlyphView(context, collapseDirection, if (fullImageMode) Color.WHITE else Color.GRAY).apply {
             setOnClickListener { setState(TriggerState.COLLAPSED, animated = true) }
         }
 
@@ -309,7 +316,7 @@ internal class PoltioFloatingBoxTriggerView(
             }
         }
 
-        addView(expandedContainer, FrameLayout.LayoutParams(expandedWidthPx, expandedHeightPx, Gravity.CENTER_VERTICAL or Gravity.END))
+        addView(expandedContainer, FrameLayout.LayoutParams(expandedWidthPx, expandedHeightPx, Gravity.CENTER_VERTICAL or dockedEdgeGravity))
 
         var downX = 0f
         expandedContainer.setOnTouchListener { view, event ->
@@ -317,7 +324,8 @@ internal class PoltioFloatingBoxTriggerView(
                 MotionEvent.ACTION_DOWN -> downX = event.x
                 MotionEvent.ACTION_UP -> {
                     val dx = event.x - downX
-                    if (dx > context.dp(24f)) {
+                    val towardsEdge = if (isLeftDocked) -dx else dx
+                    if (towardsEdge > context.dp(24f)) {
                         setState(TriggerState.COLLAPSED, animated = true)
                     } else if (abs(dx) < context.dp(8f)) {
                         view.performClick()
