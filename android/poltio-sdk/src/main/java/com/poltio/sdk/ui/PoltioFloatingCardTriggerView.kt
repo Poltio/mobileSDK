@@ -60,7 +60,8 @@ internal class PoltioFloatingCardTriggerView(
     /** Docked on the left screen edge: the edge tab and every edge-facing detail are mirrored, so
      * the square side sits against the edge and the rounded side faces the screen. */
     private val isLeftDocked = widget.overlayOptions.isLeftDocked
-    private val dockedEdgeGravity = if (isLeftDocked) Gravity.START else Gravity.END
+    /** Absolute, like the overlay manager's, so a right-to-left locale doesn't flip the tab. */
+    private val dockedEdgeGravity = if (isLeftDocked) Gravity.LEFT else Gravity.RIGHT
 
     private val collapsedWidthPx = context.dp(Constants.COLLAPSED_WIDTH_DP)
     private val collapsedHeightPx = context.dp(Constants.COLLAPSED_HEIGHT_DP)

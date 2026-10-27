@@ -52,9 +52,22 @@
         }
 
         /// Applies the widget's custom font family, if any, so the branding mark matches the rest
-        /// of the card trigger instead of always using the system font.
+        /// of the card trigger instead of always using the system font, and a wordmark color that
+        /// reads on the card's own background (`.secondaryLabel` follows the system appearance, not
+        /// the card, and all but disappears on a dark one).
         func configure(with options: PoltioOverlayOptions) {
             label.font = options.resolvedFont(size: Constants.fontSize, weight: .semibold)
+            label.textColor = Self.wordmarkColor(on: options.resolvedBgColor)
+        }
+
+        /// Light text on a dark background, dark text on a light one.
+        static func wordmarkColor(on background: UIColor) -> UIColor {
+            var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+            guard background.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
+                return .secondaryLabel
+            }
+            let brightness = 0.299 * red + 0.587 * green + 0.114 * blue
+            return brightness < 0.6 ? UIColor(white: 1, alpha: 0.75) : UIColor(white: 0, alpha: 0.5)
         }
     }
 #endif

@@ -53,7 +53,8 @@ internal class PoltioFloatingBoxTriggerView(
     /** Docked on the left screen edge: every edge-facing detail is mirrored, like web's `box.ts`,
      * so the square side sits against the edge and the rounded side faces the screen. */
     private val isLeftDocked = widget.overlayOptions.isLeftDocked
-    private val dockedEdgeGravity = if (isLeftDocked) Gravity.START else Gravity.END
+    /** Absolute, like the overlay manager's, so a right-to-left locale doesn't flip the tab. */
+    private val dockedEdgeGravity = if (isLeftDocked) Gravity.LEFT else Gravity.RIGHT
 
     private val collapsedWidthPx get() = context.dp(42f * scale)
     private val collapsedHeightPx get() = context.dp(140f * scale)
