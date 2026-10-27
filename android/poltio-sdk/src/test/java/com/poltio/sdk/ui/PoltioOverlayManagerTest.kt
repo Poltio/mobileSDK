@@ -9,6 +9,7 @@ import android.widget.FrameLayout
 import androidx.test.core.app.ApplicationProvider
 import com.poltio.sdk.PoltioOverlayOptions
 import com.poltio.sdk.PoltioWidgetResponse
+import java.util.concurrent.TimeUnit
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -88,6 +89,81 @@ class PoltioOverlayManagerTest {
         host.resume()
         idleMain()
         assertNotNull("The trigger must show once the host resumes", shownTrigger(host.get()))
+
+        PoltioOverlayManager.hideTrigger()
+        idleMain()
+        host.destroy()
+    }
+
+    /** Runs [block] with trigger views counted into a list of widget ids, then restores the reporter. */
+    private fun countingViews(block: (reported: List<Int?>) -> Unit) {
+        val original = PoltioOverlayManager.ctaViewReporter
+        val reported = mutableListOf<Int?>()
+        PoltioOverlayManager.ctaViewReporter = { reported += it.widgetId }
+        try {
+            block(reported)
+        } finally {
+            PoltioOverlayManager.ctaViewReporter = original
+        }
+    }
+
+    @Test
+    fun `rebuilding the host behind the widget sheet brings the trigger back visible once the sheet closes`() = countingViews { reported ->
+        val application = ApplicationProvider.getApplicationContext<Application>()
+        PoltioOverlayManager.attach(application)
+        val host = Robolectric.buildActivity(Activity::class.java).create().start().resume()
+        PoltioOverlayManager.showTrigger(boxWidget("bottom-left"), puid = null)
+        idleMain()
+
+        // Opening the widget hides the trigger, and the translucent sheet covers the paused host.
+        PoltioOverlayManager.presentWidgetWebView("box_widget", 7, puid = null)
+        idleMain()
+        host.pause()
+        val sheetIntent = PoltioWebViewActivity.newIntent(application, "box_widget", 7, null, null)
+        val sheet = Robolectric.buildActivity(PoltioWebViewActivity::class.java, sheetIntent).setup()
+
+        // A rotation rebuilds the host behind the sheet: it resumes for a moment and pauses again.
+        host.recreate()
+        idleMain()
+        assertNull("Nothing may attach under the sheet", shownTrigger(host.get()))
+
+        // Closing the sheet resumes the host, and only then is the finished sheet destroyed.
+        sheet.pause()
+        host.resume()
+        idleMain()
+        sheet.stop().destroy()
+        shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS)
+
+        val trigger = shownTrigger(host.get())
+        assertNotNull("The trigger must come back", trigger)
+        assertEquals("It must settle on screen, not beside it", 0f, trigger!!.translationX, 0f)
+        assertEquals(1f, trigger.alpha, 0f)
+        assertEquals("Counted once, before the rotation", listOf<Int?>(7), reported)
+
+        PoltioOverlayManager.hideTrigger()
+        idleMain()
+        host.destroy()
+    }
+
+    @Test
+    fun `a rotation keeps the trigger without counting it again`() = countingViews { reported ->
+        val application = ApplicationProvider.getApplicationContext<Application>()
+        PoltioOverlayManager.attach(application)
+        val host = Robolectric.buildActivity(Activity::class.java).create().start().resume()
+        PoltioOverlayManager.showTrigger(boxWidget("bottom-left"), puid = null)
+        idleMain()
+
+        host.recreate()
+        idleMain()
+        val carriedOver = shownTrigger(host.get())
+        assertNotNull("The rebuilt host gets the trigger back", carriedOver)
+        assertEquals("The rotation itself isn't a new view", listOf<Int?>(7), reported)
+
+        // A host that tracks its screen again after rotating still counts that one view, as before.
+        PoltioOverlayManager.showTrigger(boxWidget("bottom-left"), puid = null)
+        idleMain()
+        assertSame(carriedOver, shownTrigger(host.get()))
+        assertEquals(listOf<Int?>(7, 7), reported)
 
         PoltioOverlayManager.hideTrigger()
         idleMain()

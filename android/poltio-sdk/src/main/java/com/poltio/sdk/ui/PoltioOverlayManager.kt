@@ -58,7 +58,13 @@ internal object PoltioOverlayManager {
     /** What the trigger on screen was built from, so a configuration change can carry it over. */
     private var shownTrigger: TriggerRequest? = null
 
-    private class TriggerRequest(val widget: PoltioWidgetResponse, val puid: String?)
+    /** [reportView] is false for a trigger carried over a configuration change: it was already
+     * counted before the rotation, and a host that re-tracks its screen counts it again anyway. */
+    private class TriggerRequest(val widget: PoltioWidgetResponse, val puid: String?, val reportView: Boolean = true)
+
+    /** Reports a trigger view; swapped in tests to count them. */
+    @androidx.annotation.VisibleForTesting
+    internal var ctaViewReporter: (PoltioWidgetResponse) -> Unit = { PoltioSDK.reportCtaView(it) }
 
     /** Registers activity-lifecycle tracking; safe to call more than once with the same instance. */
     fun attach(app: Application) {
@@ -70,9 +76,15 @@ internal object PoltioOverlayManager {
                 // host behind it, which resumes again once the sheet closes.
                 if (activity is PoltioWebViewActivity) return
                 resumedActivity = WeakReference(activity)
-                pendingTrigger?.let { request ->
+                if (pendingTrigger == null) return
+                // Posted, and only shown if this host is still resumed by then: a host rebuilt by a
+                // rotation behind the open widget sheet resumes for a moment and pauses again in
+                // the same pass, and a trigger shown then would sit, counted, under the sheet.
+                PoltioExecutors.main.post {
+                    val request = pendingTrigger ?: return@post
+                    if (resumedActivity?.get() !== activity) return@post
                     pendingTrigger = null
-                    showTriggerOnMain(request.widget, request.puid)
+                    showTriggerOnMain(request.widget, request.puid, request.reportView)
                 }
             }
 
@@ -87,7 +99,7 @@ internal object PoltioOverlayManager {
                     // over to the new one instead of leaving it bare until the next screen view.
                     val carriedOver = shownTrigger.takeIf { activity.isChangingConfigurations }
                     teardownOverlaySynchronously()
-                    if (carriedOver != null) pendingTrigger = carriedOver
+                    if (carriedOver != null) pendingTrigger = TriggerRequest(carriedOver.widget, carriedOver.puid, reportView = false)
                 }
             }
 
@@ -129,7 +141,7 @@ internal object PoltioOverlayManager {
     private fun isCurrent(widget: PoltioWidgetResponse): Boolean =
         currentPublicId == widget.publicId && currentWidgetId == widget.widgetId
 
-    private fun showTriggerOnMain(widget: PoltioWidgetResponse, puid: String?) {
+    private fun showTriggerOnMain(widget: PoltioWidgetResponse, puid: String?, reportView: Boolean = true) {
         // A newer request supersedes one still waiting for a host to resume.
         pendingTrigger = null
 
@@ -172,7 +184,7 @@ internal object PoltioOverlayManager {
             // would match on widget and trigger type alone and return here — leaving the trigger
             // attached to the paused, off-screen Activity underneath instead of the one actually
             // visible now.
-            PoltioSDK.reportCtaView(widget)
+            if (reportView) ctaViewReporter(widget)
             return
         }
 
@@ -182,7 +194,7 @@ internal object PoltioOverlayManager {
             // Keep it rather than give up after a few tries: a host sitting paused under the widget
             // sheet after a rotation resumes only once the sheet closes, however long that takes.
             PoltioLogger.debug { "No resumed Activity; showing the trigger for widget '${widget.publicId}' once one resumes." }
-            pendingTrigger = TriggerRequest(widget, puid)
+            pendingTrigger = TriggerRequest(widget, puid, reportView)
             return
         }
 
@@ -195,7 +207,7 @@ internal object PoltioOverlayManager {
         // The trigger is now guaranteed to actually render below — report the impression once
         // here rather than at the top of the method, so a widget kept for a host to resume isn't
         // reported until it actually shows.
-        PoltioSDK.reportCtaView(widget)
+        if (reportView) ctaViewReporter(widget)
         val container = FrameLayout(activity).apply {
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
             clipChildren = false
@@ -246,13 +258,16 @@ internal object PoltioOverlayManager {
         animateTriggerIn(triggerView)
     }
 
+    /** Slides the trigger in from beyond its edge to its resting place, which is always an
+     * untranslated X: reading the current translation instead would, on a trigger still mid-way
+     * through an earlier entrance, settle it off-screen. */
     private fun animateTriggerIn(view: android.view.View) {
-        val restingX = view.translationX
+        view.animate().cancel()
         view.alpha = 0f
-        view.translationX = restingX + view.context.dp(triggerSlideOffsetDp)
+        view.translationX = view.context.dp(triggerSlideOffsetDp).toFloat()
         view.animate()
             .alpha(1f)
-            .translationX(restingX)
+            .translationX(0f)
             .setStartDelay(50)
             .setDuration(400)
             .setInterpolator(android.view.animation.OvershootInterpolator(0.9f))
@@ -395,6 +410,9 @@ internal object PoltioOverlayManager {
     internal fun onWidgetWebViewDismissed() {
         PoltioExecutors.runOnMain {
             val container = overlayContainer ?: return@runOnMain
+            // Only a trigger the sheet hid comes back here. One shown since it opened (e.g. kept
+            // across a rotation and shown as the host resumed) is already on screen, entering.
+            if (container.visibility == android.view.View.VISIBLE) return@runOnMain
             val trigger = activeTriggerView as? PoltioTriggerPresentable
 
             trigger?.resetToCollapsed(animated = false)
