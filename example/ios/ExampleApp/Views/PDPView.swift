@@ -164,7 +164,7 @@ struct PDPView: View {
             Text("\(product.name) has been added to your shopping cart.")
         }
         .onAppear {
-            PoltioSDK.track(event: "view", params: ["url": "example://pdp"])
+            PoltioSDK.track(event: "view", params: ["url": "poltiodemo://pdp"])
         }
     }
 }

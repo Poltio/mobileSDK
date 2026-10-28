@@ -290,6 +290,11 @@ struct PoltioOverlayOptions: Codable, Equatable {
         return parts.count > 1 ? String(parts[1]) : "right"
     }
 
+    /// Whether the trigger docks on the left screen edge; anything else docks on the right.
+    var isLeftDocked: Bool {
+        horizontalPosition == "left"
+    }
+
     /// Initial trigger position / state (e.g. "active", "collapsed", "expanded"), respecting mobile overrides.
     var floatingInitialPosition: String? {
         field("floating-initial-position")
@@ -921,9 +926,8 @@ struct PoltioOverlayOptions: Codable, Equatable {
             }
             let inner = str[str.index(after: start) ..< end]
             let components = inner.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-            guard components.count >= 3 else { return nil }
-
-            guard let r = Double(components[0]),
+            guard components.count >= 3,
+                  let r = Double(components[0]),
                   let g = Double(components[1]),
                   let b = Double(components[2])
             else {

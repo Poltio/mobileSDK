@@ -249,6 +249,9 @@ internal class PoltioOverlayOptions private constructor(private val fields: Map<
             return if (parts.size > 1) parts[1] else "right"
         }
 
+    /** Whether the trigger docks on the left screen edge; anything else docks on the right. */
+    val isLeftDocked: Boolean get() = horizontalPosition == "left"
+
     val floatingInitialPosition: String? get() = field("floating-initial-position")
 
     /** Scroll offset (px) at which the JS SDK reveals the trigger. No native equivalent; decoded for parity only. */

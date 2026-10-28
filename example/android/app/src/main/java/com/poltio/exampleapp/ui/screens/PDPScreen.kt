@@ -44,7 +44,7 @@ fun PDPScreen(
     val product = SampleCatalog.getById(productId) ?: return
 
     LaunchedEffect(productId) {
-        PoltioSDKPlaceholder.trackScreen("PDP / ${product.name}", url = "example://pdp")
+        PoltioSDKPlaceholder.trackScreen("PDP / ${product.name}", url = "poltiodemo://pdp")
     }
 
     Column(

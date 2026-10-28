@@ -3,7 +3,9 @@ package com.poltio.sdk.ui
 import android.content.Intent
 import android.net.Uri
 import android.os.Looper
+import android.view.ViewGroup
 import android.webkit.WebResourceRequest
+import android.widget.FrameLayout
 import androidx.test.core.app.ApplicationProvider
 import com.poltio.sdk.BuildConfig
 import com.poltio.sdk.PoltioAddToCartHandler
@@ -58,6 +60,22 @@ class PoltioWebViewActivityTest {
         assertTrue(shadowOf(webView).webViewClient.shouldOverrideUrlLoading(webView, request))
         shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS)
         return activity
+    }
+
+    @Test
+    fun `widget fills the sheet under a floating close button`() {
+        val activity = launch()
+        val webView = activity.webView!!
+        val sheet = webView.parent as ViewGroup
+        val webViewParams = webView.layoutParams as FrameLayout.LayoutParams
+        assertEquals(FrameLayout.LayoutParams.MATCH_PARENT, webViewParams.height)
+        assertEquals(0, webViewParams.topMargin)
+
+        val close = (0 until sheet.childCount).map(sheet::getChildAt).single { it.contentDescription?.toString() == "Close" }
+        // Added after the WebView, so it draws over the widget rather than in a bar of its own.
+        assertTrue(sheet.indexOfChild(close) > sheet.indexOfChild(webView))
+        assertTrue(close.isClickable)
+        assertEquals(activity.dp(48f), close.layoutParams.width)
     }
 
     @Test

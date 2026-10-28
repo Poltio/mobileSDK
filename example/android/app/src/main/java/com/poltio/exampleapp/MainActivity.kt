@@ -6,9 +6,9 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Laptop
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.Icon
@@ -31,6 +31,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.poltio.exampleapp.ui.screens.HomeScreen
 import com.poltio.exampleapp.ui.screens.LogInspectorScreen
+import com.poltio.exampleapp.ui.screens.LookbookScreen
 import com.poltio.exampleapp.ui.screens.PDPScreen
 import com.poltio.exampleapp.ui.screens.PLPScreen
 import com.poltio.exampleapp.ui.theme.PoltioTheme
@@ -55,7 +56,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object Home : Screen("home", "Home", Icons.Default.Home)
     object Phones : Screen("category/Phones", "Phones", Icons.Default.Smartphone)
     object TVs : Screen("category/TVs", "TVs", Icons.Default.Tv)
-    object Laptops : Screen("category/Laptops", "Laptops", Icons.Default.Laptop)
+    object Lookbook : Screen("lookbook", "Lookbook", Icons.Default.AutoAwesome)
     object Logs : Screen("logs", "Logs", Icons.Default.BugReport)
 }
 
@@ -69,7 +70,8 @@ fun TechStoreApp() {
         Screen.Home,
         Screen.Phones,
         Screen.TVs,
-        Screen.Laptops,
+        // Laptops stays reachable from Home's categories; a sixth tab would crowd the bar.
+        Screen.Lookbook,
         Screen.Logs
     )
 
@@ -135,6 +137,10 @@ fun TechStoreApp() {
             ) { backStackEntry ->
                 val productId = backStackEntry.arguments?.getString("productId") ?: "phone-1"
                 PDPScreen(productId = productId)
+            }
+
+            composable(Screen.Lookbook.route) {
+                LookbookScreen()
             }
 
             composable(Screen.Logs.route) {

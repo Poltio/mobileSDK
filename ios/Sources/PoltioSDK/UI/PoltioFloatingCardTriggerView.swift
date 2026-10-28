@@ -15,6 +15,15 @@
 
         private(set) var currentState: TriggerState
 
+        /// Docked on the left screen edge: the edge tab and every edge-facing detail are mirrored, so
+        /// the square side sits against the edge and the rounded side faces the screen.
+        private let isLeftDocked: Bool
+
+        /// Flips a horizontal offset written for the right edge so it points the same way on the left.
+        private func mirrored(_ x: CGFloat) -> CGFloat {
+            isLeftDocked ? -x : x
+        }
+
         // Container views
         private let collapsedContainer = UIView()
         private let expandedContainer = UIView()
@@ -124,6 +133,7 @@
             self.widget = widget
             self.onOpenWidget = onOpenWidget
             currentState = widget.overlayOptions.isInitialExpanded ? .expanded : .collapsed
+            isLeftDocked = widget.overlayOptions.isLeftDocked
             super.init(frame: .zero)
 
             setupView()
@@ -168,8 +178,8 @@
             let tapExpanded = UITapGestureRecognizer(target: self, action: #selector(handleExpandedTap))
             expandedContainer.addGestureRecognizer(tapExpanded)
 
-            let swipeToCollapse = UISwipeGestureRecognizer(target: self, action: #selector(handleSwipeRight))
-            swipeToCollapse.direction = .right
+            let swipeToCollapse = UISwipeGestureRecognizer(target: self, action: #selector(handleSwipeToEdge))
+            swipeToCollapse.direction = isLeftDocked ? .left : .right
             expandedContainer.addGestureRecognizer(swipeToCollapse)
 
             setupAccessibility()
@@ -198,10 +208,15 @@
             collapsedContainer.translatesAutoresizingMaskIntoConstraints = false
             collapsedContainer.backgroundColor = widget.overlayOptions.resolvedBgColor
             collapsedContainer.layer.cornerRadius = Constants.collapsedCornerRadius
-            collapsedContainer.layer.maskedCorners = [.layerMinXMinYCorner, .layerMinXMaxYCorner]
+            collapsedContainer.layer.maskedCorners = isLeftDocked
+                ? [.layerMaxXMinYCorner, .layerMaxXMaxYCorner]
+                : [.layerMinXMinYCorner, .layerMinXMaxYCorner]
             collapsedContainer.layer.shadowColor = UIColor.black.cgColor
             collapsedContainer.layer.shadowOpacity = Constants.collapsedShadowOpacity
-            collapsedContainer.layer.shadowOffset = Constants.collapsedShadowOffset
+            collapsedContainer.layer.shadowOffset = CGSize(
+                width: mirrored(Constants.collapsedShadowOffset.width),
+                height: Constants.collapsedShadowOffset.height
+            )
             collapsedContainer.layer.shadowRadius = Constants.collapsedShadowRadius
             collapsedContainer.isUserInteractionEnabled = true
 
@@ -209,18 +224,18 @@
             collapsedSparkleIcon.translatesAutoresizingMaskIntoConstraints = false
             collapsedContainer.addSubview(collapsedSparkleIcon)
 
-            // Bottom left chevron
+            // Bottom chevron, pointing away from the docked edge (the way the card expands)
             collapsedChevron.translatesAutoresizingMaskIntoConstraints = false
             collapsedChevron.contentMode = .scaleAspectFit
             collapsedChevron.tintColor = widget.overlayOptions.resolvedIconColor
             let chevronConfig = UIImage.SymbolConfiguration(pointSize: Constants.collapsedChevronPointSize, weight: .bold)
-            collapsedChevron.image = UIImage(systemName: "chevron.left", withConfiguration: chevronConfig)
+            collapsedChevron.image = UIImage(systemName: isLeftDocked ? "chevron.right" : "chevron.left", withConfiguration: chevronConfig)
             collapsedContainer.addSubview(collapsedChevron)
 
             addSubview(collapsedContainer)
 
             NSLayoutConstraint.activate([
-                collapsedContainer.trailingAnchor.constraint(equalTo: trailingAnchor),
+                pinToDockedEdge(collapsedContainer),
                 collapsedContainer.centerYAnchor.constraint(equalTo: centerYAnchor),
                 collapsedContainer.widthAnchor.constraint(equalToConstant: Constants.collapsedWidth),
                 collapsedContainer.heightAnchor.constraint(equalToConstant: Constants.collapsedHeight),
@@ -326,7 +341,7 @@
                 : expandedContainer.bottomAnchor.constraint(equalTo: actionButton.bottomAnchor, constant: -Constants.actionButtonBottomInset)
 
             NSLayoutConstraint.activate([
-                expandedContainer.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Constants.expandedCardMargin),
+                pinToDockedEdge(expandedContainer, inset: Constants.expandedCardMargin),
                 expandedContainer.centerYAnchor.constraint(equalTo: centerYAnchor),
                 expandedContainer.widthAnchor.constraint(equalToConstant: Constants.expandedCardWidth),
 
@@ -370,6 +385,14 @@
             }
         }
 
+        /// Holds `container` `inset` points off the docked edge, so it stays put while the trigger resizes.
+        /// Physical anchors, like the overlay manager's, so a right-to-left language doesn't flip it.
+        private func pinToDockedEdge(_ container: UIView, inset: CGFloat = 0) -> NSLayoutConstraint {
+            isLeftDocked
+                ? container.leftAnchor.constraint(equalTo: leftAnchor, constant: inset)
+                : container.rightAnchor.constraint(equalTo: rightAnchor, constant: -inset)
+        }
+
         /// Matches web's card (`core.ts`'s `first` → `second` transition): reveals the collapsed
         /// card once the host content scrolls past `floatingScrollThreshold` (default 300pt,
         /// matching web's own `scrollThreshold ?? 300`). One-shot, like web's own scroll listener
@@ -405,9 +428,8 @@
             // on PoltioScrollObserver.handleScrolled.
             guard let scrollView = notification.object as? UIScrollView,
                   let scrolledScene = scrollView.window?.windowScene,
-                  scrolledScene == window?.windowScene
-            else { return }
-            guard currentState == .expanded,
+                  scrolledScene == window?.windowScene,
+                  currentState == .expanded,
                   let expandedAt, Date().timeIntervalSince(expandedAt) > Self.scrollCollapseGracePeriod
             else { return }
             setState(.collapsed, animated: true)
@@ -483,8 +505,9 @@
                     heightConstraint.constant = effectiveHeight
                     collapsedContainer.alpha = isExpanded ? 0.0 : 1.0
                     expandedContainer.alpha = isExpanded ? 1.0 : 0.0
-                    collapsedContainer.transform = isExpanded ? CGAffineTransform(translationX: Constants.collapseTransformOffsetX, y: 0) : .identity
-                    expandedContainer.transform = isExpanded ? .identity : CGAffineTransform(translationX: Constants.collapseTransformOffsetX, y: 0)
+                    let slideTowardsEdge = CGAffineTransform(translationX: mirrored(Constants.collapseTransformOffsetX), y: 0)
+                    collapsedContainer.transform = isExpanded ? slideTowardsEdge : .identity
+                    expandedContainer.transform = isExpanded ? .identity : slideTowardsEdge
                     superview?.layoutIfNeeded()
                 },
                 completion: { [weak self] _ in
@@ -513,7 +536,7 @@
             setState(.collapsed, animated: true)
         }
 
-        @objc private func handleSwipeRight() {
+        @objc private func handleSwipeToEdge() {
             setState(.collapsed, animated: true)
         }
 

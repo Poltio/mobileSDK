@@ -1105,6 +1105,21 @@ final class PoltioSDKTests: XCTestCase {
             XCTAssertEqual(handledURLs, [productURL])
         }
 
+        func testWidgetFillsTheSheetUnderAFloatingCloseButton() throws {
+            let controller = PoltioWebViewController(publicId: "abc")
+            controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 800)
+            controller.view.layoutIfNeeded()
+
+            let webView = try XCTUnwrap(controller.view.subviews.compactMap { $0 as? WKWebView }.first)
+            XCTAssertEqual(webView.frame, controller.view.bounds)
+
+            // Added last, so it sits above the widget rather than in a bar of its own.
+            let closeButton = try XCTUnwrap(controller.view.subviews.last as? UIButton)
+            XCTAssertEqual(closeButton.accessibilityLabel, "Close")
+            XCTAssertTrue(webView.frame.contains(closeButton.frame))
+            XCTAssertEqual(closeButton.frame.size, CGSize(width: 44, height: 44))
+        }
+
         func testAddToCartIsOnlyTrustedFromPoltioFrames() {
             XCTAssertTrue(PoltioWebViewController.isTrustedBridgeOrigin(protocol: "https", host: "www.poltio.com"))
             XCTAssertTrue(PoltioWebViewController.isTrustedBridgeOrigin(protocol: "https", host: "poltio.com"))
@@ -1871,6 +1886,149 @@ final class PoltioSDKTests: XCTestCase {
             let activeWidget = PoltioWidgetResponse(publicId: "active_1", overlayOptions: activeOptions)
             let activeCardView = PoltioFloatingCardTriggerView(widget: activeWidget, onOpenWidget: {})
             XCTAssertEqual(activeCardView.currentState, .expanded)
+        }
+
+        func testEdgeTabsMirrorOnTheLeftEdge() {
+            let roundedOnRight: CACornerMask = [.layerMinXMinYCorner, .layerMinXMaxYCorner]
+            let roundedOnLeft: CACornerMask = [.layerMaxXMinYCorner, .layerMaxXMaxYCorner]
+            let cases: [(position: String?, corners: CACornerMask, swipe: UISwipeGestureRecognizer.Direction)] = [
+                (nil, roundedOnRight, .right),
+                ("bottom-right", roundedOnRight, .right),
+                ("center-left", roundedOnLeft, .left),
+                ("bottom-left", roundedOnLeft, .left),
+            ]
+
+            for (position, corners, swipe) in cases {
+                let box = PoltioFloatingBoxTriggerView(
+                    widget: PoltioWidgetResponse(publicId: "box", overlayOptions: PoltioOverlayOptions(triggerType: "box", floatingPosition: position)),
+                    onOpenWidget: {}
+                )
+                let card = PoltioFloatingCardTriggerView(
+                    widget: PoltioWidgetResponse(publicId: "card", overlayOptions: PoltioOverlayOptions(triggerType: "card", floatingPosition: position)),
+                    onOpenWidget: {}
+                )
+
+                for (name, trigger) in [("box", box as UIView), ("card", card as UIView)] {
+                    // Subview 0 is the collapsed edge tab, subview 1 the expanded container.
+                    let collapsedTab = trigger.subviews[0]
+                    let expanded = trigger.subviews[1]
+                    let label = "\(name) at \(position ?? "default")"
+                    XCTAssertEqual(collapsedTab.layer.maskedCorners, corners, label)
+                    XCTAssertEqual(collapsedTab.layer.shadowOffset.width < 0, corners == roundedOnRight, label)
+                    let swipes = expanded.gestureRecognizers?.compactMap { $0 as? UISwipeGestureRecognizer }
+                    XCTAssertEqual(swipes?.map(\.direction), [swipe], label)
+                }
+                XCTAssertEqual(box.subviews[1].subviews[0].layer.maskedCorners, corners, "box inner card at \(position ?? "default")")
+            }
+        }
+
+        func testTriggersKeepTheirPhysicalSideInRightToLeftLayouts() {
+            for isLeftDocked in [true, false] {
+                let container = UIView(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
+                container.semanticContentAttribute = .forceRightToLeft
+                // Pinned to `leading`, the control lands on the right: the layout really is right-to-left.
+                let control = UIView()
+                let trigger = UIView()
+                for view in [control, trigger] {
+                    view.translatesAutoresizingMaskIntoConstraints = false
+                    view.semanticContentAttribute = .forceRightToLeft
+                    container.addSubview(view)
+                    NSLayoutConstraint.activate([
+                        view.widthAnchor.constraint(equalToConstant: 42),
+                        view.heightAnchor.constraint(equalToConstant: 140),
+                    ])
+                }
+                NSLayoutConstraint.activate([
+                    control.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                    control.topAnchor.constraint(equalTo: container.topAnchor),
+                ])
+                PoltioOverlayManager.pinTrigger(
+                    trigger, in: container, vertical: "bottom", isLeftDocked: isLeftDocked,
+                    horizontalInset: 0, verticalInset: 24, hugsRawEdgeHorizontally: true,
+                    bottomObstruction: 50
+                )
+                container.layoutIfNeeded()
+
+                XCTAssertEqual(control.frame.maxX, 402)
+                if isLeftDocked {
+                    XCTAssertEqual(trigger.frame.minX, 0)
+                } else {
+                    XCTAssertEqual(trigger.frame.maxX, 402)
+                }
+                // Lifted by its own bottom inset plus the host tab bar the overlay window can't see.
+                XCTAssertEqual(trigger.frame.maxY, 874 - 24 - 50)
+            }
+        }
+
+        func testBottomTriggersClearTheHostTabBar() {
+            XCTAssertEqual(PoltioOverlayManager.tabBarOverlap(tabBarTop: 790, windowHeight: 874, safeAreaBottom: 34), 50)
+            XCTAssertEqual(PoltioOverlayManager.tabBarOverlap(tabBarTop: 874, windowHeight: 874, safeAreaBottom: 34), 0)
+
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
+            let tabs = UITabBarController()
+            tabs.viewControllers = [UIViewController()]
+            // Embedded as a child, the way SwiftUI's TabView hosts its UITabBarController.
+            let root = UIViewController()
+            root.addChild(tabs)
+            root.view.addSubview(tabs.view)
+            tabs.didMove(toParent: root)
+            window.rootViewController = root
+            window.isHidden = false
+
+            XCTAssertTrue(PoltioOverlayManager.visibleTabBar(under: root) === tabs.tabBar)
+            tabs.tabBar.isHidden = true
+            XCTAssertNil(PoltioOverlayManager.visibleTabBar(under: root))
+            XCTAssertNil(PoltioOverlayManager.visibleTabBar(under: UIViewController()))
+        }
+
+        func testBottomTriggerFollowsTheTabBarAfterItIsBuilt() throws {
+            let container = UIView(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
+            func addTrigger() -> UIView {
+                let trigger = UIView()
+                trigger.translatesAutoresizingMaskIntoConstraints = false
+                container.addSubview(trigger)
+                NSLayoutConstraint.activate([
+                    trigger.widthAnchor.constraint(equalToConstant: 42),
+                    trigger.heightAnchor.constraint(equalToConstant: 140),
+                ])
+                return trigger
+            }
+
+            let trigger = addTrigger()
+            let bottom = try XCTUnwrap(PoltioOverlayManager.pinTrigger(
+                trigger, in: container, vertical: "bottom", isLeftDocked: false,
+                horizontalInset: 0, verticalInset: 24, hugsRawEdgeHorizontally: true,
+                bottomObstruction: 50
+            ))
+            container.layoutIfNeeded()
+            XCTAssertEqual(trigger.frame.maxY, 874 - 24 - 50)
+
+            // The tab bar hides: the trigger drops back to its own inset.
+            XCTAssertTrue(PoltioOverlayManager.updateBottomClearance(bottom, inset: 24, overlap: 0))
+            container.layoutIfNeeded()
+            XCTAssertEqual(trigger.frame.maxY, 874 - 24)
+
+            // Measured again with nothing changed, it stays put.
+            XCTAssertFalse(PoltioOverlayManager.updateBottomClearance(bottom, inset: 24, overlap: 0))
+
+            // Only a bottom-docked trigger has a clearance to follow.
+            for vertical in ["top", "center"] {
+                XCTAssertNil(PoltioOverlayManager.pinTrigger(
+                    addTrigger(), in: container, vertical: vertical, isLeftDocked: false,
+                    horizontalInset: 0, verticalInset: 24, hugsRawEdgeHorizontally: true
+                ), vertical)
+            }
+        }
+
+        func testPoltioWordmarkContrastsWithTheCardBackground() {
+            func isLight(_ color: UIColor) -> Bool {
+                var white: CGFloat = 0, alpha: CGFloat = 0
+                color.getWhite(&white, alpha: &alpha)
+                return white > 0.5
+            }
+            XCTAssertTrue(isLight(PoltioBrandingMarkView.wordmarkColor(on: UIColor(red: 0.12, green: 0.24, blue: 0.33, alpha: 1))), "navy card")
+            XCTAssertTrue(isLight(PoltioBrandingMarkView.wordmarkColor(on: UIColor(red: 0, green: 0.62, blue: 0.93, alpha: 1))), "default blue card")
+            XCTAssertFalse(isLight(PoltioBrandingMarkView.wordmarkColor(on: .white)), "white card")
         }
 
         func testOverlayManagerCardTriggerPresentation() {

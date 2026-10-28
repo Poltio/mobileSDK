@@ -15,6 +15,15 @@ internal interface PoltioTriggerPresentable {
     fun resetToCollapsed(animated: Boolean)
 }
 
+/** `GradientDrawable.cornerRadii` for an edge tab: only the two corners facing the screen are
+ * rounded, so the side against the docked edge stays square. */
+internal fun edgeTabCornerRadii(radius: Float, isLeftDocked: Boolean): FloatArray =
+    if (isLeftDocked) {
+        floatArrayOf(0f, 0f, radius, radius, radius, radius, 0f, 0f)
+    } else {
+        floatArrayOf(radius, radius, 0f, 0f, 0f, 0f, radius, radius)
+    }
+
 /** Converts a dp value to pixels using this context's display density. */
 internal fun Context.dp(value: Float): Int = (value * resources.displayMetrics.density).roundToInt()
 

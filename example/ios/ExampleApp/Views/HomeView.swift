@@ -110,7 +110,7 @@ struct HomeView: View {
                 .background(Color.gray.opacity(0.05))
             #endif
                 .onAppear {
-                    PoltioSDK.track(event: "view", params: ["url": "example://home"])
+                    PoltioSDK.track(event: "view", params: ["url": "poltiodemo://home"])
                 }
         }
     }
