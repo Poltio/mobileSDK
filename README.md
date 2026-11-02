@@ -357,8 +357,9 @@ Releases are fully automated by GitHub Actions. Nothing is tagged or published f
      Central usually takes 10–30 minutes to serve a new version after the workflow finishes.
    - `publish-cocoapods.yaml` syncs `PoltioSDK.podspec` to the tag (`scripts/bump-version.sh`) and
      runs `pod trunk push`. Trunk can report "Calling the GitHub commit API timed out" even though
-     the push went through, so check `https://trunk.cocoapods.org/api/v1/pods/PoltioSDK` before
-     re-running (a re-run of an accepted version fails with "duplicate entry").
+     the push went through, so when the push fails the workflow checks whether the version landed in
+     `CocoaPods/Specs` and passes with a warning if it did. Re-running it for a version that is
+     already on trunk skips the push.
 3. **Swift Package Manager** resolves the tag directly; there's nothing to publish.
 
 Don't bump versions, tag, or publish locally.
