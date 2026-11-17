@@ -520,8 +520,12 @@ object PoltioSDK {
             PoltioLogger.debug { "reportCtaView skipped — SDK not configured." }
             return
         }
+        // A stack's other cards each count an impression for their own content, without `widget_id`:
+        // the backend counts a widget view only when it's sent, so the widget still gets one per display.
+        val otherContents = widget.overlayOptions.otherStackContents(widget.publicId)
         PoltioExecutors.serial.execute {
             apiClient.reportCtaView(key, sdkId, widget.publicId, widget.widgetId)
+            otherContents.forEach { apiClient.reportCtaView(key, sdkId, it, null) }
         }
     }
 

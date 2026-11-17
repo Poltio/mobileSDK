@@ -11,13 +11,15 @@
     final class PoltioTriggerIconLoader {
         private weak var container: UIView?
         private let size: CGFloat
+        private let contentMode: UIView.ContentMode
         private var imageView: UIImageView?
         private var svgWebView: WKWebView?
         private var task: URLSessionDataTask?
 
-        init(container: UIView, size: CGFloat) {
+        init(container: UIView, size: CGFloat, contentMode: UIView.ContentMode = .scaleAspectFit) {
             self.container = container
             self.size = size
+            self.contentMode = contentMode
         }
 
         deinit {
@@ -32,14 +34,19 @@
         /// thread) once an image/SVG successfully renders; the caller is responsible for hiding its
         /// fallback icon there. A no-op if no icon URL is configured or the download/decode fails.
         func load(from overlayOptions: PoltioOverlayOptions, centeredOn anchor: UIView, onLoaded: @escaping () -> Void) {
-            guard let container, let url = overlayOptions.resolvedImageUrl() else { return }
-
+            guard let url = overlayOptions.resolvedImageUrl() else { return }
             let hasSvg = !(overlayOptions.floatingSvg?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
-            let isSvgFile = url.pathExtension.lowercased() == "svg" || hasSvg
+            load(url: url, svgHint: hasSvg, centeredOn: anchor, onLoaded: onLoaded)
+        }
+
+        /// Loads the image or SVG at `url`; `svgHint` treats it as SVG whatever its extension.
+        func load(url: URL, svgHint: Bool = false, centeredOn anchor: UIView, onLoaded: @escaping () -> Void) {
+            guard container != nil else { return }
+            let isSvgFile = url.pathExtension.lowercased() == "svg" || svgHint
 
             task?.cancel()
             task = URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
-                guard let self, let container = self.container, let data, error == nil else { return }
+                guard let self, let container, let data, error == nil else { return }
 
                 let mimeType = response?.mimeType?.lowercased() ?? ""
                 let utf8String = String(data: data, encoding: .utf8)
@@ -109,7 +116,7 @@
             }
             let iv = UIImageView()
             iv.translatesAutoresizingMaskIntoConstraints = false
-            iv.contentMode = .scaleAspectFit
+            iv.contentMode = contentMode
             iv.clipsToBounds = true
             container.addSubview(iv)
             NSLayoutConstraint.activate([

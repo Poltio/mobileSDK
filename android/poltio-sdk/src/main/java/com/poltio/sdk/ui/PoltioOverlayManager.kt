@@ -41,7 +41,8 @@ internal object PoltioOverlayManager {
     private var resumedActivity: WeakReference<Activity>? = null
 
     private var overlayContainer: FrameLayout? = null
-    private var activeTriggerView: (android.view.View)? = null
+    internal var activeTriggerView: (android.view.View)? = null
+        private set
     /** How far (dp) the active trigger slides in from, and out to, beyond its docked edge. */
     private var triggerSlideOffsetDp = 80f
     private var currentPublicId: String? = null
@@ -158,8 +159,15 @@ internal object PoltioOverlayManager {
         pendingTrigger = null
 
         val options = widget.overlayOptions
-        if (!(options.isBoxTrigger || options.isPillTrigger || options.isCardTrigger)) {
-            PoltioLogger.warning { "Trigger type '${options.triggerType ?: "none"}' is not currently handled (supported: 'box', 'pill', 'card')." }
+        if (!(options.isBoxTrigger || options.isPillTrigger || options.isCardTrigger || options.isStackTrigger)) {
+            PoltioLogger.warning { "Trigger type '${options.triggerType ?: "none"}' is not currently handled (supported: 'box', 'pill', 'card', 'stack')." }
+            hideTriggerOnMain()
+            return
+        }
+
+        val stackCards = options.stackCards
+        if (options.isStackTrigger && stackCards == null) {
+            PoltioLogger.warning { "Stack trigger for widget '${widget.publicId}' skipped: floating-stack-cards must be a JSON list of 2-5 cards, each with content and title." }
             hideTriggerOnMain()
             return
         }
@@ -251,6 +259,12 @@ internal object PoltioOverlayManager {
         triggerSlideOffsetDp = if (options.isLeftDocked) -80f else 80f
 
         val triggerView: android.view.View = when {
+            options.isStackTrigger && stackCards != null -> PoltioFloatingStackTriggerView(activity, widget, stackCards) { card ->
+                // Each card opens its own content; the widget id stays the trigger's.
+                presentWidgetWebView(card.content, widget.widgetId, puid, options)
+            }.also {
+                pinTrigger(it, container, vertical, horizontal, horizontalInsetDp = 16f, verticalInsetDp = 24f, avoidSystemBars = true)
+            }
             options.isPillTrigger -> PoltioFloatingPillTriggerView(activity, widget, onOpenWidget, onDismissForever).also {
                 pinTrigger(it, container, vertical, horizontal, horizontalInsetDp = 16f, verticalInsetDp = 70f, avoidSystemBars = true)
             }

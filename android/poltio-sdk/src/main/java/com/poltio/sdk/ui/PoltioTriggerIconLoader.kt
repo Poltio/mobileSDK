@@ -21,7 +21,11 @@ import java.util.concurrent.Future
  * render via a lightweight, JS-disabled `WebView` (there's no first-party SVG renderer on
  * Android either); it's created on demand since most triggers never load one.
  */
-internal class PoltioTriggerIconLoader(private val container: ViewGroup, private val sizeDp: Float) {
+internal class PoltioTriggerIconLoader(
+    private val container: ViewGroup,
+    private val sizeDp: Float,
+    private val scaleType: ImageView.ScaleType = ImageView.ScaleType.FIT_CENTER,
+) {
     private var imageView: ImageView? = null
     private var svgWebView: WebView? = null
     private var inFlight: Future<*>? = null
@@ -47,8 +51,12 @@ internal class PoltioTriggerIconLoader(private val container: ViewGroup, private
      */
     fun load(overlayOptions: PoltioOverlayOptions, anchor: View, onLoaded: () -> Unit) {
         val urlString = overlayOptions.resolvedImageUrl() ?: return
-        val hasSvg = !overlayOptions.floatingSvg?.trim().isNullOrEmpty()
-        val isSvgFile = urlString.substringAfterLast('.', "").lowercase() == "svg" || hasSvg
+        load(urlString, svgHint = !overlayOptions.floatingSvg?.trim().isNullOrEmpty(), anchor, onLoaded)
+    }
+
+    /** Loads the image or SVG at [urlString]; [svgHint] treats it as SVG whatever its extension. */
+    fun load(urlString: String, svgHint: Boolean, anchor: View, onLoaded: () -> Unit) {
+        val isSvgFile = urlString.substringAfterLast('.', "").lowercase() == "svg" || svgHint
 
         inFlight?.cancel(true)
         inFlight = PoltioExecutors.io.submit {
@@ -143,7 +151,7 @@ internal class PoltioTriggerIconLoader(private val container: ViewGroup, private
     private fun ensureImageView(anchor: View): ImageView {
         imageView?.let { return it }
         val iv = ImageView(container.context).apply {
-            scaleType = ImageView.ScaleType.FIT_CENTER
+            scaleType = this@PoltioTriggerIconLoader.scaleType
             clipToOutline = true
         }
         container.addView(iv, overlayParamsMatching(anchor))
