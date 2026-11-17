@@ -2,6 +2,7 @@ package com.poltio.sdk
 
 import android.view.Gravity
 import androidx.annotation.ColorInt
+import org.json.JSONArray
 import org.json.JSONObject
 
 /** Represents the response payload from `/sdk/mobile/v1/widget`. */
@@ -126,6 +127,14 @@ internal class PoltioOverlayOptions private constructor(private val fields: Map<
 
         fun fromJson(raw: JSONObject): PoltioOverlayOptions = PoltioOverlayOptions(buildFields(raw))
 
+        /** Resolves a stored image [path] against [cdnPrefix]; an absolute `http(s)` URL is returned as is. */
+        fun resolvedImageUrl(path: String?, cdnPrefix: String): String? {
+            val trimmed = path?.trim()
+            if (trimmed.isNullOrEmpty()) return null
+            if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed
+            return "${cdnPrefix.trim('/')}/${trimmed.trim('/')}"
+        }
+
         /** Resolves a raw color string, falling back to a caller-provided default. */
         @ColorInt
         fun resolvedColor(raw: String?, @ColorInt fallback: Int): Int = PoltioColorParser.parse(raw) ?: fallback
@@ -180,10 +189,13 @@ internal class PoltioOverlayOptions private constructor(private val fields: Map<
     /** Convenience check for pill trigger type. */
     val isPillTrigger: Boolean get() = rawTriggerType == "pill"
 
+    /** Convenience check for the stack ("Multi") trigger type: 2–5 glass cards, each opening its own content. */
+    val isStackTrigger: Boolean get() = rawTriggerType == "stack"
+
     /** Convenience check for card trigger type (rounded slideover/card trigger). */
     val isCardTrigger: Boolean
         get() {
-            if (isBoxTrigger || isPillTrigger) return false
+            if (isBoxTrigger || isPillTrigger || isStackTrigger) return false
             val raw = rawTriggerType
             if (raw == "card" || raw == "slideover" || raw == CARD_DESIGN_TYPE_2025) return true
             val designType = floatingDesignType?.trim()?.lowercase()
@@ -285,6 +297,34 @@ internal class PoltioOverlayOptions private constructor(private val fields: Map<
     val pillShowCloseButton: Boolean get() = boolValue(field("floating-pill-show-close-button"), false)
     val pillCloseRememberDuration: Double get() = numericValue(field("floating-pill-close-remember-duration")) ?: 48.0
 
+    // MARK: - stack
+
+    /**
+     * The stack trigger's cards (`floating-stack-cards`, a JSON string of 2–5 cards), in panel order
+     * with the front card first. `null` when the field is missing, unreadable, out of range, or a card
+     * lacks its content or title, so the trigger is skipped rather than half drawn.
+     */
+    val stackCards: List<PoltioStackCard>?
+        get() {
+            val raw = field("floating-stack-cards") ?: return null
+            val cards = try {
+                val array = JSONArray(raw)
+                List(array.length()) { PoltioStackCard.fromJson(array.getJSONObject(it)) }
+            } catch (error: Exception) {
+                return null
+            }
+            if (cards.size !in 2..5 || cards.any { it.content.isBlank() || it.title.isBlank() }) return null
+            return cards
+        }
+
+    /** The contents a stack reports an impression for besides the widget's own [publicId]: every other
+     * card's content, once each, in card order. Empty for any other trigger. */
+    fun otherStackContents(publicId: String): List<String> =
+        if (isStackTrigger) stackCards.orEmpty().map { it.content }.distinct() - publicId else emptyList()
+
+    /** Whether the stack draws its fan as small pills (`floating-stack-format` `compact`) instead of vertical cards (`expanded`, the default). */
+    val isStackCompact: Boolean get() = field("floating-stack-format")?.trim()?.lowercase() == "compact"
+
     // MARK: - box
 
     val floatingImg: String? get() = field("floating-img")
@@ -379,10 +419,6 @@ internal class PoltioOverlayOptions private constructor(private val fields: Map<
             .map { it.trim() }
             .firstOrNull { it.isNotEmpty() } ?: return null
 
-        if (rawImgPath.startsWith("http://") || rawImgPath.startsWith("https://")) {
-            return rawImgPath
-        }
-
         val cleanPath = rawImgPath.trim('/')
         val hasValidSvg = !(floatingSvg?.trim().isNullOrEmpty())
         val defaultPrefix = if (isPillTrigger || hasValidSvg || cleanPath.endsWith(".svg")) {
@@ -390,8 +426,44 @@ internal class PoltioOverlayOptions private constructor(private val fields: Map<
         } else {
             "https://cdn.poltio.com/240x120"
         }
+        return resolvedImageUrl(rawImgPath, cdnPrefix ?: defaultPrefix)
+    }
+}
 
-        val effectivePrefix = (cdnPrefix ?: defaultPrefix).trim('/')
-        return "$effectivePrefix/$cleanPath"
+/** One card of the stack trigger, from the `floating-stack-cards` JSON. [content] and [title] are
+ * required; everything else falls back to a default when missing. */
+internal data class PoltioStackCard(
+    /** Public id of the Poltio content this card opens. */
+    val content: String,
+    val title: String,
+    /** Stored image path or URL for the round image; the round area shows the card color without one. */
+    val image: String? = null,
+    val desc: String? = null,
+    val button: String? = null,
+    val textColor: String? = null,
+    val bg: String? = null,
+    val buttonBg: String? = null,
+    /** Card opacity in percent, 40–100. */
+    val opacity: Double? = null,
+) {
+    /** The card image, resolved like the trigger icon, sized for the round slot. */
+    val imageUrl: String? get() = PoltioOverlayOptions.resolvedImageUrl(image, "https://cdn.poltio.com/160x160")
+
+    /** [opacity] as an alpha, clamped to the panel's 40–100 range (default 80). */
+    val alpha: Float get() = ((opacity ?: 80.0).coerceIn(40.0, 100.0) / 100.0).toFloat()
+
+    companion object {
+        fun fromJson(json: JSONObject) = PoltioStackCard(
+            content = json.getString("content").trim(),
+            title = json.getString("title"),
+            image = json.optStringOrNull("image"),
+            desc = json.optStringOrNull("desc"),
+            button = json.optStringOrNull("button"),
+            textColor = json.optStringOrNull("text_color"),
+            bg = json.optStringOrNull("bg"),
+            buttonBg = json.optStringOrNull("button_bg"),
+            // The panel sends opacity as a string ("80"); a number is read too.
+            opacity = json.opt("opacity").let { (it as? Number)?.toDouble() ?: (it as? String)?.trim()?.toDoubleOrNull() },
+        )
     }
 }

@@ -150,9 +150,14 @@ struct PoltioOverlayOptions: Codable, Equatable {
         rawTriggerType == "pill"
     }
 
+    /// Convenience check for the stack ("Multi") trigger type: 2–5 glass cards, each opening its own content.
+    var isStackTrigger: Bool {
+        rawTriggerType == "stack"
+    }
+
     /// Convenience check for card trigger type (rounded slideover/card trigger).
     var isCardTrigger: Bool {
-        if isBoxTrigger || isPillTrigger {
+        if isBoxTrigger || isPillTrigger || isStackTrigger {
             return false
         }
         if let raw = rawTriggerType, raw == "card" || raw == "slideover" || raw == Self.cardDesignType2025 {
@@ -394,6 +399,34 @@ struct PoltioOverlayOptions: Codable, Equatable {
     /// Hours to suppress the trigger after an explicit close (default 48), respecting mobile overrides.
     var pillCloseRememberDuration: Double {
         Self.numericValue(field("floating-pill-close-remember-duration")) ?? 48
+    }
+
+    // MARK: - stack
+
+    /// The stack trigger's cards (`floating-stack-cards`, a JSON string of 2–5 cards), in panel order with
+    /// the front card first. `nil` when the field is missing, unreadable, out of range, or a card lacks
+    /// its content or title, so the trigger is skipped rather than half drawn.
+    var stackCards: [PoltioStackCard]? {
+        guard let raw = field("floating-stack-cards"),
+              let cards = try? JSONDecoder().decode([PoltioStackCard].self, from: Data(raw.utf8)),
+              (2 ... 5).contains(cards.count),
+              cards.allSatisfy({ !$0.content.isBlank && !$0.title.isBlank })
+        else { return nil }
+        return cards
+    }
+
+    /// The contents a stack reports an impression for besides the widget's own `publicId`: every other
+    /// card's content, once each, in card order. Empty for any other trigger.
+    func otherStackContents(excluding publicId: String) -> [String] {
+        guard isStackTrigger, let cards = stackCards else { return [] }
+        var seen: Set<String> = [publicId]
+        return cards.map(\.content).filter { seen.insert($0).inserted }
+    }
+
+    /// Whether the stack draws its fan as small pills (`floating-stack-format` `compact`) instead of
+    /// vertical cards (`expanded`, the default).
+    var isStackCompact: Bool {
+        field("floating-stack-format")?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "compact"
     }
 
     // MARK: - box
@@ -700,10 +733,6 @@ struct PoltioOverlayOptions: Codable, Equatable {
             return nil
         }
 
-        if path.hasPrefix("http://") || path.hasPrefix("https://") {
-            return URL(string: path)
-        }
-
         let cleanPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let hasValidSvg = !(floatingSvg?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
         let defaultPrefix = if isPillTrigger || hasValidSvg || cleanPath.hasSuffix(".svg") {
@@ -711,9 +740,19 @@ struct PoltioOverlayOptions: Codable, Equatable {
         } else {
             "https://cdn.poltio.com/240x120"
         }
+        return Self.resolvedImageUrl(path: path, cdnPrefix: cdnPrefix ?? defaultPrefix)
+    }
 
-        let effectivePrefix = cdnPrefix ?? defaultPrefix
-        let cleanPrefix = effectivePrefix.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    /// Resolves a stored image `path` against `cdnPrefix`; an absolute `http(s)` URL is returned as is.
+    static func resolvedImageUrl(path: String?, cdnPrefix: String) -> URL? {
+        guard let path = path?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty else {
+            return nil
+        }
+        if path.hasPrefix("http://") || path.hasPrefix("https://") {
+            return URL(string: path)
+        }
+        let cleanPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let cleanPrefix = cdnPrefix.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         return URL(string: "\(cleanPrefix)/\(cleanPath)")
     }
 
@@ -787,6 +826,8 @@ struct PoltioOverlayOptions: Codable, Equatable {
         parentId: String? = nil,
         parentClassName: String? = nil,
         parentHeight: String? = nil,
+        stackCards: String? = nil,
+        stackFormat: String? = nil,
         mobile: [String: PoltioAnyCodable]? = nil
     ) {
         var built: [String: String] = [:]
@@ -860,6 +901,8 @@ struct PoltioOverlayOptions: Codable, Equatable {
         set("floating-parent-id", parentId)
         set("floating-parent-class-name", parentClassName)
         set("floating-parent-height", parentHeight)
+        set("floating-stack-cards", stackCards)
+        set("floating-stack-format", stackFormat)
 
         if let mobile {
             for (key, value) in mobile {
@@ -883,6 +926,62 @@ struct PoltioOverlayOptions: Codable, Equatable {
             guard let codingKey = DynamicCodingKeys(stringValue: key) else { continue }
             try container.encode(value, forKey: codingKey)
         }
+    }
+}
+
+/// One card of the stack trigger, from the `floating-stack-cards` JSON. `content` and `title` are
+/// required; everything else falls back to a default when missing.
+struct PoltioStackCard: Equatable {
+    /// Public id of the Poltio content this card opens.
+    let content: String
+    let title: String
+    /// Stored image path or URL for the round image; the round area shows the card color without one.
+    var image: String?
+    var desc: String?
+    var button: String?
+    var textColor: String?
+    var bg: String?
+    var buttonBg: String?
+    /// Card opacity in percent, 40–100.
+    var opacity: Double?
+
+    /// The card image, resolved like the trigger icon (`resolvedImageUrl`), sized for the round slot.
+    var imageUrl: URL? {
+        PoltioOverlayOptions.resolvedImageUrl(path: image, cdnPrefix: "https://cdn.poltio.com/160x160")
+    }
+
+    /// `opacity` as an alpha, clamped to the panel's 40–100 range (default 80).
+    var alpha: Double {
+        min(max(opacity ?? 80, 40), 100) / 100
+    }
+}
+
+extension PoltioStackCard: Decodable {
+    private enum CodingKeys: String, CodingKey {
+        case content, title, image, desc, button, bg, opacity
+        case textColor = "text_color"
+        case buttonBg = "button_bg"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        content = try container.decode(String.self, forKey: .content).trimmingCharacters(in: .whitespacesAndNewlines)
+        title = try container.decode(String.self, forKey: .title)
+        image = try? container.decodeIfPresent(String.self, forKey: .image)
+        desc = try? container.decodeIfPresent(String.self, forKey: .desc)
+        button = try? container.decodeIfPresent(String.self, forKey: .button)
+        textColor = try? container.decodeIfPresent(String.self, forKey: .textColor)
+        bg = try? container.decodeIfPresent(String.self, forKey: .bg)
+        buttonBg = try? container.decodeIfPresent(String.self, forKey: .buttonBg)
+        // The panel sends opacity as a string ("80"); a number is read too.
+        opacity = (try? container.decodeIfPresent(Double.self, forKey: .opacity))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .opacity)).flatMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+    }
+}
+
+private extension String {
+    var isBlank: Bool {
+        trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }
 

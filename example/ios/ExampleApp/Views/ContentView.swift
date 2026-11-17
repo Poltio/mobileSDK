@@ -1,4 +1,9 @@
-import PoltioSDK
+#if DEBUG
+    // The sample stack below reaches the SDK's internal overlay manager.
+    @testable import PoltioSDK
+#else
+    import PoltioSDK
+#endif
 import SwiftUI
 
 struct SDKStatusView: View {
@@ -136,6 +141,21 @@ struct SDKStatusView: View {
                         }
                     }
 
+                    #if DEBUG
+                        ForEach(["expanded", "compact"], id: \.self) { format in
+                            Button(action: {
+                                eventStatusMessage = "Loading the sample \(format) stack..."
+                                SampleStackWidget.show(format: format) { eventStatusMessage = $0 }
+                            }) {
+                                HStack {
+                                    Image(systemName: "rectangle.stack.fill")
+                                        .foregroundColor(.pink)
+                                    Text("Show Sample Stack (\(format))")
+                                }
+                            }
+                        }
+                    #endif
+
                     Button(role: .destructive, action: {
                         PoltioSDK.hideTrigger()
                         eventStatusMessage = "Hidden Active Trigger Overlay"
@@ -178,6 +198,54 @@ struct SDKStatusView: View {
         }
     }
 }
+
+#if DEBUG
+    /// A hand-made stack ("Multi") trigger, until stage has a stack widget saved on a screen URL. Its
+    /// cards open the contents of the demo screens' own stage widgets, so each one opens for real.
+    enum SampleStackWidget {
+        private static let demoURLs = ["poltiodemo://home", "poltiodemo://plp/phones", "poltiodemo://plp/tvs"]
+        private static let looks: [[String: Any]] = [
+            ["title": "Shopping Assistant", "desc": "Let's find what fits you", "button": "Start", "bg": "#f2a38f", "button_bg": "#b8324a", "opacity": "80"],
+            ["title": "Phone Finder", "desc": "Pick your next phone", "button": "Start", "bg": "#8fb8f2", "button_bg": "#2a4fa0", "opacity": "70"],
+            ["title": "TV Finder", "desc": "The right screen for your room", "button": "Start", "bg": "#9be0c0", "button_bg": "#1f7a55", "opacity": "60"],
+        ]
+
+        static func show(format: String, status: @escaping (String) -> Void) {
+            guard let key = PoltioSDK.shared.clientKey else {
+                status("Configure the SDK first.")
+                return
+            }
+            let group = DispatchGroup()
+            let lock = NSLock()
+            var resolved: [Int: PoltioWidgetResponse] = [:]
+            for (index, url) in demoURLs.enumerated() {
+                group.enter()
+                _ = PoltioSDK.shared.apiClient.resolveMobileWidget(clientKey: key, deviceId: PoltioSDK.shared.sdkId, targetURL: url) { result in
+                    if case let .success(widget) = result {
+                        lock.lock()
+                        resolved[index] = widget
+                        lock.unlock()
+                    }
+                    group.leave()
+                }
+            }
+            group.notify(queue: .main) {
+                let widgets = resolved.sorted { $0.key < $1.key }.map(\.value)
+                guard widgets.count >= 2 else {
+                    status("Sample stack needs at least two demo screens with a stage widget; found \(widgets.count).")
+                    return
+                }
+                let cards = zip(widgets, looks).map { widget, look in
+                    look.merging(["content": widget.publicId, "image": widget.overlayOptions.floatingImg ?? ""]) { _, new in new }
+                }
+                guard let data = try? JSONSerialization.data(withJSONObject: cards), let json = String(data: data, encoding: .utf8) else { return }
+                let options = PoltioOverlayOptions(triggerType: "stack", floatingInitialPosition: "active", floatingPosition: "bottom-right", stackCards: json, stackFormat: format)
+                PoltioOverlayManager.shared.showTrigger(widget: PoltioWidgetResponse(publicId: widgets[0].publicId, overlayOptions: options, widgetId: widgets[0].widgetId))
+                status("Showing the sample \(format) stack with \(cards.count) cards.")
+            }
+        }
+    }
+#endif
 
 enum AppTab: Int, CaseIterable, Identifiable {
     case shop = 0

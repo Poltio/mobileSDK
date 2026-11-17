@@ -2081,8 +2081,202 @@ final class PoltioSDKTests: XCTestCase {
             }
             wait(for: [exp], timeout: 1.0)
         }
+
+        // MARK: - Stack trigger
+
+        func testOverlayManagerDrawsStackTriggersAndSkipsUnreadableCardLists() {
+            XCTAssertNil(PoltioOverlayManager.unsupportedTriggerReason(stackOptions()))
+            XCTAssertNil(PoltioOverlayManager.unsupportedTriggerReason(PoltioOverlayOptions(triggerType: "pill")))
+            XCTAssertNotNil(PoltioOverlayManager.unsupportedTriggerReason(PoltioOverlayOptions(triggerType: "stack", stackCards: "not json")))
+            XCTAssertNotNil(PoltioOverlayManager.unsupportedTriggerReason(PoltioOverlayOptions(triggerType: "stack")))
+            XCTAssertNotNil(PoltioOverlayManager.unsupportedTriggerReason(PoltioOverlayOptions(triggerType: "carousel")))
+
+            // A skipped stack is never counted as a view.
+            let mockSession = createMockSession()
+            PoltioSDK.configure(clientKey: "pk_test_stack_broken")
+            PoltioSDK.shared.apiClient = PoltioAPIClient(session: mockSession)
+            MockURLProtocol.requestHandler = { _ in
+                XCTFail("cta-view must not be reported for a stack whose cards can't be read")
+                throw URLError(.badURL)
+            }
+            let broken = PoltioWidgetResponse(publicId: "stack_broken", overlayOptions: PoltioOverlayOptions(triggerType: "stack", stackCards: "[]"))
+            PoltioOverlayManager.shared.showTrigger(widget: broken, puid: nil)
+            let exp = expectation(description: "Wait for overlay manager async dispatch")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { exp.fulfill() }
+            wait(for: [exp], timeout: 1.0)
+        }
+
+        func testStackCardTapsOpenTheirOwnContentAsAccessibleButtons() throws {
+            let widget = PoltioWidgetResponse(publicId: "content_a", overlayOptions: stackOptions(), widgetId: 77)
+            var opened: [String] = []
+            let view = try PoltioFloatingStackTriggerView(widget: widget, cards: XCTUnwrap(widget.overlayOptions.stackCards)) { opened.append($0.content) }
+
+            XCTAssertEqual(view.state, .fanned)
+            XCTAssertEqual(view.cardViews.map(\.card.content), ["content_a", "content_b", "content_c"])
+            view.cardViews[2].simulateTap()
+            view.cardViews[0].simulateTap()
+            XCTAssertEqual(opened, ["content_c", "content_a"], "front and back cards each open their own content")
+
+            for cardView in view.cardViews {
+                XCTAssertTrue(cardView.isAccessibilityElement)
+                XCTAssertTrue(cardView.accessibilityTraits.contains(.button))
+                XCTAssertTrue(cardView.accessibilityLabel?.contains(cardView.card.title) == true)
+            }
+            XCTAssertEqual(view.closeButton.accessibilityLabel, "Close")
+            // VoiceOver reads the front card and its × first.
+            XCTAssertTrue(view.accessibilityElements?.first as? UIView === view.cardViews[0])
+            XCTAssertTrue(view.accessibilityElements?[1] as? UIView === view.closeButton)
+        }
+
+        func testStackFanLeansTowardTheMiddleOfTheScreen() throws {
+            func backCardShift(_ position: String) throws -> CGPoint {
+                let widget = PoltioWidgetResponse(publicId: "content_a", overlayOptions: stackOptions(position: position))
+                let view = try PoltioFloatingStackTriggerView(widget: widget, cards: XCTUnwrap(widget.overlayOptions.stackCards)) { _ in }
+                let transform = view.fanTransform(index: 1)
+                return CGPoint(x: transform.m41, y: transform.m42)
+            }
+            let bottomRight = try backCardShift("bottom-right")
+            XCTAssertLessThan(bottomRight.x, 0)
+            XCTAssertLessThan(bottomRight.y, 0)
+            let bottomLeft = try backCardShift("bottom-left")
+            XCTAssertGreaterThan(bottomLeft.x, 0)
+            XCTAssertLessThan(bottomLeft.y, 0)
+            XCTAssertGreaterThan(try backCardShift("top-right").y, 0)
+        }
+
+        func testStackFoldIsRememberedForFortyEightHours() throws {
+            let widget = PoltioWidgetResponse(publicId: "content_a", overlayOptions: stackOptions())
+            let cards = try XCTUnwrap(widget.overlayOptions.stackCards)
+            let view = PoltioFloatingStackTriggerView(widget: widget, cards: cards) { _ in }
+
+            view.closeButton.simulateTap()
+            XCTAssertEqual(view.state, .folded)
+            XCTAssertTrue(view.cardViews.allSatisfy { !$0.isGlowing })
+            XCTAssertTrue(view.accessibilityElements?.first as? UIView === view.pillView)
+            XCTAssertEqual(view.pillView.accessibilityLabel, "Skincare Let's find your routine")
+
+            let foldKey = PoltioFloatingStackTriggerView.foldKey(publicId: "content_a")
+            XCTAssertTrue(PoltioTriggerDismissalStore.isDismissed(publicId: foldKey, now: Date().addingTimeInterval(47 * 3600)))
+            XCTAssertFalse(PoltioTriggerDismissalStore.isDismissed(publicId: foldKey, now: Date().addingTimeInterval(49 * 3600)))
+            XCTAssertFalse(PoltioTriggerDismissalStore.isDismissed(publicId: "content_a"), "a fold keeps the trigger on screen")
+
+            // Later screens start folded; the pill fans the cards out again.
+            let next = PoltioFloatingStackTriggerView(widget: widget, cards: cards) { _ in }
+            XCTAssertEqual(next.state, .folded)
+            next.pillView.simulateTap()
+            XCTAssertEqual(next.state, .fanned)
+        }
+
+        func testCollapsedStackStartsAsThePillAndCompactDrawsPills() throws {
+            let collapsed = PoltioWidgetResponse(publicId: "content_a", overlayOptions: stackOptions(initialPosition: "collapsed"))
+            let view = try PoltioFloatingStackTriggerView(widget: collapsed, cards: XCTUnwrap(collapsed.overlayOptions.stackCards)) { _ in }
+            XCTAssertEqual(view.state, .folded)
+
+            let compact = PoltioWidgetResponse(publicId: "content_a", overlayOptions: stackOptions(format: "compact"))
+            let compactView = try PoltioFloatingStackTriggerView(widget: compact, cards: XCTUnwrap(compact.overlayOptions.stackCards)) { _ in }
+            compactView.layoutIfNeeded()
+            XCTAssertEqual(compactView.state, .fanned)
+            XCTAssertEqual(compactView.cardViews[0].bounds.height, 56)
+        }
     #endif
+
+    private func stackOptions(position: String = "bottom-right", initialPosition: String? = nil, format: String? = nil) -> PoltioOverlayOptions {
+        PoltioOverlayOptions(
+            triggerType: "stack",
+            floatingInitialPosition: initialPosition,
+            floatingPosition: position,
+            stackCards: """
+            [{"content":"content_a","title":"Skincare","desc":"Let's find your routine","button":"Start","bg":"#f2a38f","opacity":"80"},
+             {"content":"content_b","title":"Hair Care","opacity":60},
+             {"content":"content_c","title":"Sun Care"}]
+            """,
+            stackFormat: format
+        )
+    }
+
+    func testStackCardsDecodeFromTheWidgetResponse() throws {
+        let cards = ##"[{"content":" content_a ","title":"Skincare","desc":"Glow","button":"Go","text_color":"#111111","bg":"#f2a38f","button_bg":"#b8324a","opacity":"80","image":"widget/a.png"},{"content":"content_b","title":"Hair","opacity":20}]"##
+        let encodedCards = try String(decoding: JSONEncoder().encode(cards), as: UTF8.self)
+        let json = """
+        {"id": 9, "public_id": "content_a", "overlay_options": {
+          "trigger-type": "stack",
+          "floating-title": "ignored by the stack",
+          "floating-stack-cards": \(encodedCards),
+          "mobile": {"floating-stack-format": "compact"}
+        }}
+        """
+        let decoded = try JSONDecoder().decode(PoltioWidgetResponse.self, from: Data(json.utf8))
+        let options = decoded.overlayOptions
+
+        XCTAssertTrue(options.isStackTrigger)
+        XCTAssertFalse(options.isCardTrigger, "a stack's own copy must not make it a card trigger")
+        XCTAssertEqual(options.triggerType, "stack")
+        XCTAssertTrue(options.isStackCompact)
+        let stack = try XCTUnwrap(options.stackCards)
+        XCTAssertEqual(stack.count, 2)
+        XCTAssertEqual(stack[0], PoltioStackCard(content: "content_a", title: "Skincare", image: "widget/a.png", desc: "Glow", button: "Go", textColor: "#111111", bg: "#f2a38f", buttonBg: "#b8324a", opacity: 80))
+        XCTAssertEqual(stack[0].imageUrl?.absoluteString, "https://cdn.poltio.com/160x160/widget/a.png")
+        XCTAssertEqual(stack[0].alpha, 0.8, accuracy: 0.001)
+        XCTAssertEqual(stack[1].alpha, 0.4, accuracy: 0.001, "opacity below the panel's 40 is clamped")
+        XCTAssertNil(stack[1].imageUrl)
+        XCTAssertFalse(PoltioOverlayOptions(triggerType: "stack").isStackCompact, "expanded is the default format")
+
+        // The options survive the widget cache's encode/decode round trip.
+        let roundTripped = try JSONDecoder().decode(PoltioWidgetResponse.self, from: JSONEncoder().encode(decoded))
+        XCTAssertEqual(roundTripped.overlayOptions.stackCards, stack)
+    }
+
+    func testUnreadableStackCardListsAreSkipped() {
+        let oneCard = #"[{"content":"a","title":"A"}]"#
+        let sixCards = "[" + (1 ... 6).map { #"{"content":"c\#($0)","title":"T"}"# }.joined(separator: ",") + "]"
+        for raw in ["", "not json", "{}", oneCard, sixCards, #"[{"content":"a","title":"A"},{"content":"b"}]"#, #"[{"content":"a","title":"A"},{"content":" ","title":"B"}]"#] {
+            XCTAssertNil(PoltioOverlayOptions(triggerType: "stack", stackCards: raw).stackCards, raw)
+        }
+        XCTAssertNotNil(PoltioOverlayOptions(triggerType: "stack", stackCards: #"[{"content":"a","title":"A"},{"content":"b","title":"B"}]"#).stackCards)
+    }
+
+    func testStackReportsOtherCardsWithoutTheWidgetId() {
+        XCTAssertEqual(stackOptions().otherStackContents(excluding: "content_a"), ["content_b", "content_c"])
+        let repeated = PoltioOverlayOptions(triggerType: "stack", stackCards: #"[{"content":"x","title":"A"},{"content":"y","title":"B"},{"content":"y","title":"C"},{"content":"x","title":"D"}]"#)
+        XCTAssertEqual(repeated.otherStackContents(excluding: "x"), ["y"], "each content once, never the widget's own")
+        XCTAssertEqual(PoltioOverlayOptions(triggerType: "pill").otherStackContents(excluding: "x"), [])
+
+        let mockSession = createMockSession()
+        PoltioSDK.configure(clientKey: "pk_test_stack_cta")
+        PoltioSDK.shared.apiClient = PoltioAPIClient(session: mockSession)
+        let lock = NSLock()
+        var reported: [String: Int?] = [:]
+        let requests = expectation(description: "one cta-view per card")
+        requests.expectedFulfillmentCount = 3
+        MockURLProtocol.requestHandler = { request in
+            let body = request.httpBody ?? request.httpBodyStreamData() ?? Data()
+            let json = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] ?? [:]
+            lock.lock()
+            reported[json["public_id"] as? String ?? ""] = json["widget_id"] as? Int
+            lock.unlock()
+            requests.fulfill()
+            return (HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!, nil)
+        }
+
+        PoltioSDK.shared.reportCtaView(widget: PoltioWidgetResponse(publicId: "content_a", overlayOptions: stackOptions(), widgetId: 77))
+        wait(for: [requests], timeout: 2.0)
+        XCTAssertEqual(reported, ["content_a": 77, "content_b": nil, "content_c": nil])
+    }
 }
+
+#if canImport(UIKit)
+    private extension UIControl {
+        /// Runs the control's touch-up actions directly: `sendActions(for:)` goes through
+        /// `UIApplication`, which a test bundle without a host app doesn't have.
+        func simulateTap() {
+            for target in allTargets {
+                for action in actions(forTarget: target, forControlEvent: .touchUpInside) ?? [] {
+                    (target as NSObject).perform(Selector(action), with: self)
+                }
+            }
+        }
+    }
+#endif
 
 private extension URLRequest {
     func httpBodyStreamData() -> Data? {

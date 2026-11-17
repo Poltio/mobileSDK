@@ -538,6 +538,30 @@ enabled — since it's now the live demonstration of the new default box behavio
 opens on scroll, auto-collapses again. The earlier `floating-img`/`full-image-mode`/`resize` test
 values are no longer set, but both were independently confirmed working in the previous round.)
 
+### stack ("Multi", Poltio/issues#6509) — no stage widget yet
+
+The panel and the web SDK's stack support are still being built, so there's no stage widget to
+point a screen at. Until there is, the example apps' **SDK Info → Show Sample Stack** buttons
+(DEBUG builds only) resolve the demo screens' own stage widgets and show a hand-made stack whose
+cards open those contents. Contract: `docs/superpowers/specs/2026-11-17-stack-trigger-design.md` in
+Poltio/websdk.
+
+Card defaults the SDKs pick when a card leaves a field out (tell the panel/web sessions if they
+differ): text white, card color = `floating-bgcolor` (Poltio blue), button color = the card color
+30% darker, button text "Start", opacity 80. `floating-initial-position` `collapsed` starts as the
+pill and fans out past `floating-scroll-threshold`; anything else (including `expanded`) starts
+fanned — native doesn't open a card's sheet on its own. Android cards are frosted-looking but don't
+blur the app behind them (no backdrop blur without extra libraries).
+
+| Attribute / behavior | Web | iOS | Android | Notes |
+|---|---|---|---|---|
+| `trigger-type: stack` | ⬜ | ✅ | ⬜ | iOS 26.0 simulator, sample stack: three glass cards fanned up-left from bottom-right. Unit tests cover dispatch on both platforms. |
+| `floating-stack-cards` | ⬜ | ✅ | ⬜ | Each card's title, description, button, colors and opacity drawn; a back card opened its own content in the sheet, and the stack came back unchanged when the sheet closed. Unreadable list / <2 / >5 cards / missing content or title → skipped with a warning (unit tests). |
+| `floating-stack-format` | ⬜ | 🧩 | ⬜ | `compact` fan of small pills covered by unit tests; not yet screenshotted. |
+| × → pill, 48h memory | ⬜ | 🧩 | ⬜ | Fold memory unit-tested (`stack-fold:<public id>` key in `PoltioTriggerDismissalStore`, trigger itself not dismissed). |
+| Impressions | ⬜ | ✅ (unit test) | ✅ (unit test) | Widget content with `widget_id`, every other card's content once without it. |
+| Reduce Motion / removed animations | ⬜ | 🧩 | 🧩 | No cascade, no glow; fold is a plain swap. |
+
 ### product_card — out of scope (no native trigger)
 
 All `➖` — see "Known, accepted gaps" above.
@@ -930,3 +954,8 @@ then move on"). Remaining items below are all low-priority cleanup, not new trig
   | Box | No collapse-on-scroll/outside-touch at all — only a 5s timer + swipe | Collapses on any `ACTION_DOWN` outside (via `PoltioHostInteractionBus`), not scroll-distance-gated |
   | Pill | Collapses on touch-passthrough hitTest (any touch outside, incl. a stray tap) | Same `ACTION_DOWN`-outside pattern as box |
   | Card | No auto-collapse at all (deliberate, matches web) | No auto-collapse at all (deliberate, matches web) |
+
+- **2026-11-17**: Added the `stack` ("Multi") trigger on both platforms (Poltio/issues#6509). iOS
+  verified in the iPhone 17 Pro / iOS 26.0 simulator with the hand-made sample stack (see the
+  `stack` section). Android written and unit-tested in code but not yet built or run: this Mac had
+  no JDK, Android SDK or emulator at the time.

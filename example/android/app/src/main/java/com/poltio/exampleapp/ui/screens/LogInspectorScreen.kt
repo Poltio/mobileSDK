@@ -25,6 +25,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.OutlinedButton
+import com.poltio.exampleapp.BuildConfig
 import com.poltio.exampleapp.services.LogType
 import com.poltio.exampleapp.services.PoltioSDKPlaceholder
 
@@ -49,6 +51,21 @@ fun LogInspectorScreen() {
         )
 
         Spacer(modifier = Modifier.height(16.dp))
+
+        // A hand-made stack ("Multi") trigger, until stage has a stack widget saved on a screen URL.
+        if (BuildConfig.DEBUG) {
+            Row {
+                listOf("expanded", "compact").forEach { format ->
+                    OutlinedButton(
+                        onClick = { PoltioSDKPlaceholder.showSampleStack(format) },
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        Text("Sample stack ($format)")
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
 
         LazyColumn(
             modifier = Modifier.fillMaxSize()
