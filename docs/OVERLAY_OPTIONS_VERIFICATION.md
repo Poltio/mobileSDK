@@ -551,9 +551,9 @@ differ): text white, card color = `floating-bgcolor` (Poltio blue), button color
 30% darker, button text "Start", opacity 80. `floating-initial-position` `collapsed` starts as the
 pill and fans out past `floating-scroll-threshold`; anything else (including `expanded`) starts
 fanned — native doesn't open a card's sheet on its own. Android cards are frosted-looking but don't
-blur the app behind them (no backdrop blur without extra libraries). The look follows Poltio/websdk#832
-and #833: upright cards offset toward the middle (odd ones past the top edge, even ones past the
-side), glass with a bevel rim and lit top edge, ringed images, glossy START and arrow buttons.
+blur the app behind them (no backdrop blur without extra libraries). The look follows Poltio/websdk#832,
+#833 and #834: upright cards offset toward the middle (odd ones past the top edge, even ones past the
+side), rimless glass with light pooled in the corners and a soft bevel, glass-ringed images, glossy START and arrow buttons.
 
 | Attribute / behavior | Web | iOS | Android | Notes |
 |---|---|---|---|---|
@@ -961,6 +961,6 @@ then move on"). Remaining items below are all low-priority cleanup, not new trig
   verified in the iPhone 17 Pro / iOS 26.0 simulator with the hand-made sample stack (see the
   `stack` section). Android written and unit-tested in code but not yet built or run: this Mac had
   no JDK, Android SDK or emulator at the time.
-- **2026-11-24**: Stack restyled to the web redesign (Poltio/websdk#832, #833). iOS checked in the
+- **2026-11-24**: Stack restyled to the web redesign (Poltio/websdk#832, #833, #834). iOS checked in the
   iPhone 17 Pro / iOS 26.5 simulator (expanded, pill, compact); Android changed the same way but
   still not compiled or run on this Mac.

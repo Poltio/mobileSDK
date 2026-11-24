@@ -334,13 +334,21 @@
 
         let card: PoltioStackCard
         let style: Style
-        private let lift = PoltioStackCardView.outerShadow(opacity: 0.4, radius: 1.1 * em, offset: 0.9 * em)
+        /// A CSS drop shadow, in em.
+        private typealias Drop = (offset: CGFloat, blur: CGFloat, spread: CGFloat, alpha: Float)
+        /// Web's: a hairline edge, a contact shadow and two steps of lift.
+        private static let cardDrops: [Drop] = [(0, 0, 0.5 / 13, 0.1), (1 / 13, 2 / 13, 0, 0.12), (0.5, 1, -0.4, 0.25), (1.4, 2.8, -0.8, 0.45)]
+        private static let imageDrops: [Drop] = [(0.35, 0.9, -0.25, 0.45)]
+
+        private let lift = PoltioStackCardView.outerShadow(PoltioStackCardView.cardDrops)
         private let surface = UIView()
         private let tint = UIView()
         private let sheen = CAGradientLayer()
-        private let rim = CAGradientLayer()
-        private let rimShape = CAShapeLayer()
-        private var insetShadows: [CAShapeLayer] = []
+        private let edge = UIView()
+        private var glints: [CAGradientLayer] = []
+        /// How far each corner's light reaches.
+        private let glintRadius: CGFloat
+        private var insetShadows: [(layer: CAShapeLayer, spread: CGFloat)] = []
         private let glowLayer = CAGradientLayer()
         private var imageLoader: PoltioTriggerIconLoader?
         private static let glowAnimationKey = "poltio.stack.glow"
@@ -349,6 +357,7 @@
         init(card: PoltioStackCard, style: Style, options: PoltioOverlayOptions) {
             self.card = card
             self.style = style
+            glintRadius = (style == .compact || style == .pill ? 1.8 : 3) * em
             super.init(frame: .zero)
 
             let cardColor = PoltioOverlayOptions.resolvedColor(card.bg, fallback: options.resolvedBgColor)
@@ -356,7 +365,7 @@
             let buttonColor = PoltioOverlayOptions.resolvedColor(card.buttonBg, fallback: Self.darker(cardColor))
             let font = { (size: CGFloat, weight: UIFont.Weight) in options.resolvedFont(size: size * em, weight: weight) }
 
-            // A slab of glass: a frosted body, light caught in its edges, the card's tint and a lifted shadow.
+            // A slab of milky glass lifted off the page.
             layer.addSublayer(lift)
 
             surface.translatesAutoresizingMaskIntoConstraints = false
@@ -375,13 +384,6 @@
             surface.addSubview(glass)
             Self.pinEdges(glass, to: surface)
 
-            // Lit from the top left: a bright lip and highlight inside that edge, a shade inside the
-            // opposite one, a soft inner glow. The tint goes over them, as on web.
-            addInsetShadow(.white, opacity: 0.8, offset: CGSize(width: 0, height: 1), radius: 0.5)
-            addInsetShadow(.white, opacity: 0.55, offset: CGSize(width: 0.2 * em, height: 0.25 * em), radius: 0.25 * em)
-            addInsetShadow(Self.shade, opacity: 0.18, offset: CGSize(width: -0.2 * em, height: -0.3 * em), radius: 0.3 * em)
-            addInsetShadow(.white, opacity: 0.2, offset: .zero, radius: 0.7 * em)
-
             // The card color under a white sheen, both at the card's opacity.
             tint.translatesAutoresizingMaskIntoConstraints = false
             tint.isUserInteractionEnabled = false
@@ -395,6 +397,27 @@
             surface.addSubview(tint)
             Self.pinEdges(tint, to: surface)
 
+            // The slab's thickness, above the tint so any opacity shows it: light pooled in the corners,
+            // strongest where it enters top-left, and a soft bevel along the edges.
+            edge.translatesAutoresizingMaskIntoConstraints = false
+            edge.isUserInteractionEnabled = false
+            surface.addSubview(edge)
+            Self.pinEdges(edge, to: surface)
+            glints = [0.9, 0.7, 0.4, 0.35].map { alpha in
+                let glint = CAGradientLayer()
+                glint.type = .radial
+                glint.colors = [UIColor.white.withAlphaComponent(alpha).cgColor, UIColor.white.withAlphaComponent(0).cgColor]
+                glint.startPoint = CGPoint(x: 0.5, y: 0.5)
+                glint.endPoint = CGPoint(x: 1, y: 1)
+                edge.layer.addSublayer(glint)
+                return glint
+            }
+            // Web lists these top first, so they're added bottom first.
+            addInsetShadow(.white, opacity: 0.2, offset: .zero, blur: 2 * em)
+            addInsetShadow(Self.shade, opacity: 0.22, offset: CGSize(width: 0, height: -0.6 * em), blur: em, spread: -0.6 * em)
+            addInsetShadow(.white, opacity: 0.45, offset: CGSize(width: -0.35 * em, height: -0.4 * em), blur: 0.7 * em, spread: -0.3 * em)
+            addInsetShadow(.white, opacity: 0.8, offset: CGSize(width: 0.35 * em, height: 0.4 * em), blur: 0.6 * em, spread: -0.3 * em)
+
             let buttonText = card.button?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let cta = { (size: CGFloat, padding: CGFloat) in
                 PoltioStackGlossView(
@@ -403,7 +426,7 @@
                     unit: size * em, padding: padding * size * em
                 )
             }
-            let image = { (size: CGFloat) in self.makeImage(size: size * em, ring: (options.isStackCompact ? 0.15 : 0.2) * em) }
+            let image = { (size: CGFloat) in self.makeImage(size: size * em, ring: (options.isStackCompact ? 0.15 : 0.24) * em) }
 
             switch style {
             case .card:
@@ -504,17 +527,6 @@
                 ])
             }
 
-            // The bevel: an uneven rim, brightest where the light hits the glass edge.
-            rim.colors = [0.95, 0.25, 0.05, 0.5, 0.9].map { UIColor.white.withAlphaComponent($0).cgColor }
-            rim.locations = [0, 0.3, 0.55, 0.85, 1]
-            rim.startPoint = CGPoint(x: 0.25, y: 0.07)
-            rim.endPoint = CGPoint(x: 0.75, y: 0.93)
-            rimShape.fillColor = nil
-            rimShape.strokeColor = UIColor.black.cgColor
-            rimShape.lineWidth = 1.5
-            rim.mask = rimShape
-            surface.layer.addSublayer(rim)
-
             glowLayer.colors = [UIColor.white.withAlphaComponent(0).cgColor, UIColor.white.withAlphaComponent(0.5).cgColor, UIColor.white.withAlphaComponent(0).cgColor]
             glowLayer.startPoint = CGPoint(x: 0.05, y: 0.29)
             glowLayer.endPoint = CGPoint(x: 0.95, y: 0.71)
@@ -534,15 +546,17 @@
             super.layoutSubviews()
             let bounds = surface.bounds
             let radius = min(surface.layer.cornerRadius, bounds.height / 2)
-            // Inset shadows are cast inward by a frame around the card, which the surface clips away.
-            let frame = UIBezierPath(rect: bounds.insetBy(dx: -3 * em, dy: -3 * em))
-            frame.append(UIBezierPath(roundedRect: bounds, cornerRadius: radius))
-            insetShadows.forEach { $0.path = frame.cgPath }
+            // A negative CSS spread grows the hole the inset shadow is cast into.
+            for (shadow, spread) in insetShadows {
+                shadow.path = Self.frame(around: UIBezierPath(roundedRect: bounds.insetBy(dx: spread, dy: spread), cornerRadius: radius - spread))
+            }
+            let corners = [CGPoint(x: bounds.minX, y: bounds.minY), CGPoint(x: bounds.maxX, y: bounds.maxY), CGPoint(x: bounds.maxX, y: bounds.minY), CGPoint(x: bounds.minX, y: bounds.maxY)]
+            for (glint, corner) in zip(glints, corners) {
+                glint.frame = CGRect(x: corner.x - glintRadius, y: corner.y - glintRadius, width: 2 * glintRadius, height: 2 * glintRadius)
+            }
             sheen.frame = tint.bounds
-            rim.frame = bounds
-            rimShape.path = UIBezierPath(roundedRect: bounds.insetBy(dx: 0.75, dy: 0.75), cornerRadius: radius - 0.75).cgPath
             glowLayer.frame = bounds
-            Self.shape(lift, bounds: self.bounds, cornerRadius: radius, spread: 0.5 * em)
+            Self.shape(lift, Self.cardDrops, bounds: self.bounds, cornerRadius: radius)
         }
 
         override var isHighlighted: Bool {
@@ -569,57 +583,102 @@
             glowLayer.animation(forKey: Self.glowAnimationKey) != nil
         }
 
-        /// A warm drop shadow that only falls outside the shape, as CSS draws one, so see-through glass
-        /// doesn't show it from below.
-        private static func outerShadow(opacity: Float, radius: CGFloat, offset: CGFloat) -> CALayer {
-            let shadow = CALayer()
-            shadow.shadowColor = shade.cgColor
-            shadow.shadowOpacity = opacity
-            shadow.shadowRadius = radius
-            shadow.shadowOffset = CGSize(width: 0, height: offset)
+        /// Warm drop shadows that only fall outside the shape, as CSS draws them, so see-through glass
+        /// doesn't show them from below.
+        private static func outerShadow(_ drops: [Drop]) -> CALayer {
+            let lift = CALayer()
+            for drop in drops {
+                let step = CALayer()
+                step.shadowColor = shade.cgColor
+                step.shadowOpacity = drop.alpha
+                step.shadowRadius = drop.blur / 2 * em
+                step.shadowOffset = CGSize(width: 0, height: drop.offset * em)
+                lift.addSublayer(step)
+            }
             let cutout = CAShapeLayer()
             cutout.fillRule = .evenOdd
-            shadow.mask = cutout
-            return shadow
+            lift.mask = cutout
+            return lift
         }
 
-        /// Fits an `outerShadow` to a rounded shape; a negative CSS spread shrinks the shadow by `spread`.
-        private static func shape(_ shadow: CALayer, bounds: CGRect, cornerRadius: CGFloat, spread: CGFloat) {
-            shadow.frame = bounds
-            shadow.shadowPath = UIBezierPath(roundedRect: bounds.insetBy(dx: spread, dy: spread), cornerRadius: cornerRadius).cgPath
-            let cutout = UIBezierPath(rect: bounds.insetBy(dx: -4 * em, dy: -4 * em))
-            cutout.append(UIBezierPath(roundedRect: bounds, cornerRadius: cornerRadius))
-            (shadow.mask as? CAShapeLayer)?.path = cutout.cgPath
+        /// Fits an `outerShadow` to a rounded shape.
+        private static func shape(_ lift: CALayer, _ drops: [Drop], bounds: CGRect, cornerRadius: CGFloat) {
+            lift.frame = bounds
+            for (step, drop) in zip(lift.sublayers ?? [], drops) {
+                let spread = drop.spread * em
+                step.frame = bounds
+                step.shadowPath = UIBezierPath(roundedRect: bounds.insetBy(dx: -spread, dy: -spread), cornerRadius: max(cornerRadius + spread, 0)).cgPath
+            }
+            (lift.mask as? CAShapeLayer)?.path = frame(around: UIBezierPath(roundedRect: bounds, cornerRadius: cornerRadius))
         }
 
-        private func addInsetShadow(_ color: UIColor, opacity: Float, offset: CGSize, radius: CGFloat) {
+        /// `hole` inside a wide frame: the frame casts a shape's inset shadow, or masks off its inside.
+        private static func frame(around hole: UIBezierPath) -> CGPath {
+            let frame = UIBezierPath(rect: hole.bounds.insetBy(dx: -8 * em, dy: -8 * em))
+            frame.append(hole)
+            return frame.cgPath
+        }
+
+        /// An inset shadow, cast inward by a frame the clipping view hides; `blur` is CSS's.
+        private static func insetShadow(_ color: UIColor, opacity: Float, offset: CGSize, blur: CGFloat) -> CAShapeLayer {
             let shadow = CAShapeLayer()
             shadow.fillRule = .evenOdd
             shadow.fillColor = UIColor.black.cgColor
             shadow.shadowColor = color.cgColor
             shadow.shadowOpacity = opacity
             shadow.shadowOffset = offset
-            shadow.shadowRadius = radius
-            surface.layer.addSublayer(shadow)
-            insetShadows.append(shadow)
+            shadow.shadowRadius = blur / 2
+            return shadow
         }
 
-        /// The round image in a white ring, lifted off the glass by a soft shadow.
+        private func addInsetShadow(_ color: UIColor, opacity: Float, offset: CGSize, blur: CGFloat, spread: CGFloat = 0) {
+            let shadow = Self.insetShadow(color, opacity: opacity, offset: offset, blur: blur)
+            edge.layer.addSublayer(shadow)
+            insetShadows.append((shadow, spread))
+        }
+
+        /// The round image under a glass ring, bright top-left and bottom-right, with a soft inner
+        /// shade, lifted off the card by a soft shadow.
         private func makeImage(size: CGFloat, ring: CGFloat) -> UIView {
             let holder = UIView()
             holder.translatesAutoresizingMaskIntoConstraints = false
-            let imageLift = Self.outerShadow(opacity: 0.4, radius: 0.45 * em, offset: 0.35 * em)
-            Self.shape(imageLift, bounds: CGRect(x: 0, y: 0, width: size, height: size), cornerRadius: size / 2, spread: 0.25 * em)
+            let bounds = CGRect(x: 0, y: 0, width: size, height: size)
+            let imageLift = Self.outerShadow(Self.imageDrops)
+            Self.shape(imageLift, Self.imageDrops, bounds: bounds, cornerRadius: size / 2)
             holder.layer.addSublayer(imageLift)
             let slot = UIView()
-            slot.translatesAutoresizingMaskIntoConstraints = false
             slot.backgroundColor = UIColor.white.withAlphaComponent(0.3)
-            slot.layer.cornerRadius = size / 2
-            slot.layer.borderWidth = ring
-            slot.layer.borderColor = UIColor.white.withAlphaComponent(0.75).cgColor
-            slot.clipsToBounds = true
-            holder.addSubview(slot)
-            Self.pinEdges(slot, to: holder)
+            // The glass goes over the photo, in its own view: the loader adds the photo to `slot`.
+            let glass = UIView()
+            glass.isUserInteractionEnabled = false
+            for view in [slot, glass] {
+                view.translatesAutoresizingMaskIntoConstraints = false
+                view.layer.cornerRadius = size / 2
+                view.clipsToBounds = true
+                holder.addSubview(view)
+                Self.pinEdges(view, to: holder)
+            }
+            let circle = Self.frame(around: UIBezierPath(ovalIn: bounds))
+            for inner in [
+                Self.insetShadow(.white, opacity: 0.3, offset: CGSize(width: 0, height: -0.25 * em), blur: 0.5 * em),
+                Self.insetShadow(.black, opacity: 0.16, offset: CGSize(width: 0, height: 0.3 * em), blur: 0.6 * em),
+            ] {
+                inner.path = circle
+                glass.layer.addSublayer(inner)
+            }
+            let rim = CAGradientLayer()
+            rim.frame = bounds
+            rim.colors = [0.95, 0.4, 0.25, 0.8].map { UIColor.white.withAlphaComponent($0).cgColor }
+            rim.locations = [0, 0.35, 0.6, 1]
+            rim.startPoint = CGPoint(x: 0.21, y: 0.09)
+            rim.endPoint = CGPoint(x: 0.79, y: 0.91)
+            let ringShape = CAShapeLayer()
+            ringShape.path = UIBezierPath(ovalIn: bounds.insetBy(dx: ring / 2, dy: ring / 2)).cgPath
+            ringShape.fillColor = nil
+            ringShape.strokeColor = UIColor.black.cgColor
+            ringShape.lineWidth = ring
+            rim.mask = ringShape
+            glass.layer.addSublayer(rim)
             NSLayoutConstraint.activate([
                 holder.widthAnchor.constraint(equalToConstant: size),
                 holder.heightAnchor.constraint(equalToConstant: size),

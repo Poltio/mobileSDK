@@ -11,6 +11,7 @@ import android.graphics.LinearGradient
 import android.graphics.Outline
 import android.graphics.Paint
 import android.graphics.PixelFormat
+import android.graphics.RadialGradient
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
@@ -75,7 +76,7 @@ private fun cssGradient(r: RectF, degrees: Float, colors: IntArray, positions: F
  * pill showing the front card (remembered for 48 hours); tapping the pill brings the cards back.
  *
  * Android has no backdrop blur without extra libraries, so the glass is translucent (the card's tint,
- * a sheen, light caught in its edges and a bevel rim) without blurring the app behind it.
+ * a sheen, light pooled in its corners and a soft bevel) without blurring the app behind it.
  */
 internal class PoltioFloatingStackTriggerView(
     context: Context,
@@ -171,7 +172,7 @@ internal class PoltioFloatingStackTriggerView(
             setColor(ColorUtils.setAlphaComponent(Color.BLACK, 71))
         }
         // Above the cards' own elevation, or they'd draw over it and take its taps.
-        closeButton.elevation = context.dp(10f).toFloat()
+        closeButton.elevation = context.dp(14f).toFloat()
         closeButton.contentDescription = "Close"
         closeButton.setOnClickListener { handleCloseTap() }
         // Compact: beside the front pill, toward the middle of the screen, clear of the pills above it.
@@ -410,15 +411,15 @@ internal class PoltioStackCardView(
                 Style.PILL -> 1.4f
             },
         ).toFloat()
-        val ring = if (options.isStackCompact) 0.15f else 0.2f
+        val ring = if (options.isStackCompact) 0.15f else 0.24f
         val buttonText = card.button?.trim().takeUnless { it.isNullOrEmpty() } ?: "Start"
 
-        background = PoltioGlassDrawable(cardColor, card.alpha, radius, density)
+        background = PoltioGlassDrawable(cardColor, card.alpha, radius, if (style == Style.COMPACT || style == Style.PILL) 1.8f else 3f, density)
         foreground = RippleDrawable(ColorStateList.valueOf(ColorUtils.setAlphaComponent(Color.WHITE, 60)), null, GradientDrawable().apply { cornerRadius = radius; setColor(Color.WHITE) })
         outlineProvider = ViewOutlineProvider.BACKGROUND
         clipToOutline = true
         // The lifted shadow, in web's warm tone where the platform can tint it.
-        elevation = context.dp(8f).toFloat()
+        elevation = context.dp(12f).toFloat()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             outlineSpotShadowColor = SHADE
             outlineAmbientShadowColor = SHADE
@@ -541,21 +542,18 @@ internal class PoltioStackCardView(
         super.onMeasure(MeasureSpec.makeMeasureSpec(size, MeasureSpec.AT_MOST), heightMeasureSpec)
     }
 
-    /** The round image in a white ring, lifted off the glass. */
+    /** The round image under a glass ring, lifted off the glass. */
     private fun imageSlot(sizeEm: Float, ringEm: Float): FrameLayout {
         val slot = FrameLayout(context)
         slot.background = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             setColor(white(0.3f))
         }
-        // The ring draws over the image.
-        slot.foreground = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            setStroke(px(ringEm), white(0.75f))
-        }
+        // The glass draws over the image.
+        slot.foreground = PoltioGlassRingDrawable(ringEm * EM * density, EM * density)
         slot.outlineProvider = ViewOutlineProvider.BACKGROUND
         slot.clipToOutline = true
-        slot.elevation = context.dp(3f).toFloat()
+        slot.elevation = context.dp(4f).toFloat()
         // The loader lays its image over this anchor, filling the round slot.
         val anchor = View(context)
         slot.addView(anchor, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
@@ -727,47 +725,46 @@ private abstract class PoltioPaintedDrawable : Drawable() {
     override fun getOpacity() = PixelFormat.TRANSLUCENT
 }
 
+/** A light or shade fading inward from one side of [r] over [depth] px. */
+private fun band(r: RectF, side: Int, color: Int, depth: Float): Shader = when (side) {
+    Gravity.TOP -> LinearGradient(0f, r.top, 0f, r.top + depth, color, Color.TRANSPARENT, Shader.TileMode.CLAMP)
+    Gravity.BOTTOM -> LinearGradient(0f, r.bottom, 0f, r.bottom - depth, color, Color.TRANSPARENT, Shader.TileMode.CLAMP)
+    Gravity.LEFT -> LinearGradient(r.left, 0f, r.left + depth, 0f, color, Color.TRANSPARENT, Shader.TileMode.CLAMP)
+    else -> LinearGradient(r.right, 0f, r.right - depth, 0f, color, Color.TRANSPARENT, Shader.TileMode.CLAMP)
+}
+
 /**
- * A slab of glass: light caught inside its top and left edges and a shade inside the opposite ones,
- * the card's tint under a white sheen at the card's opacity, and a bevel rim brightest where the
- * light hits. The view's outline clips it to its rounded shape.
+ * A slab of glass: the card's tint under a white sheen at the card's opacity, then its thickness above
+ * them so any opacity shows it: light pooled in the corners out to [glint] em, strongest where it
+ * enters top-left, light inner edges top-left and bottom-right, a shade along the bottom and a soft
+ * inner glow. The view's outline clips it to its rounded shape.
  */
-private class PoltioGlassDrawable(tint: Int, private val opacity: Float, private val radius: Float, private val density: Float) : PoltioPaintedDrawable() {
+private class PoltioGlassDrawable(tint: Int, private val opacity: Float, private val radius: Float, private val glint: Float, density: Float) : PoltioPaintedDrawable() {
     private val em = EM * density
     private val tinted = withAlpha(tint, opacity)
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 1.5f * density
-    }
     private val rect = RectF()
-    private val rimRect = RectF()
-    private var edges: List<Shader> = emptyList()
     private var sheen: Shader? = null
-    private var corner = 0f
+    private var thickness: List<Shader> = emptyList()
 
     override fun onBoundsChange(bounds: Rect) {
         rect.set(bounds)
-        corner = min(radius, rect.height() / 2)
-        rimRect.set(rect)
-        rimRect.inset(0.75f * density, 0.75f * density)
-        // The bright lip along the top, then the edge light fading inward.
-        edges = listOf(
-            LinearGradient(0f, rect.top, 0f, rect.top + 0.7f * em, intArrayOf(white(0.8f), white(0.3f), Color.TRANSPARENT), floatArrayOf(0f, 0.1f, 1f), Shader.TileMode.CLAMP),
-            LinearGradient(rect.left, 0f, rect.left + 0.5f * em, 0f, white(0.35f), Color.TRANSPARENT, Shader.TileMode.CLAMP),
-            LinearGradient(0f, rect.bottom, 0f, rect.bottom - 0.8f * em, withAlpha(SHADE, 0.18f), Color.TRANSPARENT, Shader.TileMode.CLAMP),
-            LinearGradient(rect.right, 0f, rect.right - 0.6f * em, 0f, withAlpha(SHADE, 0.12f), Color.TRANSPARENT, Shader.TileMode.CLAMP),
-        )
         sheen = cssGradient(rect, 155f, intArrayOf(white(0.5f), white(0.12f), white(0.04f), white(0.2f)), floatArrayOf(0f, 0.38f, 0.62f, 1f))
-        rimPaint.shader = cssGradient(rect, 150f, intArrayOf(white(0.95f), white(0.25f), white(0.05f), white(0.5f), white(0.9f)), floatArrayOf(0f, 0.3f, 0.55f, 0.85f, 1f))
+        val corners = listOf(rect.left to rect.top, rect.right to rect.bottom, rect.right to rect.top, rect.left to rect.bottom)
+        val glints = corners.zip(listOf(0.9f, 0.7f, 0.4f, 0.35f)) { (x, y), alpha ->
+            RadialGradient(x, y, glint * em, white(alpha), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+        }
+        val glow = listOf(Gravity.TOP, Gravity.BOTTOM, Gravity.LEFT, Gravity.RIGHT).map { band(rect, it, white(0.2f), em) }
+        thickness = glints + glow + listOf(
+            band(rect, Gravity.BOTTOM, withAlpha(SHADE, 0.22f), 0.6f * em),
+            band(rect, Gravity.BOTTOM, white(0.45f), 0.35f * em),
+            band(rect, Gravity.RIGHT, white(0.45f), 0.3f * em),
+            band(rect, Gravity.TOP, white(0.8f), 0.35f * em),
+            band(rect, Gravity.LEFT, white(0.8f), 0.3f * em),
+        )
     }
 
     override fun draw(canvas: Canvas) {
-        paint.color = Color.BLACK
-        edges.forEach {
-            paint.shader = it
-            canvas.drawRect(rect, paint)
-        }
         paint.shader = null
         paint.color = tinted
         canvas.drawRect(rect, paint)
@@ -776,12 +773,46 @@ private class PoltioGlassDrawable(tint: Int, private val opacity: Float, private
         paint.alpha = (opacity * 255).roundToInt()
         paint.shader = sheen
         canvas.drawRect(rect, paint)
+        paint.alpha = 255
+        thickness.forEach {
+            paint.shader = it
+            canvas.drawRect(rect, paint)
+        }
         paint.shader = null
-        canvas.drawRoundRect(rimRect, corner - 0.75f * density, corner - 0.75f * density, rimPaint)
     }
 
     override fun getOutline(outline: Outline) {
         outline.setRoundRect(bounds, min(radius, bounds.height() / 2f))
+    }
+}
+
+/** A glass ring [ring] px wide over a round photo's edge, bright top-left and bottom-right, with a
+ * soft shade inside its top and light inside its bottom. The slot's oval outline clips it. */
+private class PoltioGlassRingDrawable(private val ring: Float, private val em: Float) : PoltioPaintedDrawable() {
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = ring
+    }
+    private val rect = RectF()
+    private val ringRect = RectF()
+    private var inner: List<Shader> = emptyList()
+
+    override fun onBoundsChange(bounds: Rect) {
+        rect.set(bounds)
+        ringRect.set(rect)
+        ringRect.inset(ring / 2, ring / 2)
+        inner = listOf(band(rect, Gravity.BOTTOM, white(0.3f), 0.5f * em), band(rect, Gravity.TOP, ColorUtils.setAlphaComponent(Color.BLACK, 41), 0.6f * em))
+        ringPaint.shader = cssGradient(rect, 145f, intArrayOf(white(0.95f), white(0.4f), white(0.25f), white(0.8f)), floatArrayOf(0f, 0.35f, 0.6f, 1f))
+    }
+
+    override fun draw(canvas: Canvas) {
+        paint.color = Color.BLACK
+        inner.forEach {
+            paint.shader = it
+            canvas.drawRect(rect, paint)
+        }
+        canvas.drawOval(ringRect, ringPaint)
     }
 }
 
