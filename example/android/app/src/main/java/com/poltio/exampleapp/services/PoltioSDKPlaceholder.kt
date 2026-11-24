@@ -45,6 +45,10 @@ object PoltioSDKPlaceholder {
         log(LogType.TRIGGER, "Poltio Overlay Widget opened: $widgetName ($url)")
     }
 
+    fun showSampleStack(format: String) {
+        SampleStackWidget.show(format) { log(LogType.TRIGGER, it) }
+    }
+
     private fun log(type: LogType, message: String) {
         val sdf = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
         val timestamp = sdf.format(Date())

@@ -476,6 +476,11 @@ public final class PoltioSDK {
             return
         }
         apiClient.reportCtaView(clientKey: key, deviceId: sdkId, publicId: widget.publicId, widgetId: widget.widgetId)
+        // A stack's other cards each count an impression for their own content, without `widget_id`:
+        // the backend counts a widget view only when it's sent, so the widget still gets one per display.
+        for content in widget.overlayOptions.otherStackContents(excluding: widget.publicId) {
+            apiClient.reportCtaView(clientKey: key, deviceId: sdkId, publicId: content, widgetId: nil)
+        }
     }
 
     // MARK: - Public Trigger Control

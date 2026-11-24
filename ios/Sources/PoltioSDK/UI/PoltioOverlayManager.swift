@@ -88,8 +88,9 @@
                 pendingShowWorkItem?.cancel()
                 pendingShowWorkItem = nil
 
-                guard widget.overlayOptions.isBoxTrigger || widget.overlayOptions.isPillTrigger || widget.overlayOptions.isCardTrigger else {
-                    PoltioLogger.warning("Trigger type '\(widget.overlayOptions.triggerType ?? "none")' is not currently handled (supported: 'box', 'pill', 'card').")
+                let options = widget.overlayOptions
+                if let reason = Self.unsupportedTriggerReason(options) {
+                    PoltioLogger.warning("Floating trigger for widget '\(widget.publicId)' skipped: \(reason).")
                     hideTrigger()
                     return
                 }
@@ -207,7 +208,20 @@
                 let bottomConstraint: NSLayoutConstraint?
                 let bottomInset: CGFloat
 
-                if widget.overlayOptions.isPillTrigger {
+                if options.isStackTrigger, let cards = options.stackCards {
+                    let stackView = PoltioFloatingStackTriggerView(widget: widget, cards: cards) { [weak self] card in
+                        // Each card opens its own content; the widget id stays the trigger's.
+                        self?.presentWidgetWebView(publicId: card.content, widgetId: widget.widgetId, puid: puid, overlayOptions: options)
+                    }
+                    rootVC.view.addSubview(stackView)
+                    bottomInset = 24
+                    bottomConstraint = Self.pinTrigger(
+                        stackView, in: rootVC.view, vertical: vertical, isLeftDocked: isLeftDocked,
+                        horizontalInset: 16, verticalInset: bottomInset, hugsRawEdgeHorizontally: false,
+                        bottomObstruction: bottomObstruction
+                    )
+                    triggerView = stackView
+                } else if widget.overlayOptions.isPillTrigger {
                     let pillView = PoltioFloatingPillTriggerView(
                         widget: widget,
                         onOpenWidget: onOpenWidget,
@@ -278,6 +292,17 @@
                     completion: nil
                 )
             }
+        }
+
+        /// Why a trigger with `options` can't be drawn natively, or `nil` when it can.
+        static func unsupportedTriggerReason(_ options: PoltioOverlayOptions) -> String? {
+            if options.isStackTrigger {
+                return options.stackCards == nil ? "floating-stack-cards must be a JSON list of 2-5 cards, each with content and title" : nil
+            }
+            if options.isBoxTrigger || options.isPillTrigger || options.isCardTrigger {
+                return nil
+            }
+            return "trigger type '\(options.triggerType ?? "none")' is not currently handled (supported: 'box', 'pill', 'card', 'stack')"
         }
 
         /// Whether `widget` is the one the current trigger was built for: same content and same widget.
