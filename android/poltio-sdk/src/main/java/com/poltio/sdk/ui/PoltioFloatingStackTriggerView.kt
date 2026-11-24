@@ -6,14 +6,23 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorFilter
 import android.graphics.LinearGradient
+import android.graphics.Outline
 import android.graphics.Paint
+import android.graphics.PixelFormat
+import android.graphics.Rect
+import android.graphics.RectF
 import android.graphics.Shader
+import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.LayerDrawable
 import android.graphics.drawable.RippleDrawable
+import android.os.Build
 import android.provider.Settings
+import android.text.TextPaint
 import android.text.TextUtils
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewOutlineProvider
@@ -29,14 +38,44 @@ import com.poltio.sdk.PoltioOverlayOptions
 import com.poltio.sdk.PoltioStackCard
 import com.poltio.sdk.PoltioTriggerDismissalStore
 import com.poltio.sdk.PoltioWidgetResponse
+import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.cos
+import kotlin.math.min
+import kotlin.math.roundToInt
+import kotlin.math.sin
+
+/** Web's em on phones (13px): the stack's sizes are web's, in em, as dp. */
+private const val EM = 13f
+
+/** The warm tone of web's shadows and shades. */
+private val SHADE = Color.rgb(40, 22, 12)
+
+private fun white(alpha: Float) = ColorUtils.setAlphaComponent(Color.WHITE, (alpha * 255).roundToInt())
+
+private fun withAlpha(color: Int, alpha: Float) = ColorUtils.setAlphaComponent(color, (Color.alpha(color) * alpha).roundToInt())
+
+/** A linear gradient along a CSS angle (0deg points up, 90deg right) across [r], as CSS sizes it. */
+private fun cssGradient(r: RectF, degrees: Float, colors: IntArray, positions: FloatArray?): LinearGradient {
+    val rad = Math.toRadians(degrees.toDouble())
+    val dx = sin(rad).toFloat()
+    val dy = -cos(rad).toFloat()
+    val half = (abs(r.width() * dx) + abs(r.height() * dy)) / 2
+    return LinearGradient(
+        r.centerX() - dx * half, r.centerY() - dy * half, r.centerX() + dx * half, r.centerY() + dy * half,
+        colors, positions, Shader.TileMode.CLAMP,
+    )
+}
 
 /**
- * The `stack` ("Multi") trigger: 2–5 glass cards fanned toward the middle of the screen, the first
- * one in front. Any card, front or back, opens its own content. × folds the fan into a pill showing
- * the front card (remembered for 48 hours); tapping the pill fans the cards out again.
+ * The `stack` ("Multi") trigger: 2–5 glass cards stacked toward the middle of the screen, the first
+ * one in front. Back cards stand upright and only peek out: odd ones past the front card's top edge,
+ * even ones past its side. Any card, front or back, opens its own content. × folds the stack into a
+ * pill showing the front card (remembered for 48 hours); tapping the pill brings the cards back.
  *
- * Android has no backdrop blur without extra libraries, so the cards are translucent and frosted
- * looking (a tinted gradient, a light rim and sheen) without blurring the app behind them.
+ * Android has no backdrop blur without extra libraries, so the glass is translucent (the card's tint,
+ * a sheen, light caught in its edges and a bevel rim) without blurring the app behind it.
  */
 internal class PoltioFloatingStackTriggerView(
     context: Context,
@@ -47,16 +86,15 @@ internal class PoltioFloatingStackTriggerView(
 
     enum class TriggerState { FANNED, FOLDED }
 
-    private class Layout(val cardW: Float, val cardH: Float, val stepX: Float, val stepY: Float, val tiltDeg: Float)
+    /** Where a back card rests, in em toward the middle of the screen. */
+    data class Place(val up: Boolean, val side: Float, val rise: Float)
 
     companion object {
         /** How long a fold is remembered, matching web. */
         const val FOLD_REMEMBER_HOURS = 48.0
-        private const val PILL_W = 250f
-        private const val PILL_H = 64f
         private const val CLOSE_SIZE = 26f
-        private val EXPANDED = Layout(168f, 216f, 26f, 12f, 4f)
-        private val COMPACT = Layout(240f, 56f, 14f, 20f, 2f)
+        private const val PILL_H = 4.5f * EM
+        private const val PILL_MAX_W = 21f * EM
 
         /** The fold's key in [PoltioTriggerDismissalStore], kept apart from the widget's own public
          * id, which would hide the trigger outright. */
@@ -65,16 +103,32 @@ internal class PoltioFloatingStackTriggerView(
         /** Whether the user turned animations off (Developer options or Remove animations). */
         fun animationsRemoved(context: Context): Boolean =
             Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+
+        /** Back card [index] (1-based): odd ones peek past the front card's top edge, even ones past
+         * its side. Compact pills only stack upward. */
+        fun place(index: Int, compact: Boolean): Place {
+            if (compact) return Place(true, 0f, 2.9f * index)
+            val step = ((index + 1) / 2 - 1).toFloat()
+            return if (index % 2 == 1) Place(true, 0.5f + 0.8f * step, 3.4f + 2.8f * step) else Place(false, 3.6f + 2.8f * step, 1.6f + 0.5f * step)
+        }
     }
 
     private val options = widget.overlayOptions
-    private val layout = if (options.isStackCompact) COMPACT else EXPANDED
-    /** Direction toward the middle of the screen: back cards fan away from the docked corner. */
+    private val compact = options.isStackCompact
+    private val cardW = if (compact) 16f * EM else 13.5f * EM
+    private val cardH = if (compact) 3.75f * EM else 16.5f * EM
+    /** Direction toward the middle of the screen: back cards peek out away from the docked corner. */
     private val fanX = if (options.isLeftDocked) 1f else -1f
     private val fanY = if (options.verticalPosition == "top") 1f else -1f
-    /** Room for the fan beside and above (or below) the front card, plus slack for the tilt. */
-    private val spreadX = layout.stepX * (cards.size - 1) + 24f
-    private val spreadY = layout.stepY * (cards.size - 1) + 24f
+    /** Room beside and above (or below) the front card for the back cards and the compact ×, plus
+     * slack for their shadows; at least wide enough for the pill. */
+    private val totalW = maxOf(
+        cardW + ((1 until cards.size).maxOfOrNull { place(it, compact).side } ?: 0f) * EM + (if (compact) 2.1f * EM else 0f) + 24f,
+        PILL_MAX_W,
+    )
+    private val totalH = cardH + ((1 until cards.size).maxOfOrNull { place(it, compact).rise } ?: 0f) * EM + 24f
+    /** Set once the visitor opens a card or folds them: the light sweep was only a hint. */
+    private var hinted = false
 
     var state: TriggerState
         private set
@@ -90,16 +144,23 @@ internal class PoltioFloatingStackTriggerView(
     init {
         clipChildren = false
         clipToPadding = false
-        // Sized to hold the whole fan: touches only reach children inside this view's bounds, and
+        // Sized to hold the whole stack: touches only reach children inside this view's bounds, and
         // the empty corners stay unclickable, so they fall through to the host.
-        layoutParams = LayoutParams(context.dp(layout.cardW + spreadX), context.dp(layout.cardH + spreadY))
+        layoutParams = LayoutParams(context.dp(totalW), context.dp(totalH))
 
-        val style = if (options.isStackCompact) PoltioStackCardView.Style.COMPACT else PoltioStackCardView.Style.CARD
-        cardViews = cards.map { PoltioStackCardView(context, it, style, options) }
+        cardViews = cards.mapIndexed { index, card ->
+            val style = when {
+                compact -> PoltioStackCardView.Style.COMPACT
+                index == 0 -> PoltioStackCardView.Style.CARD
+                place(index, false).up -> PoltioStackCardView.Style.UP
+                else -> PoltioStackCardView.Style.SIDE
+            }
+            PoltioStackCardView(context, card, style, options)
+        }
         // Back cards first, so the front card draws, and takes touches, on top.
         cardViews.asReversed().forEach { cardView ->
-            cardView.setOnClickListener { onOpenCard(cardView.card) }
-            addAtCorner(cardView, layout.cardW, layout.cardH)
+            cardView.setOnClickListener { openCard(cardView.card) }
+            addAtCorner(cardView, cardW, cardH)
         }
         // TalkBack reads the front card first, then the ones behind it.
         cardViews.forEach { it.id = View.generateViewId() }
@@ -107,18 +168,28 @@ internal class PoltioFloatingStackTriggerView(
 
         closeButton.background = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
-            setColor(ColorUtils.setAlphaComponent(Color.BLACK, 46))
+            setColor(ColorUtils.setAlphaComponent(Color.BLACK, 71))
         }
         // Above the cards' own elevation, or they'd draw over it and take its taps.
-        closeButton.elevation = context.dp(8f).toFloat()
+        closeButton.elevation = context.dp(10f).toFloat()
         closeButton.contentDescription = "Close"
         closeButton.setOnClickListener { handleCloseTap() }
-        val closeY = if (options.isStackCompact) (layout.cardH - CLOSE_SIZE) / 2 else 8f
-        addAtCorner(closeButton, CLOSE_SIZE, CLOSE_SIZE, offsetX = layout.cardW - CLOSE_SIZE - 8f, offsetY = closeY, cornerW = layout.cardW, cornerH = layout.cardH)
+        // Compact: beside the front pill, toward the middle of the screen, clear of the pills above it.
+        val closeX = when {
+            !compact -> cardW - CLOSE_SIZE - 8f
+            fanX > 0 -> cardW + 4.5f
+            else -> -CLOSE_SIZE - 4.5f
+        }
+        val closeY = if (compact) (cardH - CLOSE_SIZE) / 2 else 8f
+        addAtCorner(closeButton, CLOSE_SIZE, CLOSE_SIZE, offsetX = closeX, offsetY = closeY, cornerW = cardW, cornerH = cardH)
 
         pillView.setOnClickListener { handlePillTap() }
         pillView.contentDescription = PoltioTriggerAccessibility.label(cards[0].title, cards[0].desc) + ". Shows all cards."
-        addAtCorner(pillView, PILL_W, PILL_H)
+        // As wide as its content, up to web's 21em; absolute LEFT/RIGHT, like addAtCorner.
+        addView(
+            pillView,
+            LayoutParams(LayoutParams.WRAP_CONTENT, context.dp(PILL_H), (if (fanX > 0) Gravity.LEFT else Gravity.RIGHT) or (if (fanY > 0) Gravity.TOP else Gravity.BOTTOM)),
+        )
 
         foldRemembered = PoltioTriggerDismissalStore.isDismissed(context, foldKey(widget.publicId))
         val startsCollapsed = options.floatingInitialPosition?.trim()?.lowercase() == "collapsed"
@@ -140,8 +211,6 @@ internal class PoltioFloatingStackTriggerView(
         cornerW: Float = w,
         cornerH: Float = h,
     ) {
-        val totalW = layout.cardW + spreadX
-        val totalH = layout.cardH + spreadY
         val boxX = if (fanX > 0) 0f else totalW - cornerW
         val boxY = if (fanY > 0) 0f else totalH - cornerH
         addView(view, LayoutParams(context.dp(w), context.dp(h), Gravity.TOP or Gravity.LEFT).apply {
@@ -150,22 +219,21 @@ internal class PoltioFloatingStackTriggerView(
         })
     }
 
-    /** Places card [index] in the fan: shifted toward the middle of the screen, smaller, tilted. */
-    fun applyFanPose(view: View, index: Int) {
-        val step = index.toFloat()
-        view.translationX = context.dp(fanX * step * layout.stepX).toFloat()
-        view.translationY = context.dp(fanY * step * layout.stepY).toFloat()
-        view.rotation = -fanX * fanY * step * layout.tiltDeg
-        view.rotationY = fanX * step * 7f
-        view.scaleX = 1f - 0.05f * step
-        view.scaleY = 1f - 0.05f * step
+    /** Card [index]'s resting translation and scale: upright, shifted toward the middle of the
+     * screen and drawn as web's perspective draws a card pushed 30px further back per card. */
+    private fun fanPose(index: Int): Triple<Float, Float, Float> {
+        if (index == 0) return Triple(0f, 0f, 1f)
+        val place = place(index, compact)
+        val scale = 900f / (900f + 30f * index)
+        val unit = EM * resources.displayMetrics.density * scale
+        return Triple(fanX * place.side * unit, fanY * place.rise * unit, scale)
     }
 
-    private fun resetPose(view: View, scale: Float) {
-        view.translationX = 0f
-        view.translationY = 0f
-        view.rotation = 0f
-        view.rotationY = 0f
+    /** Places card [index] where it rests in the stack. */
+    fun applyFanPose(view: View, index: Int) {
+        val (x, y, scale) = fanPose(index)
+        view.translationX = x
+        view.translationY = y
         view.scaleX = scale
         view.scaleY = scale
     }
@@ -213,8 +281,8 @@ internal class PoltioFloatingStackTriggerView(
     /** Closing a card's experience brings the stack back unchanged. */
     override fun resetToCollapsed(animated: Boolean) = Unit
 
-    /** The staggered cascade: each card leaves the front position for its place in the fan, then a
-     * soft glow crosses the cards three times to hint they're tappable. */
+    /** The staggered cascade: each card rises from the docked edge into its place, then light sweeps
+     * across the cards three times to hint they're tappable. */
     private fun fanOut(animated: Boolean) {
         val animate = animated && !animationsRemoved(context)
         pillView.animate().cancel()
@@ -230,21 +298,22 @@ internal class PoltioFloatingStackTriggerView(
                 return@forEachIndexed
             }
             cardView.alpha = 0f
-            resetPose(cardView, 0.85f)
-            val step = index.toFloat()
+            cardView.translationX = 0f
+            cardView.translationY = -fanY * context.dp(1.5f * EM)
+            cardView.scaleX = 0.9f
+            cardView.scaleY = 0.9f
+            val (x, y, scale) = fanPose(index)
             cardView.animate()
                 .alpha(1f)
-                .translationX(context.dp(fanX * step * layout.stepX).toFloat())
-                .translationY(context.dp(fanY * step * layout.stepY).toFloat())
-                .rotation(-fanX * fanY * step * layout.tiltDeg)
-                .rotationY(fanX * step * 7f)
-                .scaleX(1f - 0.05f * step)
-                .scaleY(1f - 0.05f * step)
+                .translationX(x)
+                .translationY(y)
+                .scaleX(scale)
+                .scaleY(scale)
                 .setStartDelay(90L * index)
                 .setDuration(550)
                 .setInterpolator(OvershootInterpolator(0.8f))
                 .start()
-            cardView.playGlow(startDelayMs = 600L + 90L * cardViews.size + 150L * index)
+            if (!hinted) cardView.playGlow(startDelayMs = 700L + 300L * index)
         }
 
         closeButton.visibility = View.VISIBLE
@@ -262,7 +331,7 @@ internal class PoltioFloatingStackTriggerView(
         cardViews.forEach { cardView ->
             cardView.stopGlow()
             cardView.animate().cancel()
-            cardView.animate().alpha(0f).translationX(0f).translationY(0f).rotation(0f).rotationY(0f)
+            cardView.animate().alpha(0f).translationX(0f).translationY(0f)
                 .scaleX(0.9f).scaleY(0.9f).setStartDelay(0).setDuration(if (animate) 280L else 0L)
                 .setInterpolator(DecelerateInterpolator())
                 .withEndAction { if (state == TriggerState.FOLDED) cardView.visibility = View.GONE }
@@ -287,8 +356,15 @@ internal class PoltioFloatingStackTriggerView(
 
     // MARK: - Actions
 
+    private fun openCard(card: PoltioStackCard) {
+        hinted = true
+        cardViews.forEach { it.stopGlow() }
+        onOpenCard(card)
+    }
+
     private fun handleCloseTap() {
         stopObservingScroll()
+        hinted = true
         PoltioTriggerDismissalStore.recordDismissal(context, foldKey(widget.publicId), FOLD_REMEMBER_HOURS)
         setState(TriggerState.FOLDED, animated = true)
     }
@@ -300,137 +376,231 @@ internal class PoltioFloatingStackTriggerView(
 }
 
 /**
- * One frosted card of the stack trigger, drawn as a vertical card, a compact pill (image and
- * title), or the folded pill (image, title and description). The whole card is one button.
+ * One glass card of the stack trigger, drawn as the front card, a back card peeking past the front
+ * one's top edge ([Style.UP]) or side ([Style.SIDE]), a compact pill, or the folded pill. The whole
+ * card is one button.
  */
 internal class PoltioStackCardView(
     context: Context,
     val card: PoltioStackCard,
-    style: Style,
+    val style: Style,
     options: PoltioOverlayOptions,
 ) : FrameLayout(context) {
 
-    enum class Style { CARD, COMPACT, PILL }
+    enum class Style { CARD, UP, SIDE, COMPACT, PILL }
 
-    private val imageSlot = FrameLayout(context)
-    private val imageLoader: PoltioTriggerIconLoader
+    private var imageLoader: PoltioTriggerIconLoader? = null
     private val glow = GlowView(context)
     private var glowAnimator: ValueAnimator? = null
+    private val density = resources.displayMetrics.density
+
+    /** [em] of web's em, in px. */
+    private fun px(em: Float) = context.dp(em * EM)
 
     init {
         val cardColor = PoltioOverlayOptions.resolvedColor(card.bg, options.resolvedBgColor)
         val textColor = PoltioOverlayOptions.resolvedColor(card.textColor, Color.WHITE)
-        val radius = context.dp(if (style == Style.CARD) 22f else 28f).toFloat()
-        val alpha = (card.alpha * 255).toInt()
+        val buttonColor = PoltioOverlayOptions.resolvedColor(card.buttonBg, ColorUtils.blendARGB(cardColor, Color.BLACK, 0.3f))
+        val regular = resolvedTypeface(options.floatingFontFamily)
+        val bold = resolvedTypeface(options.floatingFontFamily, Typeface.BOLD)
+        val radius = px(
+            when (style) {
+                Style.CARD, Style.UP, Style.SIDE -> 1.5f
+                Style.COMPACT -> 1.875f
+                Style.PILL -> 1.4f
+            },
+        ).toFloat()
+        val ring = if (options.isStackCompact) 0.15f else 0.2f
+        val buttonText = card.button?.trim().takeUnless { it.isNullOrEmpty() } ?: "Start"
 
-        val tint = GradientDrawable(
-            GradientDrawable.Orientation.TL_BR,
-            intArrayOf(ColorUtils.setAlphaComponent(ColorUtils.blendARGB(cardColor, Color.WHITE, 0.35f), alpha), ColorUtils.setAlphaComponent(cardColor, alpha)),
-        ).apply {
-            cornerRadius = radius
-            setStroke(context.dp(1f), ColorUtils.setAlphaComponent(Color.WHITE, 90))
-        }
-        // A soft white sheen over the top half reads as frosted glass.
-        val sheen = GradientDrawable(
-            GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(ColorUtils.setAlphaComponent(Color.WHITE, 46), Color.TRANSPARENT),
-        ).apply { cornerRadius = radius }
-        background = LayerDrawable(arrayOf(tint, sheen))
+        background = PoltioGlassDrawable(cardColor, card.alpha, radius, density)
         foreground = RippleDrawable(ColorStateList.valueOf(ColorUtils.setAlphaComponent(Color.WHITE, 60)), null, GradientDrawable().apply { cornerRadius = radius; setColor(Color.WHITE) })
         outlineProvider = ViewOutlineProvider.BACKGROUND
         clipToOutline = true
-        elevation = context.dp(6f).toFloat()
-        cameraDistance = 8000 * resources.displayMetrics.density
-
-        val imageSize = when (style) {
-            Style.CARD -> 52f
-            Style.COMPACT -> 36f
-            Style.PILL -> 44f
-        }
-        imageSlot.background = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            setColor(cardColor)
-            setStroke(context.dp(1f), ColorUtils.setAlphaComponent(Color.WHITE, 128))
-        }
-        imageSlot.outlineProvider = ViewOutlineProvider.BACKGROUND
-        imageSlot.clipToOutline = true
-        // The loader lays its image over this anchor, filling the round slot.
-        val imageAnchor = View(context)
-        imageSlot.addView(imageAnchor, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
-        imageLoader = PoltioTriggerIconLoader(imageSlot, imageSize, ImageView.ScaleType.CENTER_CROP)
-        card.imageUrl?.let { imageLoader.load(it, svgHint = false, imageAnchor) {} }
-
-        val typeface = resolvedTypeface(options.floatingFontFamily)
-        val title = TextView(context).apply {
-            text = card.title
-            setTextColor(textColor)
-            textSize = if (style == Style.CARD) 16f else 14f
-            this.typeface = resolvedTypeface(options.floatingFontFamily, android.graphics.Typeface.BOLD)
-            maxLines = if (style == Style.CARD) 2 else 1
-            ellipsize = TextUtils.TruncateAt.END
-        }
-        val desc = TextView(context).apply {
-            text = card.desc
-            setTextColor(ColorUtils.setAlphaComponent(textColor, 230))
-            textSize = if (style == Style.CARD) 13f else 12f
-            this.typeface = typeface
-            maxLines = if (style == Style.CARD) 3 else 1
-            ellipsize = TextUtils.TruncateAt.END
-            visibility = if (card.desc.isNullOrBlank() || style == Style.COMPACT) View.GONE else View.VISIBLE
-        }
-        val texts = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(title)
-            addView(desc, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = context.dp(if (style == Style.CARD) 4f else 1f)
-            })
+        // The lifted shadow, in web's warm tone where the platform can tint it.
+        elevation = context.dp(8f).toFloat()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            outlineSpotShadowColor = SHADE
+            outlineAmbientShadowColor = SHADE
         }
 
-        val body = LinearLayout(context)
-        if (style == Style.CARD) {
-            body.orientation = LinearLayout.VERTICAL
-            body.setPadding(context.dp(14f), context.dp(14f), context.dp(14f), context.dp(14f))
-            body.addView(imageSlot, LinearLayout.LayoutParams(context.dp(imageSize), context.dp(imageSize)))
-            body.addView(texts, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f).apply { topMargin = context.dp(10f) })
-            val button = TextView(context).apply {
-                text = card.button?.trim().takeUnless { it.isNullOrEmpty() } ?: "Start"
-                setTextColor(Color.WHITE)
-                textSize = 14f
-                this.typeface = resolvedTypeface(options.floatingFontFamily, android.graphics.Typeface.BOLD)
-                gravity = Gravity.CENTER
-                maxLines = 1
-                background = GradientDrawable().apply {
-                    cornerRadius = context.dp(17f).toFloat()
-                    setColor(PoltioOverlayOptions.resolvedColor(card.buttonBg, ColorUtils.blendARGB(cardColor, Color.BLACK, 0.3f)))
+        when (style) {
+            Style.CARD -> {
+                val body = LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(px(1f), px(1f), px(1f), px(1f))
                 }
+                val head = LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                head.addView(imageSlot(4.5f, ring), LinearLayout.LayoutParams(px(4.5f), px(4.5f)))
+                val name = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+                name.addView(text(card.title, 1.05f, textColor, bold, lines = 2))
+                name.addView(line(textColor), LinearLayout.LayoutParams(px(1.6f), context.dp(2f)).apply { topMargin = px(0.5f) })
+                head.addView(name, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = px(0.65f) })
+                body.addView(head)
+                val desc = text(card.desc, 0.85f, textColor, regular, lines = 3).apply { setLineSpacing(px(0.17f).toFloat(), 1f) }
+                body.addView(desc, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = px(0.75f) })
+                // Pushes START to the bottom.
+                body.addView(View(context), LinearLayout.LayoutParams(0, 0, 1f))
+                val cta = gloss(text(buttonText.uppercase(Locale.getDefault()), 0.85f, Color.WHITE, bold, spacing = 0.1f).apply { setPadding(px(0.85f), 0, px(0.85f), 0) }, buttonColor, 0.85f)
+                body.addView(cta, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, px(2.75f * 0.85f)).apply { topMargin = px(0.55f) })
+                addView(body, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
             }
-            body.addView(button, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.dp(34f)))
-        } else {
-            body.orientation = LinearLayout.HORIZONTAL
-            body.gravity = Gravity.CENTER_VERTICAL
-            // Compact cards leave room for the front card's ×.
-            body.setPadding(context.dp(10f), 0, context.dp(if (style == Style.COMPACT) 40f else 16f), 0)
-            body.addView(imageSlot, LinearLayout.LayoutParams(context.dp(imageSize), context.dp(imageSize)))
-            body.addView(texts, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = context.dp(10f) })
+            Style.UP -> {
+                // Its full-size image moves into the strip showing past the front card's edge,
+                // beside a spaced label.
+                val edge = if (options.verticalPosition == "top") Gravity.BOTTOM else Gravity.TOP
+                addView(imageSlot(4.5f, ring), LayoutParams(px(4.5f), px(4.5f), Gravity.LEFT or edge).apply {
+                    leftMargin = px(1f)
+                    topMargin = px(0.7f)
+                    bottomMargin = px(0.7f)
+                })
+                addView(text(card.title.uppercase(Locale.getDefault()), 0.75f, textColor, bold, spacing = 0.14f), LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.LEFT or edge).apply {
+                    leftMargin = px(1f + 4.5f + 0.65f)
+                    rightMargin = px(1f)
+                    topMargin = px(0.7f + 1.15f * 0.75f)
+                    bottomMargin = topMargin
+                })
+            }
+            Style.SIDE -> {
+                // Its full-size image moves to the bottom of the strip showing past the front card's
+                // side, under a vertical label.
+                val onLeft = !options.isLeftDocked
+                val side = if (onLeft) Gravity.LEFT else Gravity.RIGHT
+                addView(imageSlot(4.5f, ring), LayoutParams(px(4.5f), px(4.5f), Gravity.BOTTOM or side).apply {
+                    leftMargin = px(0.7f)
+                    rightMargin = px(0.7f)
+                    bottomMargin = px(0.7f)
+                })
+                val spine = SpineView(context, card.title, textColor, bold, upward = onLeft)
+                addView(spine, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.TOP or side).apply {
+                    topMargin = px(1.2f * 0.75f)
+                    leftMargin = px(0.6f * 0.75f)
+                    rightMargin = leftMargin
+                })
+            }
+            Style.COMPACT -> {
+                val body = LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(px(0.45f), 0, px(0.6f), 0)
+                }
+                body.addView(imageSlot(2.85f, ring), LinearLayout.LayoutParams(px(2.85f), px(2.85f)))
+                body.addView(text(card.title, 0.95f, textColor, bold), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    leftMargin = px(0.6f)
+                    rightMargin = px(0.6f)
+                })
+                body.addView(gloss(ArrowGlyphView(context, textColor), buttonColor, 1f), LinearLayout.LayoutParams(px(1.9f), px(1.9f)))
+                addView(body, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+            }
+            Style.PILL -> {
+                val body = LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(px(0.55f), 0, px(0.55f), 0)
+                }
+                body.addView(imageSlot(3.3f, ring), LinearLayout.LayoutParams(px(3.3f), px(3.3f)))
+                val texts = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+                texts.addView(text(card.title, 0.95f, textColor, bold))
+                if (!options.isStackCompact) {
+                    texts.addView(line(textColor), LinearLayout.LayoutParams(px(1.3f), context.dp(2f)).apply {
+                        topMargin = px(0.3f)
+                        bottomMargin = px(0.25f)
+                    })
+                }
+                if (!card.desc.isNullOrBlank()) texts.addView(text(card.desc, 0.75f, textColor, regular))
+                // Past web's max width, the texts truncate before START does.
+                body.addView(texts, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    leftMargin = px(0.7f)
+                    rightMargin = px(0.7f)
+                })
+                val cta = gloss(text(buttonText.uppercase(Locale.getDefault()), 0.75f, Color.WHITE, bold, spacing = 0.1f).apply { setPadding(px(1.1f * 0.75f), 0, px(1.1f * 0.75f), 0) }, buttonColor, 0.75f)
+                body.addView(cta, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, px(2.4f * 0.75f)))
+                addView(body, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT))
+            }
         }
-        addView(body, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(glow, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
 
         isClickable = true
         isFocusable = true
         PoltioTriggerAccessibility.configureAsButton(
             this,
-            PoltioTriggerAccessibility.label(card.title, card.desc.takeIf { style != Style.COMPACT }, card.button.takeIf { style == Style.CARD }),
+            PoltioTriggerAccessibility.label(card.title, card.desc.takeIf { style != Style.COMPACT }, card.button.takeIf { style == Style.CARD || style == Style.UP || style == Style.SIDE }),
         )
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
-        body.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        for (i in 0 until childCount) getChildAt(i).importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
     }
 
-    /** Sweeps a soft highlight across the card three times, starting after [startDelayMs]. */
+    /** The pill is as wide as its content, up to web's 21em. */
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        if (style != Style.PILL) return super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        val max = px(21f)
+        val size = if (MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.UNSPECIFIED) max else min(MeasureSpec.getSize(widthMeasureSpec), max)
+        super.onMeasure(MeasureSpec.makeMeasureSpec(size, MeasureSpec.AT_MOST), heightMeasureSpec)
+    }
+
+    /** The round image in a white ring, lifted off the glass. */
+    private fun imageSlot(sizeEm: Float, ringEm: Float): FrameLayout {
+        val slot = FrameLayout(context)
+        slot.background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(white(0.3f))
+        }
+        // The ring draws over the image.
+        slot.foreground = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setStroke(px(ringEm), white(0.75f))
+        }
+        slot.outlineProvider = ViewOutlineProvider.BACKGROUND
+        slot.clipToOutline = true
+        slot.elevation = context.dp(3f).toFloat()
+        // The loader lays its image over this anchor, filling the round slot.
+        val anchor = View(context)
+        slot.addView(anchor, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        val loader = PoltioTriggerIconLoader(slot, sizeEm * EM, ImageView.ScaleType.CENTER_CROP)
+        card.imageUrl?.let { loader.load(it, svgHint = false, anchor) {} }
+        imageLoader = loader
+        return slot
+    }
+
+    private fun text(value: String?, sizeEm: Float, color: Int, typeface: Typeface, lines: Int = 1, spacing: Float = 0f) = TextView(context).apply {
+        text = value
+        setTextColor(color)
+        textSize = sizeEm * EM
+        this.typeface = typeface
+        maxLines = lines
+        ellipsize = TextUtils.TruncateAt.END
+        letterSpacing = spacing
+        includeFontPadding = false
+        setShadowLayer(2f * density, 0f, density, ColorUtils.setAlphaComponent(Color.BLACK, 46))
+    }
+
+    /** The short white line under a title. */
+    private fun line(color: Int) = View(context).apply {
+        background = GradientDrawable().apply {
+            cornerRadius = density
+            setColor(color)
+        }
+        alpha = 0.85f
+    }
+
+    /** [content] centered on a glossy 3D face in the button color; [sizeEm] is the button's font size. */
+    private fun gloss(content: View, color: Int, sizeEm: Float) = FrameLayout(context).apply {
+        val unit = sizeEm * EM * density
+        background = PoltioGlossDrawable(color, unit, density)
+        outlineProvider = ViewOutlineProvider.BACKGROUND
+        // The soft drop under the button.
+        elevation = 0.35f * unit
+        addView(content, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+    }
+
+    /** Sweeps a band of light across the glass three times, starting after [startDelayMs]. */
     fun playGlow(startDelayMs: Long) {
         glowAnimator?.cancel()
         glowAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 1300
+            duration = 1100
             repeatCount = 2
             startDelay = startDelayMs
             addUpdateListener { glow.progress = it.animatedValue as Float }
@@ -448,7 +618,7 @@ internal class PoltioStackCardView(
 
     fun dispose() {
         stopGlow()
-        imageLoader.dispose()
+        imageLoader?.dispose()
     }
 
     /** A diagonal light band drawn at [progress] (0…1 across the card; negative hides it). */
@@ -471,10 +641,189 @@ internal class PoltioStackCardView(
             val x = -band + (width + 2 * band) * progress
             paint.shader = LinearGradient(
                 x, 0f, x + band, height * 0.4f,
-                intArrayOf(Color.TRANSPARENT, ColorUtils.setAlphaComponent(Color.WHITE, 100), Color.TRANSPARENT),
+                intArrayOf(Color.TRANSPARENT, white(0.5f), Color.TRANSPARENT),
                 null, Shader.TileMode.CLAMP,
             )
             canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
         }
+    }
+
+    /** The side card's vertical label behind a short line: read upward when the strip is on the
+     * left, downward when it's on the right. */
+    private class SpineView(context: Context, title: String, color: Int, typeface: Typeface, private val upward: Boolean) : View(context) {
+        private val unit = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 0.75f * EM, resources.displayMetrics)
+        private val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+            this.typeface = typeface
+            textSize = unit
+            letterSpacing = 0.12f
+            setShadowLayer(2f * resources.displayMetrics.density, 0f, resources.displayMetrics.density, ColorUtils.setAlphaComponent(Color.BLACK, 46))
+        }
+        private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+            alpha = (Color.alpha(color) * 0.85f).roundToInt()
+        }
+        private val lead = 2f * unit
+        private val text = TextUtils.ellipsize(title.uppercase(Locale.getDefault()), paint, 9f * unit - lead, TextUtils.TruncateAt.END).toString()
+
+        init {
+            importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            setMeasuredDimension(ceil(paint.fontSpacing).toInt(), ceil(lead + paint.measureText(text)).toInt())
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            canvas.save()
+            // Lays the label out along x, from the bottom up or the top down.
+            if (upward) {
+                canvas.rotate(-90f)
+                canvas.translate(-height.toFloat(), 0f)
+            } else {
+                canvas.rotate(90f)
+                canvas.translate(0f, -width.toFloat())
+            }
+            val mid = width / 2f
+            val half = resources.displayMetrics.density
+            canvas.drawRoundRect(0f, mid - half, 1.3f * unit, mid + half, half, half, linePaint)
+            canvas.drawText(text, lead, mid - (paint.ascent() + paint.descent()) / 2, paint)
+            canvas.restore()
+        }
+    }
+
+    /** Web's arrow icon: a shaft and a head. */
+    private class ArrowGlyphView(context: Context, color: Int) : View(context) {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+            style = Paint.Style.STROKE
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+        }
+
+        init {
+            val size = (14 * resources.displayMetrics.density).roundToInt()
+            minimumWidth = size
+            minimumHeight = size
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            val s = width / 24f
+            paint.strokeWidth = 2.4f * s
+            canvas.drawLine(5 * s, 12 * s, 19 * s, 12 * s, paint)
+            canvas.drawLine(13 * s, 6 * s, 19 * s, 12 * s, paint)
+            canvas.drawLine(19 * s, 12 * s, 13 * s, 18 * s, paint)
+        }
+    }
+}
+
+/** A drawable that ignores alpha and color filters: its colors are fixed by the design. */
+private abstract class PoltioPaintedDrawable : Drawable() {
+    override fun setAlpha(alpha: Int) = Unit
+
+    override fun setColorFilter(colorFilter: ColorFilter?) = Unit
+
+    @Deprecated("Deprecated in Java")
+    override fun getOpacity() = PixelFormat.TRANSLUCENT
+}
+
+/**
+ * A slab of glass: light caught inside its top and left edges and a shade inside the opposite ones,
+ * the card's tint under a white sheen at the card's opacity, and a bevel rim brightest where the
+ * light hits. The view's outline clips it to its rounded shape.
+ */
+private class PoltioGlassDrawable(tint: Int, private val opacity: Float, private val radius: Float, private val density: Float) : PoltioPaintedDrawable() {
+    private val em = EM * density
+    private val tinted = withAlpha(tint, opacity)
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 1.5f * density
+    }
+    private val rect = RectF()
+    private val rimRect = RectF()
+    private var edges: List<Shader> = emptyList()
+    private var sheen: Shader? = null
+    private var corner = 0f
+
+    override fun onBoundsChange(bounds: Rect) {
+        rect.set(bounds)
+        corner = min(radius, rect.height() / 2)
+        rimRect.set(rect)
+        rimRect.inset(0.75f * density, 0.75f * density)
+        // The bright lip along the top, then the edge light fading inward.
+        edges = listOf(
+            LinearGradient(0f, rect.top, 0f, rect.top + 0.7f * em, intArrayOf(white(0.8f), white(0.3f), Color.TRANSPARENT), floatArrayOf(0f, 0.1f, 1f), Shader.TileMode.CLAMP),
+            LinearGradient(rect.left, 0f, rect.left + 0.5f * em, 0f, white(0.35f), Color.TRANSPARENT, Shader.TileMode.CLAMP),
+            LinearGradient(0f, rect.bottom, 0f, rect.bottom - 0.8f * em, withAlpha(SHADE, 0.18f), Color.TRANSPARENT, Shader.TileMode.CLAMP),
+            LinearGradient(rect.right, 0f, rect.right - 0.6f * em, 0f, withAlpha(SHADE, 0.12f), Color.TRANSPARENT, Shader.TileMode.CLAMP),
+        )
+        sheen = cssGradient(rect, 155f, intArrayOf(white(0.5f), white(0.12f), white(0.04f), white(0.2f)), floatArrayOf(0f, 0.38f, 0.62f, 1f))
+        rimPaint.shader = cssGradient(rect, 150f, intArrayOf(white(0.95f), white(0.25f), white(0.05f), white(0.5f), white(0.9f)), floatArrayOf(0f, 0.3f, 0.55f, 0.85f, 1f))
+    }
+
+    override fun draw(canvas: Canvas) {
+        paint.color = Color.BLACK
+        edges.forEach {
+            paint.shader = it
+            canvas.drawRect(rect, paint)
+        }
+        paint.shader = null
+        paint.color = tinted
+        canvas.drawRect(rect, paint)
+        // The sheen is part of the tint, so it takes the card's opacity too.
+        paint.color = Color.BLACK
+        paint.alpha = (opacity * 255).roundToInt()
+        paint.shader = sheen
+        canvas.drawRect(rect, paint)
+        paint.shader = null
+        canvas.drawRoundRect(rimRect, corner - 0.75f * density, corner - 0.75f * density, rimPaint)
+    }
+
+    override fun getOutline(outline: Outline) {
+        outline.setRoundRect(bounds, min(radius, bounds.height() / 2f))
+    }
+}
+
+/** A glossy 3D button face in the button color: a lit top half under a shine and a shaded base;
+ * its view's elevation gives the soft drop. [unit] is web's em for the button, in px. */
+private class PoltioGlossDrawable(private val color: Int, private val unit: Float, private val density: Float) : PoltioPaintedDrawable() {
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val rect = RectF()
+    private val shineRect = RectF()
+    private val borderRect = RectF()
+    private var gloss: Shader? = null
+    private var shine: Shader? = null
+
+    override fun onBoundsChange(bounds: Rect) {
+        rect.set(bounds)
+        borderRect.set(rect)
+        borderRect.inset(density / 2, density / 2)
+        gloss = LinearGradient(0f, rect.top, 0f, rect.bottom, intArrayOf(white(0.3f), white(0f), ColorUtils.setAlphaComponent(Color.BLACK, 36)), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
+        val top = rect.top + 0.14f * unit
+        shineRect.set(rect.left + rect.width() * 0.12f, top, rect.right - rect.width() * 0.12f, top + rect.height() * 0.46f)
+        shine = LinearGradient(0f, shineRect.top, 0f, shineRect.bottom, white(0.55f), white(0.04f), Shader.TileMode.CLAMP)
+    }
+
+    override fun draw(canvas: Canvas) {
+        val r = rect.height() / 2
+        paint.style = Paint.Style.FILL
+        paint.shader = null
+        paint.color = color
+        canvas.drawRoundRect(rect, r, r, paint)
+        paint.color = Color.BLACK
+        paint.shader = gloss
+        canvas.drawRoundRect(rect, r, r, paint)
+        paint.shader = shine
+        canvas.drawRoundRect(shineRect, shineRect.height() / 2, shineRect.height() / 2, paint)
+        paint.shader = null
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = density
+        paint.color = white(0.14f)
+        canvas.drawRoundRect(borderRect, r, r, paint)
+    }
+
+    override fun getOutline(outline: Outline) {
+        outline.setRoundRect(bounds, bounds.height() / 2f)
     }
 }

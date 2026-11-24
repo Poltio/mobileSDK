@@ -551,14 +551,16 @@ differ): text white, card color = `floating-bgcolor` (Poltio blue), button color
 30% darker, button text "Start", opacity 80. `floating-initial-position` `collapsed` starts as the
 pill and fans out past `floating-scroll-threshold`; anything else (including `expanded`) starts
 fanned — native doesn't open a card's sheet on its own. Android cards are frosted-looking but don't
-blur the app behind them (no backdrop blur without extra libraries).
+blur the app behind them (no backdrop blur without extra libraries). The look follows Poltio/websdk#832
+and #833: upright cards offset toward the middle (odd ones past the top edge, even ones past the
+side), glass with a bevel rim and lit top edge, ringed images, glossy START and arrow buttons.
 
 | Attribute / behavior | Web | iOS | Android | Notes |
 |---|---|---|---|---|
-| `trigger-type: stack` | ⬜ | ✅ | ⬜ | iOS 26.0 simulator, sample stack: three glass cards fanned up-left from bottom-right. Unit tests cover dispatch on both platforms. |
+| `trigger-type: stack` | ⬜ | ✅ | ⬜ | iOS 26.5 simulator, sample stack: three upright glass cards, one peeking past the top edge with its label, one past the side with a vertical label. Unit tests cover dispatch on both platforms. |
 | `floating-stack-cards` | ⬜ | ✅ | ⬜ | Each card's title, description, button, colors and opacity drawn; a back card opened its own content in the sheet, and the stack came back unchanged when the sheet closed. Unreadable list / <2 / >5 cards / missing content or title → skipped with a warning (unit tests). |
-| `floating-stack-format` | ⬜ | 🧩 | ⬜ | `compact` fan of small pills covered by unit tests; not yet screenshotted. |
-| × → pill, 48h memory | ⬜ | 🧩 | ⬜ | Fold memory unit-tested (`stack-fold:<public id>` key in `PoltioTriggerDismissalStore`, trigger itself not dismissed). |
+| `floating-stack-format` | ⬜ | ✅ | ⬜ | `compact`: pills stacked upward with glossy arrows in each button color, × beside the front pill (iOS 26.5 simulator). |
+| × → pill, 48h memory | ⬜ | ✅ | ⬜ | × folds into the glass pill tile with its own START; the next stack started folded and the pill brought the cards back (iOS 26.5 simulator). Fold memory unit-tested (`stack-fold:<public id>` key in `PoltioTriggerDismissalStore`, trigger itself not dismissed). |
 | Impressions | ⬜ | ✅ (unit test) | ✅ (unit test) | Widget content with `widget_id`, every other card's content once without it. |
 | Reduce Motion / removed animations | ⬜ | 🧩 | 🧩 | No cascade, no glow; fold is a plain swap. |
 
@@ -959,3 +961,6 @@ then move on"). Remaining items below are all low-priority cleanup, not new trig
   verified in the iPhone 17 Pro / iOS 26.0 simulator with the hand-made sample stack (see the
   `stack` section). Android written and unit-tested in code but not yet built or run: this Mac had
   no JDK, Android SDK or emulator at the time.
+- **2026-11-24**: Stack restyled to the web redesign (Poltio/websdk#832, #833). iOS checked in the
+  iPhone 17 Pro / iOS 26.5 simulator (expanded, pill, compact); Android changed the same way but
+  still not compiled or run on this Mac.

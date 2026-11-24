@@ -21,6 +21,7 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import kotlin.math.abs
 
 @RunWith(RobolectricTestRunner::class)
 class PoltioFloatingStackTriggerViewTest {
@@ -99,6 +100,7 @@ class PoltioFloatingStackTriggerViewTest {
         view.cardViews[1].performClick()
         view.cardViews[0].performClick()
         assertEquals(listOf("content_b", "content_a"), opened)
+        assertTrue("the light sweep stops once a card is opened", view.cardViews.none { it.isGlowing })
         view.cardViews.forEach { card ->
             assertTrue(card.isClickable)
             assertTrue(card.contentDescription.contains(card.card.title))
@@ -109,15 +111,24 @@ class PoltioFloatingStackTriggerViewTest {
 
     @Test
     fun `the fan leans toward the middle of the screen`() {
-        fun backCardShift(position: String): Pair<Float, Float> {
+        fun backCardShift(position: String, index: Int = 1): Pair<Float, Float> {
             val view = stackView(stackWidget(position = position))
             val probe = View(view.context)
-            view.applyFanPose(probe, 1)
+            view.applyFanPose(probe, index)
+            assertTrue("back cards stand upright", probe.rotation == 0f && probe.rotationY == 0f)
             return probe.translationX to probe.translationY
         }
         backCardShift("bottom-right").let { (x, y) -> assertTrue(x < 0 && y < 0) }
         backCardShift("bottom-left").let { (x, y) -> assertTrue(x > 0 && y < 0) }
         assertTrue(backCardShift("top-right").second > 0)
+
+        // Odd back cards peek past the front card's top edge, even ones past its side.
+        backCardShift("bottom-right").let { (x, y) -> assertTrue(abs(y) > abs(x)) }
+        backCardShift("bottom-right", index = 2).let { (x, y) -> assertTrue(abs(x) > abs(y)) }
+        assertEquals(
+            listOf(PoltioStackCardView.Style.CARD, PoltioStackCardView.Style.UP, PoltioStackCardView.Style.SIDE),
+            stackView().cardViews.map { it.style },
+        )
     }
 
     @Test

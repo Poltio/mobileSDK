@@ -205,8 +205,8 @@ struct SDKStatusView: View {
     enum SampleStackWidget {
         private static let demoURLs = ["poltiodemo://home", "poltiodemo://plp/phones", "poltiodemo://plp/tvs"]
         private static let looks: [[String: Any]] = [
-            ["title": "Shopping Assistant", "desc": "Let's find what fits you", "button": "Start", "bg": "#f2a38f", "button_bg": "#b8324a", "opacity": "80"],
-            ["title": "Phone Finder", "desc": "Pick your next phone", "button": "Start", "bg": "#8fb8f2", "button_bg": "#2a4fa0", "opacity": "70"],
+            ["title": "Shopping Assistant", "desc": "Let's find what fits you", "button": "Start", "bg": "#f2a38f", "button_bg": "#b8324a", "opacity": "60"],
+            ["title": "Phone Finder", "desc": "Pick your next phone", "button": "Start", "bg": "#8fb8f2", "button_bg": "#2a4fa0", "opacity": "60"],
             ["title": "TV Finder", "desc": "The right screen for your room", "button": "Start", "bg": "#9be0c0", "button_bg": "#1f7a55", "opacity": "60"],
         ]
 

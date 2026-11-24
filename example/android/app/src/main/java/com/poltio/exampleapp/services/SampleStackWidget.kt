@@ -20,8 +20,8 @@ import java.util.concurrent.atomic.AtomicInteger
 object SampleStackWidget {
     private val demoUrls = listOf("poltiodemo://home", "poltiodemo://plp/phones", "poltiodemo://plp/tvs")
     private val looks = listOf(
-        listOf("Shopping Assistant", "Let's find what fits you", "#f2a38f", "#b8324a", "80"),
-        listOf("Phone Finder", "Pick your next phone", "#8fb8f2", "#2a4fa0", "70"),
+        listOf("Shopping Assistant", "Let's find what fits you", "#f2a38f", "#b8324a", "60"),
+        listOf("Phone Finder", "Pick your next phone", "#8fb8f2", "#2a4fa0", "60"),
         listOf("TV Finder", "The right screen for your room", "#9be0c0", "#1f7a55", "60"),
     )
 

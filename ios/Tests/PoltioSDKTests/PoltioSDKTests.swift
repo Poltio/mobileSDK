@@ -2116,6 +2116,7 @@ final class PoltioSDKTests: XCTestCase {
             view.cardViews[2].simulateTap()
             view.cardViews[0].simulateTap()
             XCTAssertEqual(opened, ["content_c", "content_a"], "front and back cards each open their own content")
+            XCTAssertTrue(view.cardViews.allSatisfy { !$0.isGlowing }, "the light sweep stops once a card is opened")
 
             for cardView in view.cardViews {
                 XCTAssertTrue(cardView.isAccessibilityElement)
@@ -2129,10 +2130,12 @@ final class PoltioSDKTests: XCTestCase {
         }
 
         func testStackFanLeansTowardTheMiddleOfTheScreen() throws {
-            func backCardShift(_ position: String) throws -> CGPoint {
+            func backCardShift(_ position: String, index: Int = 1) throws -> CGPoint {
                 let widget = PoltioWidgetResponse(publicId: "content_a", overlayOptions: stackOptions(position: position))
                 let view = try PoltioFloatingStackTriggerView(widget: widget, cards: XCTUnwrap(widget.overlayOptions.stackCards)) { _ in }
-                let transform = view.fanTransform(index: 1)
+                let transform = view.fanTransform(index: index)
+                XCTAssertEqual(transform.m12, 0, "back cards stand upright")
+                XCTAssertEqual(transform.m21, 0, "back cards stand upright")
                 return CGPoint(x: transform.m41, y: transform.m42)
             }
             let bottomRight = try backCardShift("bottom-right")
@@ -2142,6 +2145,14 @@ final class PoltioSDKTests: XCTestCase {
             XCTAssertGreaterThan(bottomLeft.x, 0)
             XCTAssertLessThan(bottomLeft.y, 0)
             XCTAssertGreaterThan(try backCardShift("top-right").y, 0)
+
+            // Odd back cards peek past the front card's top edge, even ones past its side.
+            XCTAssertGreaterThan(abs(bottomRight.y), abs(bottomRight.x))
+            let second = try backCardShift("bottom-right", index: 2)
+            XCTAssertGreaterThan(abs(second.x), abs(second.y))
+            let widget = PoltioWidgetResponse(publicId: "content_a", overlayOptions: stackOptions())
+            let view = try PoltioFloatingStackTriggerView(widget: widget, cards: XCTUnwrap(widget.overlayOptions.stackCards)) { _ in }
+            XCTAssertEqual(view.cardViews.map(\.style), [.card, .up, .side])
         }
 
         func testStackFoldIsRememberedForFortyEightHours() throws {
@@ -2176,7 +2187,8 @@ final class PoltioSDKTests: XCTestCase {
             let compactView = try PoltioFloatingStackTriggerView(widget: compact, cards: XCTUnwrap(compact.overlayOptions.stackCards)) { _ in }
             compactView.layoutIfNeeded()
             XCTAssertEqual(compactView.state, .fanned)
-            XCTAssertEqual(compactView.cardViews[0].bounds.height, 56)
+            XCTAssertEqual(compactView.cardViews[0].bounds.height, 48.75, accuracy: 0.5, "web's 3.75em at 13pt")
+            XCTAssertEqual(compactView.cardViews.map(\.style), [.compact, .compact, .compact])
         }
     #endif
 
